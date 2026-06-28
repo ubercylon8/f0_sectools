@@ -39,6 +39,11 @@ line-length = 100
 select = ["E", "F", "I", "B", "UP", "S"]  # incl. flake8-bandit (S) for a security repo
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use `assert` (S101) and dummy/hardcoded credential fixtures
+# (S105/S106). These bandit checks are noise in test code, not production code.
+"**/tests/**" = ["S101", "S105", "S106"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["core", "servers", "evals"]
