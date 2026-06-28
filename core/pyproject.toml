@@ -9,6 +9,7 @@ authors = [{ name = "F0RT1KA Contributors" }]
 
 dependencies = [
     "pydantic>=2.7",   # findings schema models & validation
+    "httpx>=0.27",     # async Microsoft Graph client
 ]
 
 [build-system]

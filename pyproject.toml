@@ -8,17 +8,24 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "F0RT1KA Contributors" }]
 keywords = ["security", "mcp", "soc", "siem", "edr", "llm", "local-llm", "agents"]
 
-# The root is a virtual workspace; runtime code lives in the member packages
-# under core/ and servers/. Install members in editable mode via `uv sync`.
+# The root is a virtual workspace coordinator; runtime code lives in the member
+# packages under core/ and servers/. Sync the whole workspace with
+# `uv sync --all-packages` to install every member (editable) and its deps.
 dependencies = []
 
-[project.optional-dependencies]
+# Dev tooling lives in a dependency group (installed by default by `uv sync`).
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "respx>=0.21",
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+
+[tool.uv]
+# The root itself is not a distributable package — it only coordinates members.
+package = false
 
 [tool.uv.workspace]
 # Each platform server and the shared core are workspace members.

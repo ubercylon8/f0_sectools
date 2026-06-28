@@ -77,11 +77,14 @@ git branch -m main
 git branch --show-current   # expect: main
 ```
 
-- [ ] **Step 2: Add runtime/test deps to root dev extras**
+- [ ] **Step 2: Make the root a virtual workspace coordinator and add dev tooling**
 
-In `pyproject.toml`, set `[project.optional-dependencies].dev` to:
+The root must NOT be a distributable package, and dev tools belong in a
+dependency group (not a project extra) so `uv sync` installs them by default.
+In `pyproject.toml`, replace `[project.optional-dependencies]` with:
 
 ```toml
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -89,14 +92,20 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+
+[tool.uv]
+package = false
 ```
 
 And add to `core/pyproject.toml` dependencies: `"httpx>=0.27"` (alongside `pydantic>=2.7`).
 
-- [ ] **Step 3: Sync the workspace**
+- [ ] **Step 3: Sync the whole workspace**
 
-Run: `uv sync --extra dev`
-Expected: resolves and installs pydantic, httpx, pytest, respx, ruff into `.venv`; `core` installed editable.
+Run: `uv sync --all-packages`
+Expected: builds/installs `f0-sectools-core` editable plus its deps (pydantic,
+httpx) and the dev group (pytest, respx, ruff) into `.venv`. (Plain `uv sync`
+installs only the root's deps, NOT workspace members — always use
+`--all-packages` here.)
 
 - [ ] **Step 4: Verify tooling runs**
 
