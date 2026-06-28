@@ -90,15 +90,22 @@ async def test_list_conditional_access_policies_flags_disabled():
 
 @pytest.mark.asyncio
 async def test_list_privileged_role_assignments_maps():
+    # Graph allows only ONE $expand per query, so role names come from a separate
+    # roleDefinitions lookup and only `principal` is expanded on the assignments.
     with respx.mock as router:
         _token(router)
+        router.get(GRAPH + "/roleManagement/directory/roleDefinitions").mock(
+            return_value=httpx.Response(
+                200, json={"value": [{"id": "rd1", "displayName": "Global Administrator"}]}
+            )
+        )
         router.get(GRAPH + "/roleManagement/directory/roleAssignments").mock(
             return_value=httpx.Response(
                 200,
                 json={"value": [{
                     "id": "ra1",
+                    "roleDefinitionId": "rd1",
                     "principal": {"userPrincipalName": "admin@corp.com", "id": "u9"},
-                    "roleDefinition": {"displayName": "Global Administrator"},
                 }]},
             )
         )

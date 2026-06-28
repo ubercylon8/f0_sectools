@@ -151,20 +151,22 @@ async def list_conditional_access_policies(gc: GraphClient) -> list[Finding]:
 
 
 async def list_privileged_role_assignments(gc: GraphClient, limit: int = 100) -> list[Finding]:
-    params = {"$expand": "principal,roleDefinition", "$top": limit}
+    # Graph permits only ONE $expand per query, so resolve role names from a
+    # separate roleDefinitions lookup and expand only `principal` on assignments.
+    perm = "RoleManagement.Read.Directory"
     try:
-        raw = await gc.get_all("/roleManagement/directory/roleAssignments", params=params)
+        defs = await gc.get_all("/roleManagement/directory/roleDefinitions")
+        raw = await gc.get_all(
+            "/roleManagement/directory/roleAssignments", params={"$expand": "principal"}
+        )
     except GraphError as e:
         if e.status == 403:
-            return [
-                Finding.permission_missing(
-                    "entra", "RoleManagement.Read.Directory", "privileged role assignments"
-                )
-            ]
+            return [Finding.permission_missing("entra", perm, "privileged role assignments")]
         raise
+    role_names = {d.get("id"): d.get("displayName", "directory role") for d in defs}
     out: list[Finding] = []
     for a in raw:
-        role = (a.get("roleDefinition") or {}).get("displayName", "directory role")
+        role = role_names.get(a.get("roleDefinitionId"), "directory role")
         principal = a.get("principal") or {}
         who = (
             principal.get("userPrincipalName")
@@ -185,4 +187,6 @@ async def list_privileged_role_assignments(gc: GraphClient, limit: int = 100) ->
                 ),
             )
         )
-    return out
+    # Critical roles first, then cap output to keep payloads small-model-safe.
+    out.sort(key=lambda f: 0 if f.severity == Severity.high else 1)
+    return out[:limit]
