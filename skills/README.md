@@ -48,3 +48,6 @@ each server's README and the Hermes integration guide.
 | `defender/triage-incident` | Investigate a Defender incident: gather, summarize, recommend |
 | `defender/posture-summary` | Secure score + open incidents → leadership rollup |
 | `defender/threat-hunt` | Guided advanced-hunting (KQL) with safe starter queries |
+| `entra/identity-risk-review` | Review ID Protection risky users + risk detections |
+| `entra/conditional-access-audit` | Audit CA policies; flag disabled/report-only gaps |
+| `entra/privileged-access-review` | Review privileged role holders; flag admin sprawl |

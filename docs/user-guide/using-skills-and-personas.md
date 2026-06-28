@@ -13,6 +13,9 @@ Skills are step-by-step procedures the agent follows for a task. They live in
 | `triage-defender-incident` | Investigate an incident: gather alerts, summarize, recommend | `list_incidents`, `list_alerts` |
 | `defender-posture-summary` | Leadership rollup: secure score + open incidents | `get_secure_score`, `list_incidents` |
 | `defender-threat-hunt` | Guided KQL hunting (last 30 days) with safe starters | `run_hunting_query` |
+| `review-entra-identity-risk` | Review ID Protection risky users + detections (P2) | `list_risky_users`, `list_risk_detections` |
+| `audit-conditional-access` | Audit CA policies; flag disabled/report-only | `list_conditional_access_policies` |
+| `review-privileged-access` | Review privileged role holders; flag admin sprawl | `list_privileged_role_assignments` |
 
 In skills-aware runtimes they activate automatically by description, when you
 name them, or via `/skill-name`. In non-skill UIs (LM Studio, Open WebUI) the
