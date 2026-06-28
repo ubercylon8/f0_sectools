@@ -53,6 +53,8 @@ testpaths = ["core", "servers", "evals"]
 # importlib mode lets same-basename test files (e.g. each server's
 # tests/test_tools.py) coexist without module-name collisions.
 addopts = "--import-mode=importlib"
+# Make the repo root importable so `evals` (the eval harness) resolves in tests.
+pythonpath = ["."]
 
 [tool.mypy]
 python_version = "3.11"
