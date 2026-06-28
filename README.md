@@ -34,18 +34,29 @@ Threat intel & IR: **MISP**, **TheHive / Cortex**, **OpenCTI**
 ## Repository layout
 
 ```
-core/        Shared package: findings schema, redaction, auth, paging,
-             small-model helpers, gated-action machinery, persona renderers.
-servers/     One thin MCP server per platform (imports core).
-skills/      Higher-level playbooks that orchestrate the servers.
-evals/       Small-model tool-calling evaluation harness + task sets.
-docs/        Documentation.
-CLAUDE.md    Build guide / house rules for agents working in this repo.
+core/          Shared package: findings schema, redaction, auth, paging,
+               small-model helpers, gated-action machinery, persona renderers.
+servers/       One thin MCP server per platform (imports core).
+skills/        Portable agentskills.io playbooks (work in Hermes, Claude Code, …).
+integrations/  Runtime-specific wiring (e.g. Hermes config + personas).
+prompts/       Portable system prompts for non-skill UIs (LM Studio, Open WebUI).
+evals/         Small-model tool-calling evaluation harness + task sets.
+docs/          Documentation, including the user guide.
+CLAUDE.md      Build guide / house rules for agents working in this repo.
 ```
+
+## Using f0_sectools
+
+See the **[User Guide](docs/user-guide/README.md)** — getting started, per-runtime
+setup (Hermes, LM Studio, Open WebUI, Claude Code), skills & personas, example
+workflows, and troubleshooting.
 
 ## Status
 
-Early scaffolding. The build order is: `core/` foundation → **Wazuh** reference MCP server end-to-end → first `evals/` task set → replicate the pattern across platforms.
+**Working today:** the `core/` foundation, the **Microsoft Defender** and
+**Microsoft Entra ID** MCP servers (both live-validated), the eval harness, three
+Defender skills, the four role personas, and the Hermes integration. Next:
+rounding out Entra skills and the next platform (LimaCharlie / ProjectAchilles).
 
 ## License
 

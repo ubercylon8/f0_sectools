@@ -162,6 +162,8 @@ Tools always emit the structured finding; the persona view is a presentation lay
 
 How a local model actually drives these tools. The mechanism differs by runtime, but the **content is authored once**.
 
+> **Operator-facing instructions live in the [User Guide](docs/user-guide/README.md)** (`docs/user-guide/`) — per-runtime setup, workflows, troubleshooting. This section is the builder's view; keep the two in sync when adding a runtime, skill, or persona, and update the User Guide's support matrix.
+
 ### Skills (one portable set)
 
 Skills live in `skills/` as **[agentskills.io](https://agentskills.io) `SKILL.md`** packages (the open standard, originally Anthropic's, now adopted by Hermes, Claude Code, Goose, OpenHands, Cursor, …). A skill is a directory with a `SKILL.md` (YAML frontmatter: `name`, `description` ≤60 chars, `version`, optional `metadata.hermes`) plus `## When to Use / Procedure / Pitfalls / Verification`, and optional `references/`. Loaded via progressive disclosure. The same files work in **every** skills-aware runtime — never fork them per runtime (Critical Rule 9). Each skill refers to tools by **base name** (`list_incidents`); runtimes prefix differently (Hermes `mcp_f0-defender_list_incidents`, Claude Code `mcp__f0-defender__list_incidents`).
