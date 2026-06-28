@@ -1,0 +1,29 @@
+# Small-model tool-calling eval task set — Microsoft Entra ID server.
+#
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every Entra tool has at least one task and every task names a
+# real tool.
+
+- prompt: "Which users are flagged as risky right now?"
+  expect_tool: list_risky_users
+
+- prompt: "Show me the high-risk user accounts in Entra."
+  expect_tool: list_risky_users
+
+- prompt: "What identity risk detections have fired recently?"
+  expect_tool: list_risk_detections
+
+- prompt: "List Entra ID Protection risk events."
+  expect_tool: list_risk_detections
+
+- prompt: "Show me the conditional access policies, especially any that are disabled."
+  expect_tool: list_conditional_access_policies
+
+- prompt: "Audit our conditional access configuration."
+  expect_tool: list_conditional_access_policies
+
+- prompt: "Who holds privileged directory roles like Global Administrator?"
+  expect_tool: list_privileged_role_assignments
+
+- prompt: "List everyone with admin role assignments in Entra."
+  expect_tool: list_privileged_role_assignments

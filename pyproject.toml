@@ -19,6 +19,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "respx>=0.21",
+    "pyyaml>=6.0",
     "ruff>=0.6",
     "mypy>=1.10",
 ]
@@ -42,7 +43,9 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 # Tests legitimately use `assert` (S101) and dummy/hardcoded credential fixtures
 # (S105/S106). These bandit checks are noise in test code, not production code.
+# Match both tests/ packages and standalone test_*.py files (e.g. under evals/).
 "**/tests/**" = ["S101", "S105", "S106"]
+"**/test_*.py" = ["S101", "S105", "S106"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

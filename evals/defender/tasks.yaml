@@ -1,0 +1,37 @@
+# Small-model tool-calling eval task set — Microsoft Defender server.
+#
+# Each task is a natural-language ask plus the tool a small model SHOULD call and
+# the key arguments it should fill. The future eval harness replays these against
+# a local model (vLLM/llama.cpp) and scores tool-selection + argument-filling.
+# Until then, evals/test_eval_coverage.py enforces that every tool has a task and
+# every task names a real tool.
+#
+# Fields: prompt (str), expect_tool (str), and optionally expect_args (exact
+# key/value matches) or expect_args_contains (substring match on a string arg).
+
+- prompt: "What's our Microsoft Secure Score right now?"
+  expect_tool: get_secure_score
+
+- prompt: "Show me the overall security posture score for the tenant."
+  expect_tool: get_secure_score
+
+- prompt: "List the active high-severity incidents."
+  expect_tool: list_incidents
+  expect_args: { severity_min: high }
+
+- prompt: "Are there any Defender incidents I should look at?"
+  expect_tool: list_incidents
+
+- prompt: "Show me the latest critical alerts."
+  expect_tool: list_alerts
+  expect_args: { severity_min: critical }
+
+- prompt: "Pull the most recent Defender alerts."
+  expect_tool: list_alerts
+
+- prompt: "Hunt for processes that downloaded files using PowerShell in the last day."
+  expect_tool: run_hunting_query
+  expect_args_contains: { kql: "DeviceProcessEvents" }
+
+- prompt: "Run an advanced hunting query for suspicious sign-ins."
+  expect_tool: run_hunting_query
