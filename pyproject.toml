@@ -1,0 +1,41 @@
+[project]
+name = "f0_sectools"
+version = "0.0.1"
+description = "Security-operations tools, skills, and MCP servers for local AI agents — privacy-first, small-model-driven."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "F0RT1KA Contributors" }]
+keywords = ["security", "mcp", "soc", "siem", "edr", "llm", "local-llm", "agents"]
+
+# The root is a virtual workspace; runtime code lives in the member packages
+# under core/ and servers/. Install members in editable mode via `uv sync`.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[tool.uv.workspace]
+# Each platform server and the shared core are workspace members.
+members = ["core", "servers/*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]  # incl. flake8-bandit (S) for a security repo
+ignore = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["core", "servers", "evals"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

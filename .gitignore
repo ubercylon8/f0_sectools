@@ -1,0 +1,65 @@
+# ── Secrets & credentials (NEVER commit) ─────────────────────────────────────
+# Per-platform credential files. The leading-dot env files are local-only.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.pfx
+*.p12
+secrets/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / lock caches
+.uv/
+pip-wheel-metadata/
+
+# ── Testing & evaluation ─────────────────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+# Eval run outputs (local model results are not source)
+evals/results/
+evals/.cache/
+
+# ── Local SOC/platform data pulled at runtime (privacy: never source) ─────────
+findings-output/
+audit-logs/
+*.log
+
+# ── IDE / editor ─────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Tooling state (machine-local, not source) ────────────────────────────────
+.remember/
+.claude/
+.playwright-mcp/

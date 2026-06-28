@@ -1,0 +1,48 @@
+f0_sectools
+Copyright 2026 F0RT1KA Contributors
+
+This product is part of the ProjectAchilles ecosystem
+(https://projectachilles.io/).
+
+================================================================================
+Purpose
+================================================================================
+
+f0_sectools provides tools, skills, and Model Context Protocol (MCP) servers
+that let AI agents connect to security platforms (SIEM/XDR, EDR, identity, and
+threat-intelligence systems) to understand security posture, assess risk, and
+help SOC analysts, security engineers, threat hunters, and CISOs decide on the
+right course of action.
+
+It is designed to run with small, open-weight language models served locally
+(e.g. via vLLM or llama.cpp), so organizations can operate security-operations
+agents on their own infrastructure without sending sensitive security data to
+external services.
+
+f0_sectools is the defensive / operational counterpart to f0_library, the
+F0RT1KA security-testing framework.
+
+================================================================================
+License
+================================================================================
+
+This project is licensed under the Apache License, Version 2.0. See the LICENSE
+file for the full terms.
+
+================================================================================
+Authorized-use and safety notice
+================================================================================
+
+This software connects to live security platforms and can, when explicitly
+enabled, take response actions on them (for example: isolating a host or
+disabling a user account).
+
+By default all tools are READ-ONLY. Any state-changing action is gated behind
+an explicit configuration flag AND a per-action human confirmation token, and
+is recorded to a local audit trail. Operators are responsible for ensuring they
+have proper authorization before connecting f0_sectools to any platform and
+before enabling or performing any response action. The authors and contributors
+are not liable for any misuse or damage caused by this software.
+
+See SECURITY.md for the responsible-disclosure process and authorized-use
+guidance.
