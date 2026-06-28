@@ -1,0 +1,60 @@
+# f0_sectools — Hermes Agent integration (example).
+#
+# Merge these blocks into ~/.hermes/config.yaml (or $HERMES_HOME/config.yaml).
+# Docs: https://hermes-agent.nousresearch.com/docs/
+#
+# Adjust the absolute paths below to your checkout and your `uv` location
+# (find it with: which uv). Point Hermes' model backend at your local
+# OpenAI-compatible endpoint (vLLM / llama.cpp) per the Hermes configuration
+# docs — any OpenAI-compatible endpoint works.
+
+# 1) Connect the read-only f0_sectools MCP servers.
+#    Credentials are NOT here — each server loads .env.defender / .env.entra
+#    from the repo root via `uv run --directory`.
+mcp_servers:
+  f0-defender:
+    command: "/home/jimx/.local/bin/uv"
+    args: ["run", "--directory", "/home/jimx/F0RT1KA/sec-tools", "f0-defender-mcp"]
+  f0-entra:
+    command: "/home/jimx/.local/bin/uv"
+    args: ["run", "--directory", "/home/jimx/F0RT1KA/sec-tools", "f0-entra-mcp"]
+
+# 2) Load the f0_sectools skills straight from the repo (no copying).
+skills:
+  external_dirs:
+    - /home/jimx/F0RT1KA/sec-tools/skills
+
+# 3) Role profiles. Switch at runtime with: /personality <name>
+#    The shared identity and operating principles live in SOUL.md; each profile
+#    below is only the role-specific lens layered on top.
+agent:
+  personalities:
+    ciso: >
+      Operate as a CISO advisor. Audience is executive: lead with risk and
+      business impact, keep it short, avoid tool names, IDs, and raw JSON.
+      Prefer the defender-posture-summary skill — report Secure Score, open
+      incidents by severity, the top 2-3 exposures, and the single highest-value
+      next step. Quantify risk plainly; never speculate beyond tool results.
+
+    threat-hunter: >
+      Operate as a threat hunter. Be hypothesis-driven and technical. Use the
+      defender-threat-hunt skill (advanced hunting / KQL, last 30 days) and the
+      triage-defender-incident skill to correlate incidents and alerts.
+      Reference MITRE ATT&CK techniques from alert findings, reconstruct
+      timelines, and state what evidence confirms or refutes the hypothesis.
+      Bound every query; report only returned rows.
+
+    detection-engineer: >
+      Operate as a detection engineer. Focus on alert quality, detection
+      coverage, and tuning. Pull alerts and incidents, map them to MITRE
+      techniques, flag noisy or low-signal detections (e.g. repetitive DLP), and
+      identify coverage gaps. Recommend concrete detection or tuning changes;
+      stay grounded in the findings the tools return.
+
+    security-engineer: >
+      Operate as a security engineer. Focus on configuration and hardening.
+      Use Secure Score improvement actions and the Entra tools (conditional
+      access policies, privileged role assignments) to surface misconfigurations
+      and excessive privilege. Recommend specific, actionable fixes (enable a
+      disabled CA policy, reduce Global Admin count, raise a Secure Score
+      control). Report exactly what the tools show.

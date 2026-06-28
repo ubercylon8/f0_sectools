@@ -17,7 +17,9 @@ This single constraint drives almost every design rule below. Small local models
 ### Form factor
 
 - **MCP servers** (`servers/`) — one thin Model Context Protocol server per platform, exposing read tools (and gated write actions). Runtime-agnostic: they target the OpenAI-compatible API surface, so they work behind vLLM, llama.cpp, or any compliant front-end.
-- **Skills** (`skills/`) — higher-level, markdown playbooks/workflows that orchestrate the servers (e.g. "triage this Wazuh alert", "build an incident posture summary for the CISO").
+- **Skills** (`skills/`) — higher-level playbooks that orchestrate the servers (e.g. "triage a Defender incident", "build a posture summary for the CISO"). They follow the **[agentskills.io](https://agentskills.io) open standard** (`SKILL.md`) — originally Anthropic's Agent Skills format, now adopted by Hermes, Claude Code, Goose, and others. **One portable set, no runtime-specific forks.**
+- **Personas** — four role lenses (CISO, threat hunter, detection engineer, security engineer) that shape output. Delivered as Hermes `agent.personalities` profiles and mirrored as switchable modes in the portable system prompt.
+- **Runtimes** — primary target is **Hermes Agent** (skills-aware, native MCP, OpenAI-compatible backend; see `integrations/hermes/`). The same skills run under Claude Code and other agentskills.io clients. For non-skill chat UIs (LM Studio, Open WebUI) a portable system prompt in `prompts/` carries the same guidance. See [Skills, Personas & Runtimes](#skills-personas--runtimes).
 
 ---
 
@@ -31,6 +33,7 @@ This single constraint drives almost every design rule below. Small local models
 6. **All safety logic lives in `core/`, never in a server.** Redaction, secret handling, the findings schema, and the gated-action machinery are implemented once, in the shared core, and imported by every server. A server must not re-implement or bypass them.
 7. **Per-platform credential isolation.** Each platform has its own `.env.<platform>`. No cross-platform credential bleed; a server only loads its own platform's secrets.
 8. **Audit every write action.** Gated actions are logged (who/what/when/which target/confirmation token) to a local audit trail — never to an external service.
+9. **Skills are one portable set, not per-runtime forks.** All skills follow the agentskills.io `SKILL.md` standard and live once in `skills/`. Runtime-specific wiring (Hermes config/personas, the LM Studio system prompt) lives in `integrations/` and `prompts/` and must not duplicate skill *content* — same DRY discipline as rule 6.
 
 ---
 
@@ -91,7 +94,14 @@ f0_sectools/
     misp-mcp/
     thehive-mcp/
     opencti-mcp/
-  skills/                   # higher-level playbooks that orchestrate servers
+  skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
+    defender/
+      triage-incident/      # SKILL.md (+ references/, templates/)
+      posture-summary/
+      threat-hunt/
+  integrations/             # runtime-specific wiring (NO skill content — see rule 9)
+    hermes/                 # SOUL.md + config.example.yaml (mcp_servers, external skills dir, 4 personas)
+  prompts/                  # portable system prompts for non-skill UIs (LM Studio, Open WebUI)
   evals/                    # small-model tool-calling eval harness + task sets
   docs/
 ```
@@ -143,6 +153,32 @@ The same finding is rendered differently per audience via `core/renderers/`:
 - **Threat hunter / IR** — timeline, pivots, case-building across MISP/TheHive/OpenCTI.
 
 Tools always emit the structured finding; the persona view is a presentation layer, never a different data contract.
+
+> **Two persona layers, don't confuse them.** `core/renderers/` (above, planned) shapes how a *finding's text* is presented. The **agent personas** in [Skills, Personas & Runtimes](#skills-personas--runtimes) shape the *agent's behaviour* — which skills/tools it favours and how it frames a whole response. They compose; the renderer is optional polish, the agent persona is the primary mechanism today.
+
+---
+
+## Skills, Personas & Runtimes
+
+How a local model actually drives these tools. The mechanism differs by runtime, but the **content is authored once**.
+
+### Skills (one portable set)
+
+Skills live in `skills/` as **[agentskills.io](https://agentskills.io) `SKILL.md`** packages (the open standard, originally Anthropic's, now adopted by Hermes, Claude Code, Goose, OpenHands, Cursor, …). A skill is a directory with a `SKILL.md` (YAML frontmatter: `name`, `description` ≤60 chars, `version`, optional `metadata.hermes`) plus `## When to Use / Procedure / Pitfalls / Verification`, and optional `references/`. Loaded via progressive disclosure. The same files work in **every** skills-aware runtime — never fork them per runtime (Critical Rule 9). Each skill refers to tools by **base name** (`list_incidents`); runtimes prefix differently (Hermes `mcp_f0-defender_list_incidents`, Claude Code `mcp__f0-defender__list_incidents`).
+
+Current skills: `defender/triage-incident`, `defender/posture-summary`, `defender/threat-hunt`.
+
+### Personas (four role lenses)
+
+CISO, threat hunter, detection engineer, security engineer — each a behavioural lens (focus + output style + which skills/tools to favour). Shared identity and the read-only / never-fabricate principles live in one place; each persona only adds its lens. Delivered as **Hermes `agent.personalities`** (switch with `/personality <name>`) and mirrored as switchable **modes** in the portable prompt.
+
+### Runtimes
+
+- **Hermes Agent** (primary) — skills-aware, native MCP, OpenAI-compatible backend. `integrations/hermes/` holds `SOUL.md` (base identity) and `config.example.yaml` (wires `mcp_servers`, points `skills.external_dirs` at this repo's `skills/` in place, defines the four personalities). See its README.
+- **Claude Code / other agentskills.io clients** — the same `skills/` load unmodified.
+- **Non-skill chat UIs (LM Studio, Open WebUI)** — no skill system; paste `prompts/f0-sectools-system-prompt.md` (persona-switchable) as the system prompt. See `docs/running-with-local-models.md`.
+
+**Rule of thumb:** skill *content* and persona *definitions* are authored once; `integrations/` and `prompts/` only carry runtime wiring, never copies of skill logic.
 
 ---
 
@@ -273,4 +309,6 @@ git add <specific-files> && git commit -m "feat(wazuh): add read-only alert quer
 | Returning data | Emit the findings schema; let `core/redaction/` and `core/renderers/` do the rest |
 | Designing a tool arg | Flat scalar, descriptive name, short closed enum — never nested/objects |
 | Tempted to dump platform JSON | Paginate, bound, summarize — protect the context window |
+| Writing a skill | One `SKILL.md` in `skills/` (agentskills.io); refer to tools by base name; never fork per runtime |
+| Adding a persona/runtime wiring | Hermes → `integrations/hermes/`; non-skill UI → `prompts/`. Wiring only, no skill content |
 | About to push | Don't. Commit, surface the hash, wait for the user |
