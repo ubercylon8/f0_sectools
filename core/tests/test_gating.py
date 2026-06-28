@@ -1,7 +1,6 @@
 import json
 
 import pytest
-
 from f0_sectools_core.gating.actions import AuditLog, GatedAction, GateDenied
 
 
