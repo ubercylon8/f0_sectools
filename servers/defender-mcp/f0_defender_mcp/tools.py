@@ -7,6 +7,7 @@ produces actionable guidance instead of failing.
 from __future__ import annotations
 
 from f0_sectools_core.auth.graph import GraphClient, GraphError
+from f0_sectools_core.graph_errors import map_graph_error
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -53,12 +54,11 @@ async def get_secure_score(gc: GraphClient) -> list[Finding]:
     try:
         scores = await gc.get_all("/security/secureScores", params={"$top": 1})
     except GraphError as e:
-        if e.status == 403:
-            return [
-                Finding.permission_missing(
-                    "defender", "SecurityEvents.Read.All", "Microsoft Secure Score"
-                )
-            ]
+        finding = map_graph_error(
+            e, "defender", "SecurityEvents.Read.All", "Microsoft Secure Score"
+        )
+        if finding:
+            return [finding]
         raise
     if not scores:
         return []
@@ -97,12 +97,9 @@ async def list_incidents(
     try:
         raw = await gc.get_all("/security/incidents", params={"$top": limit})
     except GraphError as e:
-        if e.status == 403:
-            return [
-                Finding.permission_missing(
-                    "defender", "SecurityIncident.Read.All", "Defender incidents"
-                )
-            ]
+        finding = map_graph_error(e, "defender", "SecurityIncident.Read.All", "Defender incidents")
+        if finding:
+            return [finding]
         raise
     findings: list[Finding] = []
     for inc in raw:
@@ -139,10 +136,9 @@ async def list_alerts(
     try:
         raw = await gc.get_all("/security/alerts_v2", params={"$top": limit})
     except GraphError as e:
-        if e.status == 403:
-            return [
-                Finding.permission_missing("defender", "SecurityAlert.Read.All", "Defender alerts")
-            ]
+        finding = map_graph_error(e, "defender", "SecurityAlert.Read.All", "Defender alerts")
+        if finding:
+            return [finding]
         raise
     findings: list[Finding] = []
     for alert in raw:
@@ -173,10 +169,9 @@ async def run_hunting_query(gc: GraphClient, kql: str) -> list[Finding]:
     try:
         resp = await gc.post("/security/runHuntingQuery", {"Query": kql})
     except GraphError as e:
-        if e.status == 403:
-            return [
-                Finding.permission_missing("defender", "ThreatHunting.Read.All", "advanced hunting")
-            ]
+        finding = map_graph_error(e, "defender", "ThreatHunting.Read.All", "advanced hunting")
+        if finding:
+            return [finding]
         raise
     rows = resp.get("results") or []
     sample = rows[:_MAX_HUNT_ROWS]

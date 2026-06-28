@@ -7,6 +7,7 @@ still produces actionable guidance instead of failing.
 from __future__ import annotations
 
 from f0_sectools_core.auth.graph import GraphClient, GraphError
+from f0_sectools_core.graph_errors import map_graph_error
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -43,12 +44,9 @@ async def list_risky_users(gc: GraphClient, limit: int = 25) -> list[Finding]:
     try:
         raw = await gc.get_all("/identityProtection/riskyUsers", params={"$top": limit})
     except GraphError as e:
-        if e.status == 403:
-            return [
-                Finding.permission_missing(
-                    "entra", "IdentityRiskyUser.Read.All", "Entra risky users"
-                )
-            ]
+        finding = map_graph_error(e, "entra", "IdentityRiskyUser.Read.All", "Entra risky users")
+        if finding:
+            return [finding]
         raise
     out: list[Finding] = []
     for u in raw:
@@ -76,12 +74,9 @@ async def list_risk_detections(gc: GraphClient, limit: int = 25) -> list[Finding
     try:
         raw = await gc.get_all("/identityProtection/riskDetections", params={"$top": limit})
     except GraphError as e:
-        if e.status == 403:
-            return [
-                Finding.permission_missing(
-                    "entra", "IdentityRiskEvent.Read.All", "Entra risk detections"
-                )
-            ]
+        finding = map_graph_error(e, "entra", "IdentityRiskEvent.Read.All", "Entra risk detections")
+        if finding:
+            return [finding]
         raise
     out: list[Finding] = []
     for d in raw:
@@ -115,12 +110,9 @@ async def list_conditional_access_policies(gc: GraphClient) -> list[Finding]:
     try:
         raw = await gc.get_all("/identity/conditionalAccess/policies")
     except GraphError as e:
-        if e.status == 403:
-            return [
-                Finding.permission_missing(
-                    "entra", "Policy.Read.All", "conditional access policies"
-                )
-            ]
+        finding = map_graph_error(e, "entra", "Policy.Read.All", "conditional access policies")
+        if finding:
+            return [finding]
         raise
     out: list[Finding] = []
     for p in raw:
@@ -160,8 +152,9 @@ async def list_privileged_role_assignments(gc: GraphClient, limit: int = 100) ->
             "/roleManagement/directory/roleAssignments", params={"$expand": "principal"}
         )
     except GraphError as e:
-        if e.status == 403:
-            return [Finding.permission_missing("entra", perm, "privileged role assignments")]
+        finding = map_graph_error(e, "entra", perm, "privileged role assignments")
+        if finding:
+            return [finding]
         raise
     role_names = {d.get("id"): d.get("displayName", "directory role") for d in defs}
     out: list[Finding] = []

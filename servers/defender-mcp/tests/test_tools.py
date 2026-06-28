@@ -63,6 +63,21 @@ async def test_list_incidents_403_returns_permission_finding():
 
 
 @pytest.mark.asyncio
+async def test_list_incidents_429_returns_rate_limited():
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/security/incidents").mock(
+            return_value=httpx.Response(
+                429, headers={"Retry-After": "0"}, json={"error": {"message": "Too many requests"}}
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_incidents(gc)
+    assert findings[0].finding_type.value == "posture"
+    assert "Rate limited" in findings[0].title
+
+
+@pytest.mark.asyncio
 async def test_get_secure_score_maps():
     with respx.mock as router:
         _token(router)

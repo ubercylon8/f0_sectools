@@ -100,3 +100,25 @@ class Finding(BaseModel):
                 confidence="high",
             ),
         )
+
+    @classmethod
+    def rate_limited(cls, source: str, capability: str) -> Finding:
+        """Build a posture finding for a sustained platform throttle (HTTP 429).
+
+        Used by servers when a platform keeps returning 429 after the client's
+        retry budget, so a transient throttle degrades to actionable guidance
+        instead of an exception reaching the agent.
+        """
+        return cls(
+            source=source,
+            finding_type=FindingType.posture,
+            severity=Severity.info,
+            title=f"Rate limited by the platform — {capability} temporarily unavailable",
+            recommended_action=RecommendedAction(
+                summary=(
+                    f"The platform throttled the request (HTTP 429). Retry {capability} "
+                    "shortly; reduce call frequency if it persists."
+                ),
+                confidence="high",
+            ),
+        )
