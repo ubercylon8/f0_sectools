@@ -1,0 +1,15 @@
+{
+  "//": "f0_sectools MCP server config. Point any MCP-capable agent client at this.",
+  "//directory": "Replace /ABSOLUTE/PATH/TO/sec-tools with your checkout path. `uv run --directory` sets the working dir so each server finds its .env.<platform> file there.",
+  "//secrets": "Credentials are NOT in this file. Put them in .env.defender / .env.entra at the repo root (gitignored). Servers load them at startup.",
+  "mcpServers": {
+    "f0-defender": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-defender-mcp"]
+    },
+    "f0-entra": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-entra-mcp"]
+    }
+  }
+}
