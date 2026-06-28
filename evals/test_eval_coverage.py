@@ -22,6 +22,7 @@ EVALS = Path(__file__).parent
 SERVERS = [
     ("defender", "f0_defender_mcp.server"),
     ("entra", "f0_entra_mcp.server"),
+    ("limacharlie", "f0_limacharlie_mcp.server"),
 ]
 
 

@@ -1,0 +1,29 @@
+# Small-model tool-calling eval task set — LimaCharlie server.
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every LimaCharlie tool has at least one task.
+
+- prompt: "Give me a LimaCharlie overview of our org."
+  expect_tool: get_org_overview
+
+- prompt: "What's our endpoint and detection posture?"
+  expect_tool: get_org_overview
+
+- prompt: "List the sensors that are online."
+  expect_tool: list_sensors
+  expect_args: { online_only: true }
+
+- prompt: "Show me all the endpoints."
+  expect_tool: list_sensors
+
+- prompt: "Get details for the sensor named web-01."
+  expect_tool: get_sensor
+  expect_args_contains: { hostname: "web-01" }
+
+- prompt: "List our detection and response rules."
+  expect_tool: list_dr_rules
+
+- prompt: "What detections have fired in the last 24 hours?"
+  expect_tool: list_detections
+
+- prompt: "Hunt for new processes with an LCQL query."
+  expect_tool: query_telemetry

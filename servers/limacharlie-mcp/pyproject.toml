@@ -1,0 +1,29 @@
+[project]
+name = "f0-limacharlie-mcp"
+version = "0.0.1"
+description = "f0_sectools MCP server for LimaCharlie (read-only) — detections, sensors, D&R coverage."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "F0RT1KA Contributors" }]
+dependencies = [
+    "f0-sectools-core",
+    "mcp>=1.0",
+    "limacharlie>=5.5",
+    # limacharlie>=5.5 requires a pre-release of toon-format; request it
+    # explicitly so uv enables the pre-release for this package only.
+    "toon-format>=0.9.0b1",
+]
+
+[project.scripts]
+f0-limacharlie-mcp = "f0_limacharlie_mcp.server:main"
+
+[tool.uv.sources]
+f0-sectools-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["f0_limacharlie_mcp"]

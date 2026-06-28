@@ -42,6 +42,7 @@ Nothing leaves the host. Today: Microsoft **Defender** and **Entra ID**.
 |----------|--------|--------|-------|
 | Microsoft Defender XDR | `f0-defender-mcp` | ✅ live-validated | secure score, incidents, alerts, hunting (KQL) |
 | Microsoft Entra ID | `f0-entra-mcp` | ✅ live-validated | risky users*, risk detections*, conditional access, privileged roles |
+| LimaCharlie | `f0-limacharlie-mcp` | ⏳ implemented | org overview, sensors, D&R rules, detections, LCQL telemetry |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph
 permissions; otherwise they return a graceful "permission/throttled" finding.

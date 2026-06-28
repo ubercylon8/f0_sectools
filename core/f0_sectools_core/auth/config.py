@@ -38,3 +38,33 @@ class PlatformConfig:
             verify_tls=verify,
             allow_write=allow_write,
         )
+
+
+@dataclass
+class LimaCharlieConfig:
+    """LimaCharlie credentials (org ID + API key; optional user ID).
+
+    Loaded from .env.limacharlie. Secrets never leave this layer or get logged.
+    """
+
+    oid: str
+    api_key: str
+    uid: str | None = None
+    allow_write: bool = False
+
+    @classmethod
+    def from_env(
+        cls, prefix: str = "LIMACHARLIE", env: Mapping[str, str] | None = None
+    ) -> LimaCharlieConfig:
+        env = env if env is not None else os.environ
+        required = {"oid": f"{prefix}_OID", "api_key": f"{prefix}_API_KEY"}
+        missing = [name for name in required.values() if not env.get(name)]
+        if missing:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        allow_write = env.get(f"{prefix}_ALLOW_WRITE", "false").strip().lower() in _TRUE
+        return cls(
+            oid=env[required["oid"]],
+            api_key=env[required["api_key"]],
+            uid=env.get(f"{prefix}_UID") or None,
+            allow_write=allow_write,
+        )

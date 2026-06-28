@@ -215,8 +215,11 @@ Targets (build incrementally — start with Wazuh as the reference implementatio
 | MISP | Threat intel (OSS) | API key | events, IOCs, enrichment | — |
 | TheHive / Cortex | IR (OSS) | API key | cases, observables, analyzers | create/close case |
 | OpenCTI | Threat intel (OSS) | API token | entities, relationships | — |
+| LimaCharlie | SecOps/EDR/XDR | OID + API key (SDK) | sensors, detections, D&R rules, LCQL telemetry | isolate sensor (future) |
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
+
+**Implemented & live-validated:** `defender-mcp`, `entra-mcp`. **Implemented:** `limacharlie-mcp` (uses the official `limacharlie` Python SDK; closes the offensive↔defensive loop with `f0_library`'s D&R rules). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis).
 
 ---
 
