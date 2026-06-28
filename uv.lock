@@ -12,6 +12,7 @@ resolution-markers = [
 [manifest]
 members = [
     "f0-defender-mcp",
+    "f0-entra-mcp",
     "f0-sectools",
     "f0-sectools-core",
 ]
@@ -247,6 +248,23 @@ wheels = [
 name = "f0-defender-mcp"
 version = "0.0.1"
 source = { editable = "servers/defender-mcp" }
+dependencies = [
+    { name = "f0-sectools-core" },
+    { name = "httpx" },
+    { name = "mcp" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "f0-sectools-core", editable = "core" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "mcp", specifier = ">=1.0" },
+]
+
+[[package]]
+name = "f0-entra-mcp"
+version = "0.0.1"
+source = { editable = "servers/entra-mcp" }
 dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
