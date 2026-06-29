@@ -1,0 +1,27 @@
+# Small-model tool-calling eval task set — ProjectAchilles server.
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every ProjectAchilles tool has at least one task.
+
+- prompt: "What's our ProjectAchilles defense score?"
+  expect_tool: get_defense_score
+
+- prompt: "How well are our controls blocking simulated attacks?"
+  expect_tool: get_defense_score
+
+- prompt: "Is our defense score improving over time?"
+  expect_tool: get_defense_score_trend
+
+- prompt: "Which MITRE techniques are we weakest against?"
+  expect_tool: get_weak_techniques
+
+- prompt: "Show me recent test executions that were not blocked."
+  expect_tool: list_test_executions
+
+- prompt: "What risks have we formally accepted?"
+  expect_tool: list_risk_acceptances
+
+- prompt: "List our ProjectAchilles test agents."
+  expect_tool: list_agents
+
+- prompt: "How healthy is our test-agent fleet?"
+  expect_tool: get_fleet_health

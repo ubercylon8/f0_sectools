@@ -85,6 +85,7 @@ f0_sectools/
     defender-mcp/           # built + live-validated
     entra-mcp/              # built + live-validated
     limacharlie-mcp/        # built + live-validated
+    projectachilles-mcp/    # built (live test pending)
     # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
     #          sophos, misp, thehive, opencti (see Platform Integrations)
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
@@ -208,10 +209,11 @@ Targets (build incrementally — start with Wazuh as the reference implementatio
 | TheHive / Cortex | IR (OSS) | API key | cases, observables, analyzers | create/close case |
 | OpenCTI | Threat intel (OSS) | API token | entities, relationships | — |
 | LimaCharlie | SecOps/EDR/XDR | OID + API key (SDK) | sensors, detections, D&R rules, LCQL telemetry | isolate sensor (future) |
+| ProjectAchilles | Security validation (F0RT1KA) | `pa_` API key (Bearer) | defense score, test results, weak techniques, agents | — |
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
 
-**Implemented & live-validated:** `defender-mcp`, `entra-mcp`, `limacharlie-mcp` (the last uses the official `limacharlie` Python SDK and closes the offensive↔defensive loop with `f0_library`'s D&R rules). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis).
+**Implemented & live-validated:** `defender-mcp`, `entra-mcp`, `limacharlie-mcp` (the last uses the official `limacharlie` Python SDK and closes the offensive↔defensive loop with `f0_library`'s D&R rules). **Implemented (live test pending):** `projectachilles-mcp` (read-only over the PA REST API with a `pa_` Bearer key — defense score, test results, weak techniques, agents). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis).
 
 ---
 

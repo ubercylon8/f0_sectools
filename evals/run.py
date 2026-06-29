@@ -34,6 +34,7 @@ SERVER_MODULES = {
     "defender": "f0_defender_mcp.server",
     "entra": "f0_entra_mcp.server",
     "limacharlie": "f0_limacharlie_mcp.server",
+    "projectachilles": "f0_projectachilles_mcp.server",
 }
 
 

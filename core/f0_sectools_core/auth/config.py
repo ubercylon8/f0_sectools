@@ -68,3 +68,35 @@ class LimaCharlieConfig:
             uid=env.get(f"{prefix}_UID") or None,
             allow_write=allow_write,
         )
+
+
+@dataclass
+class ProjectAchillesConfig:
+    """ProjectAchilles credentials: instance base URL + a `pa_` API key.
+
+    The org is embedded in the key, so no separate org ID is needed. Loaded from
+    .env.projectachilles. Secrets never leave this layer or get logged.
+    """
+
+    base_url: str
+    api_key: str
+    verify_tls: bool = True
+    allow_write: bool = False
+
+    @classmethod
+    def from_env(
+        cls, prefix: str = "PROJECTACHILLES", env: Mapping[str, str] | None = None
+    ) -> ProjectAchillesConfig:
+        env = env if env is not None else os.environ
+        required = {"base_url": f"{prefix}_BASE_URL", "api_key": f"{prefix}_API_KEY"}
+        missing = [name for name in required.values() if not env.get(name)]
+        if missing:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        verify = env.get(f"{prefix}_VERIFY_TLS", "true").strip().lower() in _TRUE
+        allow_write = env.get(f"{prefix}_ALLOW_WRITE", "false").strip().lower() in _TRUE
+        return cls(
+            base_url=env[required["base_url"]].rstrip("/"),
+            api_key=env[required["api_key"]],
+            verify_tls=verify,
+            allow_write=allow_write,
+        )

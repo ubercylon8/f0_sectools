@@ -54,9 +54,10 @@ workflows, and troubleshooting.
 ## Status
 
 **Working today:** the `core/` foundation; the **Microsoft Defender**, **Microsoft
-Entra ID** (both live-validated), and **LimaCharlie** MCP servers; the eval
-harness; nine skills (Defender, Entra, LimaCharlie); the four role personas; and the Hermes
-integration. Next: live-validate LimaCharlie, add its skills, then ProjectAchilles.
+Entra ID**, and **LimaCharlie** MCP servers (all live-validated) plus
+**ProjectAchilles** (built, live test pending); the eval harness; nine skills; the
+four role personas; and the Hermes integration. Next: live-validate
+ProjectAchilles and add its skills.
 
 ## License
 

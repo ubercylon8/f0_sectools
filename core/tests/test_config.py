@@ -1,5 +1,9 @@
 import pytest
-from f0_sectools_core.auth.config import LimaCharlieConfig, PlatformConfig
+from f0_sectools_core.auth.config import (
+    LimaCharlieConfig,
+    PlatformConfig,
+    ProjectAchillesConfig,
+)
 
 
 def test_loads_from_env_mapping():
@@ -52,3 +56,32 @@ def test_limacharlie_config_optional_uid_and_write():
     cfg = LimaCharlieConfig.from_env(env=env)
     assert cfg.uid == "u"
     assert cfg.allow_write is True
+
+
+def test_projectachilles_config_loads():
+    env = {
+        "PROJECTACHILLES_BASE_URL": "https://tpsgl.projectachilles.io",
+        "PROJECTACHILLES_API_KEY": "pa_abc123",
+    }
+    cfg = ProjectAchillesConfig.from_env(env=env)
+    assert cfg.base_url == "https://tpsgl.projectachilles.io"
+    assert cfg.api_key == "pa_abc123"
+    assert cfg.verify_tls is True
+    assert cfg.allow_write is False
+
+
+def test_projectachilles_config_missing_raises():
+    with pytest.raises(ValueError) as e:
+        ProjectAchillesConfig.from_env(env={"PROJECTACHILLES_BASE_URL": "x"})
+    assert "PROJECTACHILLES_API_KEY" in str(e.value)
+
+
+def test_projectachilles_config_strips_trailing_slash():
+    env = {
+        "PROJECTACHILLES_BASE_URL": "https://tpsgl.projectachilles.io/",
+        "PROJECTACHILLES_API_KEY": "pa_x",
+        "PROJECTACHILLES_VERIFY_TLS": "false",
+    }
+    cfg = ProjectAchillesConfig.from_env(env=env)
+    assert cfg.base_url == "https://tpsgl.projectachilles.io"
+    assert cfg.verify_tls is False
