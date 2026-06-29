@@ -33,4 +33,17 @@ def map_pa_error(e: Exception, capability: str) -> Finding | None:
         )
     if e.status == 429:
         return Finding.rate_limited("projectachilles", capability)
+    if e.status in (502, 503, 504):
+        return Finding(
+            source="projectachilles",
+            finding_type=FindingType.posture,
+            severity=Severity.info,
+            title=f"ProjectAchilles API temporarily unavailable (HTTP {e.status}) — "
+            f"{capability} deferred",
+            recommended_action=RecommendedAction(
+                summary="The PA API gateway returned an upstream error; confirm the "
+                "backend is running, then retry.",
+                confidence="high",
+            ),
+        )
     return None

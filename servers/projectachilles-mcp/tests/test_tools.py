@@ -107,3 +107,13 @@ async def test_list_agents_403_degrades():
     pa = FakeClient(raise_on={"/agent/admin/agents": ProjectAchillesError(403, "forbidden")})
     findings = await tools.list_agents(pa)
     assert "not granted" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_defense_score_502_degrades():
+    pa = FakeClient(
+        raise_on={"/analytics/defense-score": ProjectAchillesError(502, "<html>bad gateway")}
+    )
+    findings = await tools.get_defense_score(pa)
+    assert findings[0].finding_type.value == "posture"
+    assert "unavailable" in findings[0].title.lower()
