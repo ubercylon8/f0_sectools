@@ -82,23 +82,15 @@ f0_sectools/
     gating/                 # gated write-action machinery + audit log
     renderers/              # persona renderers (analyst/engineer/ciso/hunter)
   servers/                  # one thin MCP server per platform
-    wazuh-mcp/
-    elastic-mcp/
-    splunk-mcp/
-    sentinel-mcp/
-    defender-mcp/
-    crowdstrike-mcp/
-    sentinelone-mcp/
-    sophos-mcp/
-    entra-mcp/
-    misp-mcp/
-    thehive-mcp/
-    opencti-mcp/
+    defender-mcp/           # built + live-validated
+    entra-mcp/              # built + live-validated
+    limacharlie-mcp/        # built + live-validated
+    # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
+    #          sophos, misp, thehive, opencti (see Platform Integrations)
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
-    defender/
-      triage-incident/      # SKILL.md (+ references/, templates/)
-      posture-summary/
-      threat-hunt/
+    defender/               # triage-incident, posture-summary, threat-hunt
+    entra/                  # identity-risk-review, conditional-access-audit, privileged-access-review
+    limacharlie/            # endpoint-investigation, detection-coverage-review, threat-hunt
   integrations/             # runtime-specific wiring (NO skill content — see rule 9)
     hermes/                 # SOUL.md + config.example.yaml (mcp_servers, external skills dir, 4 personas)
   prompts/                  # portable system prompts for non-skill UIs (LM Studio, Open WebUI)
@@ -219,7 +211,7 @@ Targets (build incrementally — start with Wazuh as the reference implementatio
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
 
-**Implemented & live-validated:** `defender-mcp`, `entra-mcp`. **Implemented:** `limacharlie-mcp` (uses the official `limacharlie` Python SDK; closes the offensive↔defensive loop with `f0_library`'s D&R rules). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis).
+**Implemented & live-validated:** `defender-mcp`, `entra-mcp`, `limacharlie-mcp` (the last uses the official `limacharlie` Python SDK and closes the offensive↔defensive loop with `f0_library`'s D&R rules). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis).
 
 ---
 
