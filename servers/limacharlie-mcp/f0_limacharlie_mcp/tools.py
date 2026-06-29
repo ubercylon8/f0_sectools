@@ -175,11 +175,30 @@ def list_detections(
     return out
 
 
+# Guided LCQL hunt presets — a small model picks one instead of writing LCQL.
+_HUNT_PRESETS = {
+    "new_processes": "{t} | * | NEW_PROCESS | * | event/FILE_PATH event/COMMAND_LINE",
+    "powershell_activity": (
+        '{t} | * | NEW_PROCESS | event/FILE_PATH contains "powershell" '
+        "| event/FILE_PATH event/COMMAND_LINE"
+    ),
+    "dns_requests": "{t} | * | DNS_REQUEST | * | event/DOMAIN_NAME",
+    "network_connections": "{t} | * | NETWORK_CONNECTIONS | * | event/NETWORK_ACTIVITY",
+}
+
+
 def query_telemetry(
-    lc: Any, lcql: str, hours_back: int = 24, limit: int = _MAX_ITEMS
+    lc: Any,
+    hunt: str = "new_processes",
+    hours_back: int = 24,
+    limit: int = _MAX_ITEMS,
+    lcql: str | None = None,
 ) -> list[Finding]:
     end = int(time.time())
     start = end - hours_back * 3600
+    if not lcql:
+        template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
+        lcql = template.format(t=f"-{hours_back}h")
     try:
         rows = lc.query(lcql, start, end, limit=limit)
     except Exception as e:

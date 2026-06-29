@@ -13,8 +13,7 @@ the underlying results, and the test-agent fleet to a local model.
 
 | Tool | Purpose |
 |------|---------|
-| `get_defense_score` | Overall defense score (protected / detected / unprotected) |
-| `get_defense_score_trend` | Score over time (improving or regressing) |
+| `get_defense_score` | Defense score — current snapshot, or the trend with `over_time=true` |
 | `get_weak_techniques` | Lowest-scoring MITRE techniques — where defenses fail |
 | `list_test_executions` | Recent test executions (technique blocked or not, per host) |
 | `list_risk_acceptances` | Risks deliberately accepted (not remediated) |

@@ -9,7 +9,8 @@
   expect_tool: get_defense_score
 
 - prompt: "Is our defense score improving over time?"
-  expect_tool: get_defense_score_trend
+  expect_tool: get_defense_score
+  expect_args: { over_time: true }
 
 - prompt: "Which MITRE techniques are we weakest against?"
   expect_tool: get_weak_techniques

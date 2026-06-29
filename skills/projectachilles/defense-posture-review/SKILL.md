@@ -21,14 +21,15 @@ ProjectAchilles** MCP server (read-only).
 ## Tools
 
 Base tool names (runtime may prefix — see the ProjectAchilles server README):
-`get_defense_score`, `get_defense_score_trend`, `get_weak_techniques`. Read-only.
+`get_defense_score` (set `over_time=true` for the trend), `get_weak_techniques`.
+Read-only.
 
 ## Procedure
 
 1. Call `get_defense_score` for the headline — % of simulated attacks blocked or
    detected, with the protected / detected / unprotected breakdown.
-2. Call `get_defense_score_trend` to see whether posture is improving, flat, or
-   regressing over the window.
+2. Call `get_defense_score` with `over_time=true` to see whether posture is
+   improving, flat, or regressing over the window.
 3. Call `get_weak_techniques` for the lowest-scoring MITRE techniques — the
    areas defenses most often fail.
 4. Summarize for the audience: posture %, the trend direction, the top 2-3 weak
@@ -54,4 +55,4 @@ Base tool names (runtime may prefix — see the ProjectAchilles server README):
 ## Verification
 
 The posture %, trend, and weak techniques each trace to a `get_defense_score` /
-`get_defense_score_trend` / `get_weak_techniques` finding.
+`get_defense_score` / `get_weak_techniques` finding.

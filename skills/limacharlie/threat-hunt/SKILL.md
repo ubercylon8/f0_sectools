@@ -20,16 +20,17 @@ LimaCharlie Query Language (LCQL) over endpoint telemetry. Uses the
 ## Tools
 
 Base tool name (runtime may prefix — see the LimaCharlie server README):
-`query_telemetry`. Read-only; executes a bounded LCQL query.
+`query_telemetry`. Read-only; runs a bounded endpoint-telemetry hunt.
 
 ## Procedure
 
 1. State the **hypothesis** in one sentence (what behaviour, on what platform,
    why it matters).
-2. Pick a starting query from `references/lcql-starters.md` and adapt the
-   selector/filter. LCQL shape is
-   `time | sensor-selector | event-types | filter | projection`.
-3. Call `query_telemetry` with the LCQL and a bounded `hours_back` / `limit`.
+2. Pick a `hunt` **preset** that matches — `new_processes`,
+   `powershell_activity`, `dns_requests`, or `network_connections` — and a bounded
+   `hours_back` / `limit`. (For a custom hunt, pass a raw `lcql` query instead;
+   see `references/lcql-starters.md` for the shape and examples.)
+3. Call `query_telemetry` with the chosen preset (or `lcql`).
 4. Review the returned rows; note what supports or refutes the hypothesis.
 5. Refine once or twice (narrow the window, add a filter, change event type),
    then summarise: hypothesis, what you ran, what you found, and the TTPs.

@@ -18,7 +18,7 @@ back whether they fired) and fleet-wide **LCQL threat hunting**.
 | `get_sensor` | Detail for one sensor |
 | `list_dr_rules` | D&R rule inventory / coverage |
 | `list_detections` | Recent detections (D&R hits) + severity |
-| `query_telemetry` | Guided, bounded LCQL query |
+| `query_telemetry` | Guided telemetry hunt — `hunt` preset, or raw `lcql` |
 
 Every tool returns `f0_sectools_core` findings and degrades gracefully (auth /
 permission / rate-limit issues become a posture finding, not a crash).

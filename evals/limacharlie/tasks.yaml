@@ -25,5 +25,6 @@
 - prompt: "What detections have fired in the last 24 hours?"
   expect_tool: list_detections
 
-- prompt: "Hunt for new processes with an LCQL query."
+- prompt: "Hunt for new processes on our endpoints."
   expect_tool: query_telemetry
+  expect_args: { hunt: new_processes }

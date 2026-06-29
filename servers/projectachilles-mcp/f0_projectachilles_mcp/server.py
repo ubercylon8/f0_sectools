@@ -27,21 +27,19 @@ def _client() -> ProjectAchillesClient:
 
 
 @mcp.tool()
-async def get_defense_score(days: int = 30) -> list[dict]:
-    """CURRENT (point-in-time) ProjectAchilles defense score — how well controls
-    block/detect simulated attacks right now. For change OVER TIME or whether it
-    is improving, use get_defense_score_trend instead."""
+async def get_defense_score(
+    days: int = 30, over_time: bool = False, interval: str = "day"
+) -> list[dict]:
+    """ProjectAchilles defense score — how well controls block/detect simulated attacks.
+
+    over_time=false (default) returns the CURRENT score (a snapshot). over_time=true
+    returns the TREND over the period — use it for any "improving", "declining",
+    "over time", or "history" question. interval (day|hour) applies only to the trend.
+    """
     async with _client() as pa:
+        if over_time:
+            return _render(await tools.get_defense_score_trend(pa, days, interval))
         return _render(await tools.get_defense_score(pa, days))
-
-
-@mcp.tool()
-async def get_defense_score_trend(days: int = 30, interval: str = "day") -> list[dict]:
-    """Defense-score TREND over time — use for ANY question about whether posture
-    is improving, declining, regressing, or its history/direction over a period.
-    interval: day|hour."""
-    async with _client() as pa:
-        return _render(await tools.get_defense_score_trend(pa, days, interval))
 
 
 @mcp.tool()

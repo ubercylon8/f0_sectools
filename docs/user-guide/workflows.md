@@ -80,10 +80,10 @@ runs `query_telemetry`, reviews the rows, refines, and summarizes findings + TTP
 
 > **Prompt:** "As a CISO, how validated is our defense in ProjectAchilles?"
 
-The `review-defense-posture` skill runs `get_defense_score`,
-`get_defense_score_trend`, and `get_weak_techniques`, then reports the % of
-simulated attacks blocked/detected, the trend, the top weak MITRE techniques, and
-the highest-value improvement. (The raw score can differ from the PA dashboard
+The `review-defense-posture` skill runs `get_defense_score` (snapshot, then again
+with `over_time=true` for the trend) and `get_weak_techniques`, then reports the %
+of simulated attacks blocked/detected, the trend, the top weak MITRE techniques,
+and the highest-value improvement. (The raw score can differ from the PA dashboard
 depending on filters — treat it as directional.)
 
 ## ProjectAchilles coverage gaps (detection engineer)

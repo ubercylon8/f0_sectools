@@ -83,11 +83,24 @@ def test_list_dr_rules_maps():
     assert any("win-creds-dump" in f.title for f in findings)
 
 
-def test_query_telemetry_maps():
+def test_query_telemetry_preset_maps():
     lc = FakeClient(query=[{"event": {"FILE_PATH": "x"}}, {"event": {"FILE_PATH": "y"}}])
-    findings = tools.query_telemetry(lc, "plat == windows | NEW_PROCESS | * | *")
+    findings = tools.query_telemetry(lc, hunt="new_processes")
     assert findings[0].finding_type.value == "hunt_result"
     assert "2" in findings[0].title
+
+
+def test_query_telemetry_lcql_override():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"event": {"x": 1}}]
+
+    findings = tools.query_telemetry(_Cap(), lcql="-1h | * | DNS_REQUEST | * | event/DOMAIN_NAME")
+    assert "DNS_REQUEST" in captured["lcql"]  # raw lcql passed through, not a preset
+    assert findings[0].finding_type.value == "hunt_result"
 
 
 def test_get_org_overview_maps():

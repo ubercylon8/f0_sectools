@@ -21,8 +21,6 @@ from f0_sectools_core.redaction.redact import redact_obj
 
 load_dotenv(".env.limacharlie")
 
-# A harmless, bounded LCQL query to validate telemetry access.
-SMOKE_LCQL = "-24h | plat == windows | NEW_PROCESS | * | true"
 
 
 def _show(label: str, findings) -> None:
@@ -42,7 +40,7 @@ def main() -> None:
         ("list_sensors", lambda: tools.list_sensors(lc, limit=5)),
         ("list_dr_rules", lambda: tools.list_dr_rules(lc, limit=5)),
         ("list_detections", lambda: tools.list_detections(lc, hours_back=168, limit=5)),
-        ("query_telemetry", lambda: tools.query_telemetry(lc, SMOKE_LCQL, hours_back=24, limit=3)),
+        ("query_telemetry", lambda: tools.query_telemetry(lc, hunt="new_processes", limit=3)),
     ]:
         try:
             _show(label, fn())

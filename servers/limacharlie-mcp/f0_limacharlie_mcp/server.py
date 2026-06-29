@@ -6,6 +6,7 @@ the event loop. Findings are redacted before they leave the server.
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import LimaCharlieConfig
@@ -64,16 +65,25 @@ async def list_detections(
 
 
 @mcp.tool()
-async def query_telemetry(lcql: str, hours_back: int = 24, limit: int = 50) -> list[dict]:
-    """Run a bounded LCQL endpoint-telemetry query over the last hours_back hours.
+async def query_telemetry(
+    hunt: Literal[
+        "new_processes", "powershell_activity", "dns_requests", "network_connections"
+    ] = "new_processes",
+    hours_back: int = 24,
+    limit: int = 50,
+    lcql: str | None = None,
+) -> list[dict]:
+    """Hunt endpoint telemetry with a guided preset — no need to write LCQL.
 
-    Use for ANY "hunt / query telemetry" request. Construct an `lcql` query of the
-    shape `time | sensor-selector | event-types | filter | projection`. Common
-    event types: NEW_PROCESS (processes), DNS_REQUEST, NETWORK_CONNECTIONS.
-    Example: `-24h | plat == windows | NEW_PROCESS | * | event/FILE_PATH`.
+    Use for ANY "hunt / query telemetry" request. Pick a `hunt` preset:
+    new_processes, powershell_activity, dns_requests, or network_connections.
+    hours_back bounds the window. Advanced: pass a raw `lcql` query to override
+    the preset (shape: time | sensor-selector | event-types | filter | projection).
     """
     return _render(
-        await asyncio.to_thread(tools.query_telemetry, _client(), lcql, hours_back, limit)
+        await asyncio.to_thread(
+            tools.query_telemetry, _client(), hunt, hours_back, limit, lcql
+        )
     )
 
 

@@ -51,16 +51,19 @@ the exfiltration incident"*. In Hermes use `/personality <name>`; elsewhere just
 say "as a …". See [using skills & personas](using-skills-and-personas.md).
 
 ### 5. For hunts / free-text queries, give or template the query
-Some tools take a **free-text query** the model must write — Defender
-`run_hunting_query` (KQL) and LimaCharlie `query_telemetry` (LCQL). A small model
-can usually manage **common KQL**, but **struggles to invent rarer syntax like
-LCQL** from a vague prompt. So:
-- **Be specific** ("hunt for **new processes** today") rather than "hunt for stuff", **or**
-- **Supply the query** — *"Run this LCQL: `-24h | plat == windows | NEW_PROCESS | * | event/FILE_PATH`"* — and the model just passes it through, **or**
-- **Use a starter** from [`skills/limacharlie/threat-hunt/references/lcql-starters.md`](../../skills/limacharlie/threat-hunt/references/lcql-starters.md) (LCQL) and tweak the filter.
+Some tools involve a query. LimaCharlie `query_telemetry` now offers **guided
+presets** (`new_processes`, `powershell_activity`, `dns_requests`,
+`network_connections`) — so just **name the behaviour** ("hunt for new processes")
+and the model picks a preset; no query-writing needed. Defender `run_hunting_query`
+still takes free-text **KQL**, which a small model can usually manage for common
+asks. So:
+- **Be specific** ("hunt for **new processes** today" / "hunt for PowerShell
+  downloads") rather than "hunt for stuff", **or**
+- **Supply the query** for a custom hunt — *"Run this LCQL: `-24h | * | NEW_PROCESS | * | event/FILE_PATH`"* — and the model passes it through, **or**
+- **Use a starter** from [`skills/limacharlie/threat-hunt/references/lcql-starters.md`](../../skills/limacharlie/threat-hunt/references/lcql-starters.md) and tweak it.
 
-If the model keeps failing to *write* a query, that's a model-size limit, not a
-you-problem — supply the query, or use a stronger model.
+If a small model keeps failing to *write* a custom query, that's a model-size
+limit — use a preset, supply the query, or use a stronger model.
 
 ## Good prompts per platform
 
@@ -68,8 +71,8 @@ you-problem — supply the query, or use a stronger model.
 |----------|--------|-------|
 | Defender | "List active high-severity incidents" · "Hunt for PowerShell that downloaded files today" | name severity + time window |
 | Entra | "Which users are risky right now?" · "List disabled conditional access policies" | — |
-| LimaCharlie | "Investigate sensor web-01" · "What detections fired in the last 24h?" | for hunts, supply/template the LCQL (rule 5) |
-| ProjectAchilles | "What's our defense score?" · "Is our defense score **improving over time**?" | say "over time / trend" so it picks the trend tool, not the snapshot |
+| LimaCharlie | "Investigate sensor web-01" · "Hunt for new processes" | hunts use guided presets — just name the behaviour (rule 5) |
+| ProjectAchilles | "What's our defense score?" · "Is our defense score **improving over time**?" | say "over time" and it returns the trend (one tool, `over_time` flag) |
 
 ## What to expect back
 
