@@ -65,7 +65,13 @@ async def list_detections(
 
 @mcp.tool()
 async def query_telemetry(lcql: str, hours_back: int = 24, limit: int = 50) -> list[dict]:
-    """Run a bounded LCQL telemetry query over the last hours_back hours."""
+    """Run a bounded LCQL endpoint-telemetry query over the last hours_back hours.
+
+    Use for ANY "hunt / query telemetry" request. Construct an `lcql` query of the
+    shape `time | sensor-selector | event-types | filter | projection`. Common
+    event types: NEW_PROCESS (processes), DNS_REQUEST, NETWORK_CONNECTIONS.
+    Example: `-24h | plat == windows | NEW_PROCESS | * | event/FILE_PATH`.
+    """
     return _render(
         await asyncio.to_thread(tools.query_telemetry, _client(), lcql, hours_back, limit)
     )

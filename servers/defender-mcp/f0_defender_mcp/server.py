@@ -58,7 +58,13 @@ async def list_alerts(severity_min: str = "high", limit: int = 25) -> list[dict]
 
 @mcp.tool()
 async def run_hunting_query(kql: str) -> list[dict]:
-    """Run a Microsoft Defender advanced hunting (KQL) query over the last 30 days."""
+    """Run a Microsoft Defender advanced hunting query (KQL, last 30 days).
+
+    Use for ANY "run a hunting query / hunt for X" request. Construct a `kql`
+    query string. Common tables: DeviceProcessEvents (processes), SigninLogs or
+    AADSignInEventsBeta (sign-ins), DeviceNetworkEvents (network), EmailEvents
+    (email). Always bound results with `| take 50`.
+    """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
         return _render(await tools.run_hunting_query(gc, kql))
