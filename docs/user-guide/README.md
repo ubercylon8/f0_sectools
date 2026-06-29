@@ -29,9 +29,11 @@ Nothing leaves the host. Today: Microsoft **Defender** and **Entra ID**.
      [running with local models](../running-with-local-models.md).
 3. **[Using skills & personas](using-skills-and-personas.md)** — what the
    playbooks and the four role lenses do.
-4. **[Workflows](workflows.md)** — example end-to-end tasks (posture, triage,
+4. **[Prompting](prompting.md)** — how to phrase requests so a small local model
+   reliably drives the tools (matters a lot — read this).
+5. **[Workflows](workflows.md)** — example end-to-end tasks (posture, triage,
    hunt) with the prompts to use.
-5. **[Troubleshooting](troubleshooting.md)** — throttling, missing permissions,
+6. **[Troubleshooting](troubleshooting.md)** — throttling, missing permissions,
    tools not firing.
 
 ## Support matrix (living — update as the project grows)
