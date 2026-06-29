@@ -48,6 +48,16 @@ def _score_severity(score: float) -> Severity:
     return Severity.info
 
 
+def _rows(resp: Any) -> list:
+    """Extract a list of rows. Some PA endpoints return a bare array, others
+    wrap it as ``{"data": [...]}`` — handle both."""
+    if isinstance(resp, list):
+        return resp
+    if isinstance(resp, dict):
+        return resp.get("data") or []
+    return []
+
+
 async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
     frm, to = _window(days)
     try:
@@ -90,7 +100,7 @@ async def get_defense_score_trend(pa: Any, days: int = 30, interval: str = "day"
         if finding:
             return [finding]
         raise
-    pts = d.get("data") or []
+    pts = _rows(d)
     if not pts:
         return []
     first = float(pts[0].get("score", 0) or 0)
@@ -122,7 +132,7 @@ async def get_weak_techniques(pa: Any, days: int = 30, limit: int = 10) -> list[
         if finding:
             return [finding]
         raise
-    rows = sorted((d.get("data") or []), key=lambda r: float(r.get("score", 100) or 100))[:limit]
+    rows = sorted(_rows(d), key=lambda r: float(r.get("score", 100) or 100))[:limit]
     out: list[Finding] = []
     for r in rows:
         name = str(r.get("name", "technique"))
@@ -158,7 +168,7 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
             return [finding]
         raise
     out: list[Finding] = []
-    for x in (d.get("data") or [])[:limit]:
+    for x in _rows(d)[:limit]:
         host = x.get("hostname", "")
         name = x.get("test_name", "test")
         if x.get("is_protected"):
@@ -193,7 +203,7 @@ async def list_risk_acceptances(pa: Any, status: str = "active", limit: int = 50
             return [finding]
         raise
     out: list[Finding] = []
-    for r in (d.get("data") or [])[:limit]:
+    for r in _rows(d)[:limit]:
         name = r.get("test_name", "risk")
         out.append(
             Finding(
@@ -254,8 +264,8 @@ async def get_fleet_health(pa: Any) -> list[Finding]:
             return [finding]
         raise
     m = d.get("data") or {}
-    online = m.get("online_count", 0)
-    total = m.get("total_count", 0)
+    online = m.get("online", 0)
+    total = m.get("total", 0)
     return [
         Finding(
             source="projectachilles",
@@ -265,9 +275,9 @@ async def get_fleet_health(pa: Any) -> list[Finding]:
             entity=Entity(kind=EntityKind.tenant, id="fleet"),
             evidence=[
                 Evidence(key="online", value=str(online)),
-                Evidence(key="offline", value=str(m.get("offline_count", 0))),
+                Evidence(key="offline", value=str(m.get("offline", 0))),
                 Evidence(key="total", value=str(total)),
-                Evidence(key="uptime_30d", value=str(m.get("fleet_uptime_percent_30d", ""))),
+                Evidence(key="pending_tasks", value=str(m.get("pending_tasks", 0))),
             ],
         )
     ]

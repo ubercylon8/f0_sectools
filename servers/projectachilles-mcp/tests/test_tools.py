@@ -95,11 +95,10 @@ async def test_list_agents_maps():
 @pytest.mark.asyncio
 async def test_get_fleet_health_maps():
     pa = FakeClient(responses={"/agent/admin/metrics": {"success": True, "data": {
-        "online_count": 8, "offline_count": 2, "total_count": 10,
-        "fleet_uptime_percent_30d": 96.5}}})
+        "online": 8, "offline": 2, "total": 10, "pending_tasks": 3}}})
     findings = await tools.get_fleet_health(pa)
     assert findings[0].finding_type.value == "posture"
-    assert any("8" in e.value for e in findings[0].evidence)
+    assert "8/10" in findings[0].title
 
 
 @pytest.mark.asyncio
@@ -117,3 +116,13 @@ async def test_get_defense_score_502_degrades():
     findings = await tools.get_defense_score(pa)
     assert findings[0].finding_type.value == "posture"
     assert "unavailable" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_weak_techniques_handles_bare_list():
+    # Live PA returns a bare array (no {data} wrapper) for by-technique.
+    pa = FakeClient(responses={"/analytics/defense-score/by-technique": [
+        {"name": "T1059", "score": 10, "count": 8},
+    ]})
+    findings = await tools.get_weak_techniques(pa)
+    assert "T1059" in findings[0].title
