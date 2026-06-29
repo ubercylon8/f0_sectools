@@ -48,6 +48,32 @@ Returns concrete hardening recommendations.
 Calls `list_alerts`, maps them to MITRE techniques, flags noisy/low-signal
 detections (e.g. repetitive DLP), and notes coverage gaps to tune.
 
+## LimaCharlie detection-coverage review (detection engineer / CISO)
+
+> **Prompt:** "Review our LimaCharlie detection coverage."
+
+The `review-detection-coverage` skill runs `get_org_overview` (sensors, rule
+count, 24h detection volume), `list_dr_rules` (separating detection rules from
+output/forwarding rules), and `list_detections`, then reports which rules are
+firing, which are silent, and where coverage gaps are. This is the
+offensive↔defensive loop — it reads back the D&R rules `f0_library` deploys.
+
+## LimaCharlie endpoint investigation (SOC analyst / threat hunter)
+
+> **Prompt:** "Investigate the endpoint web-01 in LimaCharlie."
+
+The `investigate-lc-endpoint` skill calls `get_sensor` (status, platform), then a
+bounded `query_telemetry` LCQL scoped to the host, and summarizes notable
+activity with a recommended next step.
+
+## LimaCharlie threat hunt (threat hunter)
+
+> **Prompt:** "Hunt for PowerShell download cradles across our endpoints."
+
+The `limacharlie-threat-hunt` skill picks a bounded LCQL query from
+[`references/lcql-starters.md`](../../skills/limacharlie/threat-hunt/references/lcql-starters.md),
+runs `query_telemetry`, reviews the rows, refines, and summarizes findings + TTPs.
+
 ---
 
 ### What to expect when something isn't granted
