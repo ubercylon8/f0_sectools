@@ -217,6 +217,27 @@ Each integration follows `.env.<platform>` and the thin-server pattern. Read too
 
 ---
 
+## Adding a New Platform Server (repeatable recipe)
+
+The four built servers (`defender`, `entra`, `limacharlie`, `projectachilles`) follow an **identical pattern**. To add a platform, replicate it — `core/` does not change. Do it in this order; TDD each code step.
+
+1. **Config** — add `<Platform>Config` (dataclass + `from_env(prefix=...)`, required vars, optional `verify_tls`/`allow_write`, secrets never logged) to `core/auth/config.py`, with a test in `core/tests/test_config.py`.
+2. **Scaffold** `servers/<platform>-mcp/`: `pyproject.toml` (deps `f0-sectools-core`, `mcp`, + the platform's client lib), `README.md`, `.env.<platform>.example` (document the exact required permissions/scopes), `f0_<platform>_mcp/__init__.py`, `tests/`. Then `uv sync --all-packages`.
+3. **Client** (`client.py`) — thin wrapper exposing only the read methods needed. Async `httpx` for REST (static Bearer or OAuth); for a **synchronous vendor SDK**, wrap it and have the server run tools via `asyncio.to_thread`.
+4. **Errors** (`errors.py`) — `map_<platform>_error(e, capability, …)` mapping auth → posture finding, `403` → `Finding.permission_missing`, `429` → `Finding.rate_limited`, gateway `502/503/504` → "API unavailable" posture finding. **Every failure becomes a finding, never an exception.**
+5. **Tools** (`tools.py`) — ≤ ~8 flat read tools returning `list[Finding]`; each catches platform errors → graceful finding else re-raise; defensive dict access. Write the contract tests first (fake client) — **live data validates real field names**.
+6. **Server** (`server.py`) — `FastMCP`, one `@mcp.tool()` per tool, build the client from config, **redact at the boundary** (`redact_obj(f.model_dump())`).
+7. **Evals** — `evals/<platform>/tasks.yaml` (≥1 task per tool) + add the server to `SERVERS` in `evals/test_eval_coverage.py` and `SERVER_MODULES` in `evals/run.py`.
+8. **Smoke script** — `scripts/live_smoke_<platform>.py`.
+9. **Live-test** — create `.env.<platform>` at the repo root (gitignored), run the smoke script **with network/sandbox enabled**, and fix-forward field-name/shape mismatches (this step always finds 1–3 — mocks encode assumptions; the live API is truth). Mark live-validated once clean.
+10. **Skills** (after the server is validated) — three `SKILL.md` under `skills/<platform>/` (a posture/coverage skill, a gap/investigation skill, a platform-native one). Pick a default focus and say so. Wire into Hermes personas if relevant.
+11. **Docs** — update the Platform Integrations table + Architecture tree here, the README status, and the user-guide support matrix + workflows.
+12. **Verify & ship** — `uv run pytest`, `uv run ruff check .`, markdown link check, secret scan (no real `.env` staged), commit (conventional, with the Co-Authored-By/session trailers), **push only on explicit instruction**.
+
+**Auth models already handled** (none required a `core/` change): Microsoft Graph OAuth client-credentials, a synchronous vendor SDK (LimaCharlie), and a static `Bearer` REST key (ProjectAchilles). See the Quick Reference table for the one-liners.
+
+---
+
 ## Secrets & Privacy
 
 - **Per-platform `.env`.** `.env.wazuh`, `.env.defender`, `.env.entra`, … Each server loads only its own. All `.env*` files are gitignored.
