@@ -57,6 +57,17 @@ def test_list_sensors_maps():
     assert findings[0].finding_type.value == "posture"
 
 
+def test_list_sensors_enforces_limit():
+    lc = FakeClient(sensors=[{"sid": str(i), "hostname": f"h{i}"} for i in range(10)])
+    assert len(tools.list_sensors(lc, limit=3)) == 3
+
+
+def test_list_sensors_maps_platform_int():
+    lc = FakeClient(sensors=[{"sid": "s1", "hostname": "win-01", "platform": 0x10000000}])
+    plat = {e.key: e.value for e in tools.list_sensors(lc)[0].evidence}["platform"]
+    assert plat == "windows"
+
+
 def test_list_detections_maps():
     lc = FakeClient(detections=[
         {"cat": "Suspicious PowerShell", "routing": {"hostname": "web-01"}, "detect_id": "d1"},

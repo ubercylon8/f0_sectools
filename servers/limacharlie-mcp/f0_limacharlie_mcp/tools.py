@@ -26,6 +26,16 @@ from .errors import map_lc_error
 _MAX_ITEMS = 50
 _OVERVIEW_SCAN = 1000
 
+# LimaCharlie platform architecture constants -> human names.
+_PLATFORMS = {
+    0x10000000: "windows",
+    0x20000000: "linux",
+    0x30000000: "macos",
+    0x40000000: "ios",
+    0x50000000: "android",
+    0x60000000: "chromeos",
+}
+
 
 def _first(d: dict, *keys: str, default: Any = None) -> Any:
     for k in keys:
@@ -34,12 +44,18 @@ def _first(d: dict, *keys: str, default: Any = None) -> Any:
     return default
 
 
-def _sensor_findings(sensors: list[dict]) -> list[Finding]:
+def _platform_name(value: Any) -> str:
+    if isinstance(value, int):
+        return _PLATFORMS.get(value, str(value))
+    return str(value)
+
+
+def _sensor_findings(sensors: list[dict], cap: int = _MAX_ITEMS) -> list[Finding]:
     out: list[Finding] = []
-    for s in sensors[:_MAX_ITEMS]:
+    for s in sensors[: min(cap, _MAX_ITEMS)]:
         host = _first(s, "hostname", "host_name", default="unknown")
         online = bool(_first(s, "is_online", "online", default=False))
-        plat = _first(s, "platform", "plat", default="?")
+        plat = _platform_name(_first(s, "platform", "plat", default="?"))
         out.append(
             Finding(
                 source="limacharlie",
@@ -66,7 +82,8 @@ def list_sensors(lc: Any, online_only: bool = False, limit: int = _MAX_ITEMS) ->
         if finding:
             return [finding]
         raise
-    return _sensor_findings(sensors)
+    # The SDK does not strictly honor `limit`; enforce it on the output.
+    return _sensor_findings(sensors, cap=limit)
 
 
 def get_sensor(lc: Any, hostname: str) -> list[Finding]:
