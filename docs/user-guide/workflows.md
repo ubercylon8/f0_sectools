@@ -76,6 +76,33 @@ The `limacharlie-threat-hunt` skill picks a bounded LCQL query from
 [`references/lcql-starters.md`](../../skills/limacharlie/threat-hunt/references/lcql-starters.md),
 runs `query_telemetry`, reviews the rows, refines, and summarizes findings + TTPs.
 
+## ProjectAchilles defense posture (CISO)
+
+> **Prompt:** "As a CISO, how validated is our defense in ProjectAchilles?"
+
+The `review-defense-posture` skill runs `get_defense_score`,
+`get_defense_score_trend`, and `get_weak_techniques`, then reports the % of
+simulated attacks blocked/detected, the trend, the top weak MITRE techniques, and
+the highest-value improvement. (The raw score can differ from the PA dashboard
+depending on filters — treat it as directional.)
+
+## ProjectAchilles coverage gaps (detection engineer)
+
+> **Prompt:** "Where are our control gaps in ProjectAchilles?"
+
+The `analyze-coverage-gaps` skill correlates `get_weak_techniques` with the
+NOT-blocked `list_test_executions`, prioritizes by severity, and recommends
+specific control/detection fixes for the techniques that aren't being blocked.
+
+## ProjectAchilles validation fleet (security engineer)
+
+> **Prompt:** "Is our security validation actually running across the estate?"
+
+The `review-validation-fleet` skill uses `get_fleet_health`, `list_agents`, and
+`list_risk_acceptances` to report test-agent coverage (online vs total),
+offline/stale agents that leave endpoints unvalidated, and the risks formally
+accepted.
+
 ---
 
 ### What to expect when something isn't granted

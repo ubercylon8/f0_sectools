@@ -19,6 +19,9 @@ Skills are step-by-step procedures the agent follows for a task. They live in
 | `investigate-lc-endpoint` | Investigate a sensor: status + telemetry (default) | `get_sensor`, `list_sensors`, `query_telemetry` |
 | `review-detection-coverage` | D&R coverage vs recent detections (the loop) | `get_org_overview`, `list_dr_rules`, `list_detections` |
 | `limacharlie-threat-hunt` | Guided LCQL telemetry hunting | `query_telemetry` |
+| `review-defense-posture` | Defense score + trend + weak techniques | `get_defense_score`, `get_defense_score_trend`, `get_weak_techniques` |
+| `analyze-coverage-gaps` | Weak techniques + unblocked tests → fixes | `get_weak_techniques`, `list_test_executions` |
+| `review-validation-fleet` | Test agents + fleet health + accepted risk | `get_fleet_health`, `list_agents`, `list_risk_acceptances` |
 
 In skills-aware runtimes they activate automatically by description, when you
 name them, or via `/skill-name`. In non-skill UIs (LM Studio, Open WebUI) the

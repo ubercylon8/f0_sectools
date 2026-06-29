@@ -54,3 +54,6 @@ each server's README and the Hermes integration guide.
 | `limacharlie/endpoint-investigation` | Investigate a sensor: status + telemetry (default focus) |
 | `limacharlie/detection-coverage-review` | D&R rule coverage vs recent detections (the loop) |
 | `limacharlie/threat-hunt` | Guided LCQL telemetry hunting with safe starters |
+| `projectachilles/defense-posture-review` | Defense score + trend + weak techniques → posture |
+| `projectachilles/coverage-gap-analysis` | Weak techniques + unblocked tests → what to fix |
+| `projectachilles/validation-fleet-review` | Test agents + fleet health + accepted risks |
