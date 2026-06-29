@@ -48,6 +48,16 @@ Returns concrete hardening recommendations.
 Calls `list_alerts`, maps them to MITRE techniques, flags noisy/low-signal
 detections (e.g. repetitive DLP), and notes coverage gaps to tune.
 
+## LimaCharlie endpoint investigation (SOC analyst / threat hunter) — default focus
+
+> **Prompt:** "Investigate the endpoint web-01 in LimaCharlie."
+
+The `investigate-lc-endpoint` skill calls `get_sensor` (status, platform), then a
+bounded `query_telemetry` LCQL scoped to the host, and summarizes notable
+activity with a recommended next step. This is the LimaCharlie server's default
+focus — an underspecified LimaCharlie request resolves toward investigating
+endpoints.
+
 ## LimaCharlie detection-coverage review (detection engineer / CISO)
 
 > **Prompt:** "Review our LimaCharlie detection coverage."
@@ -57,14 +67,6 @@ count, 24h detection volume), `list_dr_rules` (separating detection rules from
 output/forwarding rules), and `list_detections`, then reports which rules are
 firing, which are silent, and where coverage gaps are. This is the
 offensive↔defensive loop — it reads back the D&R rules `f0_library` deploys.
-
-## LimaCharlie endpoint investigation (SOC analyst / threat hunter)
-
-> **Prompt:** "Investigate the endpoint web-01 in LimaCharlie."
-
-The `investigate-lc-endpoint` skill calls `get_sensor` (status, platform), then a
-bounded `query_telemetry` LCQL scoped to the host, and summarizes notable
-activity with a recommended next step.
 
 ## LimaCharlie threat hunt (threat hunter)
 

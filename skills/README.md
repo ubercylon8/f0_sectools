@@ -51,6 +51,6 @@ each server's README and the Hermes integration guide.
 | `entra/identity-risk-review` | Review ID Protection risky users + risk detections |
 | `entra/conditional-access-audit` | Audit CA policies; flag disabled/report-only gaps |
 | `entra/privileged-access-review` | Review privileged role holders; flag admin sprawl |
+| `limacharlie/endpoint-investigation` | Investigate a sensor: status + telemetry (default focus) |
 | `limacharlie/detection-coverage-review` | D&R rule coverage vs recent detections (the loop) |
-| `limacharlie/endpoint-investigation` | Investigate a sensor: status + telemetry |
 | `limacharlie/threat-hunt` | Guided LCQL telemetry hunting with safe starters |

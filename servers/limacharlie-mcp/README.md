@@ -4,8 +4,10 @@ Read-only [Model Context Protocol](https://modelcontextprotocol.io) server for
 **[LimaCharlie](https://limacharlie.io)** (SecOps / EDR / XDR), built on
 `f0-sectools-core` and the official `limacharlie` Python SDK.
 
-It closes the **offensive↔defensive loop** in the F0RT1KA ecosystem: `f0_library`
-writes D&R detections, and this server reads back whether they exist and fired.
+Its **default focus is endpoint investigation** — find a sensor, check its
+status, and query its telemetry. It also supports **detection-coverage review**
+(the offensive↔defensive loop: `f0_library` writes D&R detections, this reads
+back whether they fired) and fleet-wide **LCQL threat hunting**.
 
 ## Tools (all read-only)
 

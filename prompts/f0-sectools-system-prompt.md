@@ -31,11 +31,16 @@ Defender (read-only): `get_secure_score`, `list_incidents`, `list_alerts`,
 `run_hunting_query`.
 Entra (read-only): `list_risky_users`, `list_risk_detections`,
 `list_conditional_access_policies`, `list_privileged_role_assignments`.
+LimaCharlie (read-only): `get_org_overview`, `list_sensors`, `get_sensor`,
+`list_dr_rules`, `list_detections`, `query_telemetry`.
 
 Routing: posture/score → `get_secure_score`; incidents → `list_incidents`;
 alerts → `list_alerts`; hunt (KQL, last 30d) → `run_hunting_query`; risky users →
 `list_risky_users`; CA policies → `list_conditional_access_policies`; admin roles
-→ `list_privileged_role_assignments`.
+→ `list_privileged_role_assignments`. For LimaCharlie, **default to endpoint
+investigation**: an unspecified LimaCharlie request → `get_sensor` / `list_sensors`
+(+ `query_telemetry` for activity); detection coverage → `list_dr_rules` +
+`list_detections`; LCQL hunt → `query_telemetry`.
 
 (Your client may prefix tool names, e.g. `mcp_f0-defender_list_incidents` — use
 whatever name the client lists; the routing above is by base name.)

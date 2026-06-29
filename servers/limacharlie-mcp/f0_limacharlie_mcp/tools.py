@@ -234,7 +234,8 @@ def get_org_overview(lc: Any) -> list[Finding]:
                 Evidence(key="detections_24h", value=str(len(detections))),
             ],
             recommended_action=RecommendedAction(
-                summary="Review detection volume vs D&R coverage; investigate notable detections."
+                summary="Review online vs offline sensors and recent activity; "
+                "investigate a notable endpoint, or check detection coverage."
             ),
         )
     ]
