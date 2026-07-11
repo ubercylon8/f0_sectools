@@ -103,6 +103,27 @@ The `review-validation-fleet` skill uses `get_fleet_health`, `list_agents`, and
 offline/stale agents that leave endpoints unvalidated, and the risks formally
 accepted.
 
+## Cross-platform incident triage (SOC analyst / threat hunter)
+
+> **Prompt:** "Triage this Defender incident and give me the full picture."
+
+The `triage-incident-cross-platform` skill pivots across all four servers:
+`list_incidents` (Defender) → for the involved user, `list_risky_users` /
+`list_risk_detections` (Entra) → for the host, `get_sensor` + `query_telemetry`
+(LimaCharlie) → for the technique, `get_weak_techniques` (ProjectAchilles). It
+returns one correlated summary and flags any cross-platform join it could not
+confirm by name. Read-only. Favours a capable local model (e.g. GPT-OSS 20B).
+
+## Offensive/defensive loop (detection engineer)
+
+> **Prompt:** "Turn our weak techniques into a retest plan."
+
+The `validation-coverage-loop` skill runs `get_weak_techniques` (ProjectAchilles)
+→ checks each against `list_dr_rules` / `list_detections` (LimaCharlie) → and
+recommends which **f0_library** test to re-run for techniques that are weak and
+uncovered. f0_library is the separate offensive repo the operator runs — the
+skill only recommends. Read-only.
+
 ## Gated write actions (isolate/release a host)
 
 > **Prompt:** "Isolate device web-01, it's showing active ransomware behavior."

@@ -66,3 +66,11 @@ OLLAMA_MAX_LOADED_MODELS=1 ollama serve
 Then resume the sweep — the recorded `ok` cells are skipped and only the failed
 ones re-run (delete the error cells from the results JSON first, since any
 present cell is skipped without `--force`).
+
+## Future: multi-step (agentic) skill eval
+
+Today the harness measures **single** tool selection per prompt. The cross-platform
+correlation skills (`skills/cross-platform/`) chain several tools across servers with
+state between steps — measuring whether a small model drives the *whole chain*
+end-to-end needs a new multi-step/agentic eval (drive a skill, score each step's tool
+choice + the final synthesis). Tracked as a roadmap item; not built yet.
