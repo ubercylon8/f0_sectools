@@ -40,8 +40,20 @@ The `--server all` per-origin report (runs=3) names the collisions:
   (Defender), `get_org_overview` (LimaCharlie), and `get_fleet_health`
   (ProjectAchilles) — e.g. Granite routed a LimaCharlie prompt to `get_fleet_health`.
 
-These are **tool-description defects, not model failures** — the fix is sharper,
-platform-naming descriptions (a follow-up; this pass only measures).
+> **Update (2026-07-11, roadmap #2.5) — descriptions rewritten, verified.** The 5
+> colliding descriptions were platform-anchored + cross-referenced ("for X, use
+> `<other>` instead"). A targeted `runs=3` probe of the exact colliding prompts against
+> the full 22-tool registry, on **both** Qwen3 8B and Granite 4 Tiny, confirms: the
+> **overview/health collision is fully cleared** (LimaCharlie→`get_org_overview`,
+> Microsoft→`get_secure_score`, PA→`get_fleet_health`, all 3/3), and **platform-named
+> hunting now routes correctly**. One residual: an unqualified *"hunt for PowerShell
+> processes"* still picks `query_telemetry` (which has a `powershell_activity` preset)
+> — a genuinely ambiguous ask, left as-is rather than overfit. The `all`-column table
+> numbers above predate the reword (the full 42-task combined run is flaky on this
+> Ollama box); the targeted probe is the cleaner evidence.
+
+Originally **tool-description defects, not model failures** — now addressed for the
+overview/health and named-hunting cases.
 
 **Gemma 4 12B fails the Defender gated-write tools.** Its 75%/67% is specific: it
 does not select `isolate_host` for "isolate device dev-1" (0/2), and misses one

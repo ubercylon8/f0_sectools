@@ -6,6 +6,7 @@ suite runner is exercised with a fake client.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -74,6 +75,65 @@ async def test_model_client_parses_tool_call():
             call = await client.call("show high incidents", tools=[])
     assert call.name == "list_incidents"
     assert call.args == {"severity_min": "high"}
+
+
+_OK = httpx.Response(200, json={"choices": [{"message": {"tool_calls": [
+    {"function": {"name": "list_incidents", "arguments": "{}"}}]}}]})
+
+
+@pytest.mark.asyncio
+async def test_model_client_retries_transient_transport_error(monkeypatch):
+    # A transient connection blip (common over a long sequential sweep) must be
+    # retried, not crash the whole run.
+    monkeypatch.setattr("evals.run.asyncio.sleep", AsyncMock())
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            side_effect=[httpx.ConnectError("transient blip"), _OK]
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            call = await client.call("x", tools=[])
+    assert call.name == "list_incidents"
+
+
+@pytest.mark.asyncio
+async def test_model_client_retries_5xx_then_succeeds(monkeypatch):
+    # A 5xx (Ollama overloaded) is retried like a transport blip.
+    monkeypatch.setattr("evals.run.asyncio.sleep", AsyncMock())
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            side_effect=[httpx.Response(503, json={"error": "overloaded"}), _OK]
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            call = await client.call("x", tools=[])
+    assert call.name == "list_incidents"
+
+
+@pytest.mark.asyncio
+async def test_model_client_4xx_raises_immediately_without_retry(monkeypatch):
+    # A 4xx is a real client error — raise on the first attempt, no retry, no sleep.
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr("evals.run.asyncio.sleep", sleep_mock)
+    with respx.mock as router:
+        route = router.post("http://local/v1/chat/completions").mock(
+            return_value=httpx.Response(400, json={"error": "bad request"})
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await client.call("x", tools=[])
+    assert route.call_count == 1, "4xx must not be retried"
+    sleep_mock.assert_not_awaited()  # 4xx must not back off
+
+
+@pytest.mark.asyncio
+async def test_model_client_raises_after_exhausting_retries(monkeypatch):
+    monkeypatch.setattr("evals.run.asyncio.sleep", AsyncMock())
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            side_effect=httpx.ConnectError("always down")
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            with pytest.raises(httpx.TransportError):
+                await client.call("x", tools=[])
 
 
 @pytest.mark.asyncio
