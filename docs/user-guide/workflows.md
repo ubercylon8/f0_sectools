@@ -138,6 +138,11 @@ plaintext token itself. (Refused attempts — flag off or an invalid token — a
 rejected before execution and are not written to the audit trail; they surface
 to the operator as a refusal finding instead.)
 
+The MCP server and `scripts/confirm_action.py` must be run from the same
+working directory (the repo root) so the pending-token store
+(`audit-logs/pending/`) matches — otherwise a freshly issued token appears
+"invalid".
+
 ---
 
 ### What to expect when something isn't granted

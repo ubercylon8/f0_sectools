@@ -221,6 +221,21 @@ async def test_isolate_host_403_degrades_to_permission_finding(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_isolate_host_404_degrades(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        router.post(SEC + "/machines/dev-1/isolate").mock(
+            return_value=httpx.Response(404, json={"error": {"message": "machine not found"}})
+        )
+        gate = _gate(tmp_path, enabled=True)
+        tok = gate.token_store.issue("defender.isolate_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2", confirmation_token=tok)
+        assert findings[0].finding_type.value == "action"
+        assert "not applied" in findings[0].title
+
+
+@pytest.mark.asyncio
 async def test_isolate_host_503_degrades(tmp_path):
     with respx.mock as router:
         _token(router)

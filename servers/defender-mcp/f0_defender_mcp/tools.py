@@ -252,7 +252,27 @@ async def _run_machine_action(
         finding = map_graph_error(e, "defender", "Machine.Isolate", f"host {verb}")
         if finding:
             return [finding]
-        raise
+        # Unmapped platform error (e.g. 404 unknown device, 400 already isolated):
+        # degrade to a graceful finding rather than raising. The single-use token
+        # was already consumed, so retrying requires a fresh confirmation token.
+        return [
+            Finding(
+                source="defender",
+                finding_type=FindingType.action,
+                severity=Severity.info,
+                title=f"Action not applied: {verb} host {device_id} (platform error {e.status})",
+                entity=Entity(kind=EntityKind.host, id=device_id),
+                evidence=[Evidence(key="error", value=e.message)],
+                recommended_action=RecommendedAction(
+                    summary=(
+                        f"The Defender API rejected the {verb} request. Verify the "
+                        "device_id and retry with a fresh confirmation token."
+                    ),
+                    gated_action=gate.name,
+                    confidence="high",
+                ),
+            )
+        ]
     return [
         Finding(
             source="defender",

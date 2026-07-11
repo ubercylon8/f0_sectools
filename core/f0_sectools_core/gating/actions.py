@@ -49,8 +49,21 @@ class TokenStore:
     def _hash(token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+    def _sweep(self) -> None:
+        if not self.dir.is_dir():
+            return
+        now = time.time()
+        for f in self.dir.glob("*.json"):
+            try:
+                rec = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if float(rec.get("expires_at", 0)) < now:
+                f.unlink(missing_ok=True)
+
     def issue(self, action: str, target: str, ttl_s: int = 900) -> str:
         self.dir.mkdir(parents=True, exist_ok=True)
+        self._sweep()
         token = secrets.token_urlsafe(24)
         record = {"action": action, "target": target, "expires_at": time.time() + ttl_s}
         (self.dir / f"{self._hash(token)}.json").write_text(
@@ -59,6 +72,7 @@ class TokenStore:
         return token
 
     def consume(self, action: str, target: str, token: str) -> bool:
+        self._sweep()
         if not token:
             return False
         path = self.dir / f"{self._hash(token)}.json"

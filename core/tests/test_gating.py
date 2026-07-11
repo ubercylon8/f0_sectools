@@ -54,6 +54,16 @@ def test_expired_token_rejected(tmp_path):
     assert store.consume("defender.isolate_host", "web-01", tok) is False
 
 
+def test_expired_records_are_swept(tmp_path):
+    store = TokenStore(str(tmp_path / "pending"))
+    store.issue("defender.isolate_host", "web-01", ttl_s=-1)  # already expired
+    pending_dir = tmp_path / "pending"
+    assert len(list(pending_dir.glob("*.json"))) == 1
+    # Issuing again should sweep the expired record before writing the new one.
+    store.issue("defender.isolate_host", "web-02")
+    assert len(list(pending_dir.glob("*.json"))) == 1
+
+
 def test_only_hash_persisted_never_plaintext(tmp_path):
     store = TokenStore(str(tmp_path / "pending"))
     tok = store.issue("defender.isolate_host", "web-01")
