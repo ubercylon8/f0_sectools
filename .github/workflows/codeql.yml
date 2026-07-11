@@ -1,0 +1,24 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    # Code scanning needs GitHub Advanced Security on PRIVATE repos (free on public).
+    # This job is skipped (green) while the repo is private and activates automatically
+    # once it is public. push + pull_request only — repository.private is unreliable on schedule.
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3
