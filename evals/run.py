@@ -71,6 +71,22 @@ async def server_tool_schemas(server: str) -> list[dict]:
     return build_openai_tools(await module.mcp.list_tools())
 
 
+async def combined_tool_schemas() -> list[dict]:
+    """Union of every server's tool schemas — the registry an operator sees with
+    all servers registered at once. Raises if two servers expose the same tool
+    name (would make the OpenAI tool list ambiguous)."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for server in sorted(SERVER_MODULES):
+        for schema in await server_tool_schemas(server):
+            name = schema["function"]["name"]
+            if name in seen:
+                raise ValueError(f"tool name collision across servers: {name!r}")
+            seen.add(name)
+            out.append(schema)
+    return out
+
+
 class ModelClient:
     """Minimal OpenAI-compatible chat client for tool-calling evals."""
 
