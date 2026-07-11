@@ -87,6 +87,46 @@ async def combined_tool_schemas() -> list[dict]:
     return out
 
 
+def combined_tasks() -> list[dict]:
+    """Every per-server task tagged with its origin server, plus the cross-platform
+    routing probes. This is the task set for the combined 22-tool registry."""
+    tasks: list[dict] = []
+    for server in sorted(SERVER_MODULES):
+        for t in load_tasks(server):
+            tasks.append({**t, "origin": server})
+    probes_path = EVALS / "combined" / "probes.yaml"
+    if probes_path.exists():
+        for p in yaml.safe_load(probes_path.read_text()) or []:
+            tasks.append(dict(p))  # probes already carry `origin`
+    return tasks
+
+
+def aggregate_by_origin(tasks: list[dict], report: dict) -> dict:
+    """Group the suite report's per-task rows by their `origin` server. Relies on
+    run_suite preserving task order. For each origin: mean tool/args rate, count,
+    and which wrong tools its prompts were misrouted to."""
+    groups: dict[str, dict] = {}
+    for task, row in zip(tasks, report["tasks"]):
+        origin = task.get("origin", "unknown")
+        g = groups.setdefault(origin, {"tool": [], "args": [], "misroutes": {}})
+        g["tool"].append(row["tool_rate"])
+        g["args"].append(row["args_rate"])
+        if row["tool_rate"] < 1.0:
+            for called in row.get("calls", []):
+                if called and called != task["expect_tool"]:
+                    g["misroutes"][called] = g["misroutes"].get(called, 0) + 1
+    out: dict[str, dict] = {}
+    for origin, g in groups.items():
+        n = len(g["tool"]) or 1
+        out[origin] = {
+            "tool_rate": sum(g["tool"]) / n,
+            "args_rate": sum(g["args"]) / n,
+            "n": len(g["tool"]),
+            "misroutes": g["misroutes"],
+        }
+    return out
+
+
 class ModelClient:
     """Minimal OpenAI-compatible chat client for tool-calling evals."""
 
@@ -165,6 +205,7 @@ async def run_suite(
                 "tool_rate": sum(a["tool_correct"] for a in attempts) / n,
                 "args_rate": sum(a["args_correct"] for a in attempts) / n,
                 "runs": n,
+                "calls": [a["called"] for a in attempts],
             }
         )
     total = len(task_rows) or 1

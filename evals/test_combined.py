@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from evals.run import combined_tool_schemas
+from evals.run import aggregate_by_origin, combined_tasks, combined_tool_schemas, run_suite
+from evals.run import ToolCall
 
 
 @pytest.mark.asyncio
@@ -29,3 +30,53 @@ def test_collision_guard_is_reachable():
     tools = asyncio.run(combined_tool_schemas())
     names = [t["function"]["name"] for t in tools]
     assert sorted(names) == sorted(set(names))
+
+
+def test_combined_tasks_tagged_with_origin_and_include_probes():
+    import yaml
+    tasks = combined_tasks()
+    # 12 defender + 8 entra + 8 limacharlie + 8 projectachilles = 36, plus probes.
+    # Distinguish by checking against native task prompts.
+    native_prompts = set()
+    for server in ["defender", "entra", "limacharlie", "projectachilles"]:
+        native = yaml.safe_load(open(f"evals/{server}/tasks.yaml"))
+        native_prompts.update(t["prompt"] for t in (native or []))
+    per_server = [t for t in tasks if t["prompt"] in native_prompts]
+    assert len(per_server) == 36
+    probes = [t for t in tasks if t["prompt"] not in native_prompts]
+    assert len(probes) >= 6, "expected the cross-platform probe set"
+    assert all("origin" in t and "prompt" in t and "expect_tool" in t for t in tasks)
+
+
+@pytest.mark.asyncio
+async def test_run_suite_records_calls():
+    tasks = [{"prompt": "a", "expect_tool": "list_incidents", "origin": "defender"}]
+
+    class _Fake:
+        async def call(self, prompt, tools):
+            return ToolCall("query_telemetry", {})  # wrong tool (misroute)
+
+    report = await run_suite([], tasks, _Fake(), runs=2)
+    assert report["tasks"][0]["calls"] == ["query_telemetry", "query_telemetry"]
+
+
+def test_aggregate_by_origin_groups_and_counts_misroutes():
+    tasks = [
+        {"prompt": "a", "expect_tool": "list_incidents", "origin": "defender"},
+        {"prompt": "b", "expect_tool": "get_secure_score", "origin": "defender"},
+        {"prompt": "c", "expect_tool": "get_defense_score", "origin": "projectachilles"},
+    ]
+    report = {
+        "tasks": [
+            {"tool_rate": 0.0, "args_rate": 0.0, "calls": ["query_telemetry"]},  # misrouted
+            {"tool_rate": 1.0, "args_rate": 1.0, "calls": ["get_secure_score"]},
+            {"tool_rate": 1.0, "args_rate": 1.0, "calls": ["get_defense_score"]},
+        ],
+        "overall_tool_rate": 2 / 3, "overall_args_rate": 2 / 3,
+    }
+    agg = aggregate_by_origin(tasks, report)
+    assert agg["defender"]["tool_rate"] == 0.5
+    assert agg["defender"]["n"] == 2
+    assert agg["defender"]["misroutes"] == {"query_telemetry": 1}
+    assert agg["projectachilles"]["tool_rate"] == 1.0
+    assert agg["projectachilles"]["misroutes"] == {}

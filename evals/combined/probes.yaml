@@ -1,0 +1,28 @@
+# Cross-platform routing probes for the combined (all-servers) eval.
+# Each prompt is deliberately ambiguous across platforms; `origin` names the
+# platform whose tool SHOULD be selected when all 22 tools are registered.
+# Same field schema as a server tasks.yaml, plus the required `origin`.
+
+- prompt: "Run a Defender advanced hunting query for suspicious PowerShell."
+  expect_tool: run_hunting_query
+  origin: defender
+
+- prompt: "Hunt across our LimaCharlie endpoints for new processes."
+  expect_tool: query_telemetry
+  origin: limacharlie
+
+- prompt: "List our LimaCharlie sensors."
+  expect_tool: list_sensors
+  origin: limacharlie
+
+- prompt: "List our ProjectAchilles validation agents."
+  expect_tool: list_agents
+  origin: projectachilles
+
+- prompt: "Show our risky users in Entra."
+  expect_tool: list_risky_users
+  origin: entra
+
+- prompt: "What risk acceptances are on file in ProjectAchilles?"
+  expect_tool: list_risk_acceptances
+  origin: projectachilles
