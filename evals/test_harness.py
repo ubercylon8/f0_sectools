@@ -77,6 +77,35 @@ async def test_model_client_parses_tool_call():
 
 
 @pytest.mark.asyncio
+async def test_model_client_retries_transient_transport_error():
+    # A transient connection blip (common over a long sequential sweep) must be
+    # retried, not crash the whole run.
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            side_effect=[
+                httpx.ConnectError("transient blip"),
+                httpx.Response(200, json={"choices": [{"message": {"tool_calls": [
+                    {"function": {"name": "list_incidents", "arguments": "{}"}}
+                ]}}]}),
+            ]
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            call = await client.call("x", tools=[])
+    assert call.name == "list_incidents"
+
+
+@pytest.mark.asyncio
+async def test_model_client_raises_after_exhausting_retries():
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            side_effect=httpx.ConnectError("always down")
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            with pytest.raises(httpx.TransportError):
+                await client.call("x", tools=[])
+
+
+@pytest.mark.asyncio
 async def test_model_client_no_tool_call_returns_none():
     with respx.mock as router:
         router.post("http://local/v1/chat/completions").mock(

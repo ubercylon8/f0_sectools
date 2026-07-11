@@ -152,20 +152,36 @@ class ModelClient:
             "temperature": 0,
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        resp = await self._client.post(
-            f"{self.base_url}/chat/completions", json=body, headers=headers
-        )
-        resp.raise_for_status()
-        message = resp.json()["choices"][0]["message"]
-        calls = message.get("tool_calls") or []
-        if not calls:
-            return None
-        fn = calls[0]["function"]
-        try:
-            args = json.loads(fn.get("arguments") or "{}")
-        except (ValueError, TypeError):
-            args = {}
-        return ToolCall(name=fn["name"], args=args if isinstance(args, dict) else {})
+        url = f"{self.base_url}/chat/completions"
+        # Retry transient blips (connection drops, read timeouts, 5xx overload) so a
+        # single hiccup over a long sequential sweep doesn't crash the whole run. A
+        # 4xx (bad request) still raises immediately; exhausting retries re-raises.
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                resp = await self._client.post(url, json=body, headers=headers)
+                if resp.status_code >= 500:
+                    last_exc = httpx.HTTPStatusError(
+                        f"server error {resp.status_code}", request=resp.request, response=resp
+                    )
+                    await asyncio.sleep(0.5 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+            except httpx.TransportError as e:
+                last_exc = e
+                await asyncio.sleep(0.5 * (attempt + 1))
+                continue
+            message = resp.json()["choices"][0]["message"]
+            calls = message.get("tool_calls") or []
+            if not calls:
+                return None
+            fn = calls[0]["function"]
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except (ValueError, TypeError):
+                args = {}
+            return ToolCall(name=fn["name"], args=args if isinstance(args, dict) else {})
+        raise last_exc  # exhausted retries
 
 
 def _args_match(task: dict, args: dict) -> bool:
