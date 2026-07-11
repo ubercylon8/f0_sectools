@@ -106,7 +106,7 @@ def aggregate_by_origin(tasks: list[dict], report: dict) -> dict:
     run_suite preserving task order. For each origin: mean tool/args rate, count,
     and which wrong tools its prompts were misrouted to."""
     groups: dict[str, dict] = {}
-    for task, row in zip(tasks, report["tasks"]):
+    for task, row in zip(tasks, report["tasks"], strict=True):
         origin = task.get("origin", "unknown")
         g = groups.setdefault(origin, {"tool": [], "args": [], "misroutes": {}})
         g["tool"].append(row["tool_rate"])

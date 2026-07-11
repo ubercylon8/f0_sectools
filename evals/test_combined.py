@@ -7,8 +7,13 @@ from __future__ import annotations
 
 import pytest
 
-from evals.run import aggregate_by_origin, combined_tasks, combined_tool_schemas, run_suite
-from evals.run import ToolCall
+from evals.run import (
+    ToolCall,
+    aggregate_by_origin,
+    combined_tasks,
+    combined_tool_schemas,
+    run_suite,
+)
 
 
 @pytest.mark.asyncio
