@@ -103,6 +103,39 @@ The `review-validation-fleet` skill uses `get_fleet_health`, `list_agents`, and
 offline/stale agents that leave endpoints unvalidated, and the risks formally
 accepted.
 
+## Gated write actions (isolate/release a host)
+
+> **Prompt:** "Isolate device web-01, it's showing active ransomware behavior."
+
+Defender's `isolate_host` / `release_host` are the only tools that change state
+on a live platform, so they're gated read-only-by-default (Critical Rule 1) — a
+small local model can never isolate a host on its own. The flow is two steps,
+split across the model and the operator:
+
+1. **Intent (the model's turn).** The agent calls `isolate_host` with no
+   `confirmation_token`. This does **not** touch the API — it returns an
+   `action` finding describing exactly what it intends to do (device, action,
+   `gated_action: defender.isolate_host`) and asks you to confirm.
+2. **Confirm (your turn, out-of-band).** In your own terminal — not through the
+   model — run:
+
+   ```bash
+   uv run python scripts/confirm_action.py isolate_host <device_id>
+   ```
+
+   This prints a single-use confirmation token. The token is generated
+   out-of-band in your shell; the model never sees it and cannot request or
+   fabricate one, so it can never self-confirm. Paste the token back into the
+   chat as the `confirmation_token` argument to re-run `isolate_host` — only
+   then does the tool call the Defender isolate API.
+
+Writes are also disabled at the config level unless `DEFENDER_ALLOW_WRITE=true`
+is set in `.env.defender` — even with a valid token, the tool refuses if the
+flag is off. Every executed action (and every refused attempt) is recorded to
+the local audit trail at `audit-logs/actions.log`, which stores the actor,
+target, action name, and a truncated SHA-256 **fingerprint** of the token —
+never the plaintext token itself.
+
 ---
 
 ### What to expect when something isn't granted

@@ -22,7 +22,6 @@ async def test_get_token_uses_custom_scope():
         ) as gc:
             await gc.get_token()
         sent = route.calls[0].request
-        body = dict(pair.split("=") for pair in sent.content.decode().split("&"))
         # scope is URL-encoded in the form body
         assert "api.security.microsoft.com" in httpx.QueryParams(sent.content.decode())["scope"]
 
