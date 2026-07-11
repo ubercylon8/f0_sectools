@@ -27,7 +27,8 @@ class AuditLog:
 
     def record(self, action: str, target: str, actor: str, token: str) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        entry = {"action": action, "target": target, "actor": actor, "token": token}
+        token_ref = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16] if token else ""
+        entry = {"action": action, "target": target, "actor": actor, "token_ref": token_ref}
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
 

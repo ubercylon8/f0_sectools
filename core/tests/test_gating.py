@@ -33,6 +33,15 @@ def test_token_rejected_for_wrong_target(tmp_path):
     assert store.consume("defender.isolate_host", "web-02", tok) is False
 
 
+def test_wrong_target_attempt_burns_token(tmp_path):
+    # A consume attempt against the wrong target must still burn the token,
+    # so it cannot then be replayed against the correct target.
+    store = TokenStore(str(tmp_path / "pending"))
+    tok = store.issue("defender.isolate_host", "web-01")
+    assert store.consume("defender.isolate_host", "web-99", tok) is False  # wrong target
+    assert store.consume("defender.isolate_host", "web-01", tok) is False  # now dead
+
+
 def test_token_rejected_for_wrong_action(tmp_path):
     store = TokenStore(str(tmp_path / "pending"))
     tok = store.issue("defender.isolate_host", "web-01")
@@ -88,6 +97,7 @@ def test_executes_and_audits(tmp_path):
     entry = json.loads(log.read_text().strip())
     assert entry["action"] == "defender.isolate_host"
     assert entry["target"] == "web-01"
+    assert tok not in log.read_text()  # plaintext token must never be persisted
 
 
 @pytest.mark.asyncio
