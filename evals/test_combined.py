@@ -80,3 +80,18 @@ def test_aggregate_by_origin_groups_and_counts_misroutes():
     assert agg["defender"]["misroutes"] == {"query_telemetry": 1}
     assert agg["projectachilles"]["tool_rate"] == 1.0
     assert agg["projectachilles"]["misroutes"] == {}
+
+
+def test_format_combined_report_shows_origins_and_misroutes():
+    from evals.run import format_combined_report
+
+    report = {"overall_tool_rate": 0.75, "overall_args_rate": 0.5, "tasks": []}
+    agg = {
+        "defender": {"tool_rate": 0.5, "args_rate": 0.5, "n": 2,
+                     "misroutes": {"query_telemetry": 1}},
+        "projectachilles": {"tool_rate": 1.0, "args_rate": 1.0, "n": 1, "misroutes": {}},
+    }
+    text = format_combined_report("gpt-oss:20b-c128k", report, agg)
+    assert "defender" in text
+    assert "query_telemetry" in text  # the misroute target is shown
+    assert "75%" in text  # overall tool-selection

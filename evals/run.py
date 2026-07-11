@@ -231,18 +231,42 @@ def format_report(server: str, model: str, report: dict) -> str:
     return "\n".join(lines)
 
 
+def format_combined_report(model: str, report: dict, origin_agg: dict) -> str:
+    lines = [f"\nCombined eval (all 22 tools)  x  {model}", "-" * 72]
+    for origin in sorted(origin_agg):
+        g = origin_agg[origin]
+        mis = ", ".join(f"{k}x{v}" for k, v in sorted(g["misroutes"].items())) or "-"
+        lines.append(
+            f"  {origin:16} tool {g['tool_rate']:5.0%}  args {g['args_rate']:5.0%}  "
+            f"(n={g['n']})  misrouted-> {mis}"
+        )
+    lines.append("-" * 72)
+    lines.append(
+        f"  OVERALL  tool-selection {report['overall_tool_rate']:.0%}  "
+        f"argument-filling {report['overall_args_rate']:.0%}"
+    )
+    return "\n".join(lines)
+
+
 async def _amain(args: argparse.Namespace) -> None:
-    tasks = load_tasks(args.server)
-    tools = await server_tool_schemas(args.server)
     api_key = args.api_key or os.environ.get("OPENAI_API_KEY")
+    if args.server == "all":
+        tools = await combined_tool_schemas()
+        tasks = combined_tasks()
+    else:
+        tools = await server_tool_schemas(args.server)
+        tasks = load_tasks(args.server)
     async with ModelClient(args.base_url, args.model, api_key) as client:
         report = await run_suite(tools, tasks, client, runs=args.runs)
-    print(format_report(args.server, args.model, report))
+    if args.server == "all":
+        print(format_combined_report(args.model, report, aggregate_by_origin(tasks, report)))
+    else:
+        print(format_report(args.server, args.model, report))
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description="f0_sectools small-model tool-calling eval")
-    p.add_argument("--server", required=True, choices=sorted(SERVER_MODULES))
+    p.add_argument("--server", required=True, choices=[*sorted(SERVER_MODULES), "all"])
     p.add_argument(
         "--base-url", required=True, help="OpenAI-compatible base URL (e.g. http://localhost:8000/v1)"
     )
