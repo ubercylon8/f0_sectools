@@ -31,3 +31,10 @@ def test_permission_missing_helper():
     assert f.severity == Severity.info
     assert f.finding_type == FindingType.posture
     assert "IdentityRiskyUser.Read.All" in f.title
+
+
+def test_api_unavailable_helper():
+    f = Finding.api_unavailable("defender", "host isolation", 503)
+    assert f.finding_type == FindingType.posture
+    assert "unavailable" in f.title
+    assert "503" in f.title
