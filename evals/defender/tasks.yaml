@@ -35,3 +35,17 @@
 
 - prompt: "Run an advanced hunting query for suspicious sign-ins."
   expect_tool: run_hunting_query
+
+- prompt: "Isolate device dev-1 from the network — I suspect it's compromised."
+  expect_tool: isolate_host
+  expect_args_contains: { device_id: dev-1 }
+
+- prompt: "Contain host dev-1, add a note that it's part of incident 42."
+  expect_tool: isolate_host
+
+- prompt: "Release dev-1 from isolation, it's been cleaned."
+  expect_tool: release_host
+  expect_args_contains: { device_id: dev-1 }
+
+- prompt: "Take dev-1 back out of network isolation."
+  expect_tool: release_host

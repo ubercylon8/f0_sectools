@@ -122,3 +122,24 @@ class Finding(BaseModel):
                 confidence="high",
             ),
         )
+
+    @classmethod
+    def api_unavailable(cls, source: str, capability: str, status: int) -> Finding:
+        """Build a posture finding for an upstream gateway error (HTTP 502/503/504).
+
+        Used by servers when a platform's gateway returns an upstream error, so a
+        transient outage degrades to actionable guidance instead of an exception.
+        """
+        return cls(
+            source=source,
+            finding_type=FindingType.posture,
+            severity=Severity.info,
+            title=f"{source} API temporarily unavailable (HTTP {status}) — {capability} deferred",
+            recommended_action=RecommendedAction(
+                summary=(
+                    "The API gateway returned an upstream error; confirm the platform "
+                    "is reachable, then retry."
+                ),
+                confidence="high",
+            ),
+        )

@@ -3,21 +3,40 @@ import pytest
 import respx
 from f0_defender_mcp.tools import (
     get_secure_score,
+    isolate_host,
     list_alerts,
     list_incidents,
+    release_host,
     run_hunting_query,
 )
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
+from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
 
 CFG = PlatformConfig(tenant_id="t", client_id="c", client_secret="s")
 TOKEN_URL = "https://login.microsoftonline.com/t/oauth2/v2.0/token"
 GRAPH = "https://graph.microsoft.com/v1.0"
+SEC = "https://api.security.microsoft.com/api"
 
 
 def _token(router):
     router.post(TOKEN_URL).mock(
         return_value=httpx.Response(200, json={"access_token": "tok", "expires_in": 3600})
+    )
+
+
+def _sec_client():
+    return GraphClient(
+        CFG, base_url=SEC, scope="https://api.security.microsoft.com/.default"
+    )
+
+
+def _gate(tmp_path, enabled):
+    return GatedAction(
+        "defender.isolate_host",
+        enabled=enabled,
+        audit=AuditLog(str(tmp_path / "a.log")),
+        token_store=TokenStore(str(tmp_path / "pending")),
     )
 
 
@@ -127,3 +146,124 @@ async def test_run_hunting_query_maps():
             findings = await run_hunting_query(gc, "DeviceProcessEvents | take 2")
     assert findings[0].finding_type.value == "hunt_result"
     assert "2" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_no_token_returns_intent_no_call(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        post = router.post(SEC + "/machines/dev-1/isolate")
+        gate = _gate(tmp_path, enabled=True)
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "suspected c2")
+        assert findings[0].finding_type.value == "action"
+        assert findings[0].recommended_action.gated_action == "defender.isolate_host"
+        assert not post.called  # intent must not touch the API
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_flag_off_refuses(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        post = router.post(SEC + "/machines/dev-1/isolate")
+        gate = _gate(tmp_path, enabled=False)
+        tok = gate.token_store.issue("defender.isolate_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2", confirmation_token=tok)
+        assert findings[0].finding_type.value == "action"
+        assert "disabled" in findings[0].title.lower()
+        assert not post.called
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_bad_token_refuses(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        post = router.post(SEC + "/machines/dev-1/isolate")
+        gate = _gate(tmp_path, enabled=True)
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2", confirmation_token="nope")
+        assert findings[0].finding_type.value == "action"
+        assert "token" in findings[0].title.lower()
+        assert not post.called
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_valid_token_executes_and_audits(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        post = router.post(SEC + "/machines/dev-1/isolate").mock(
+            return_value=httpx.Response(201, json={"id": "machineaction-9", "status": "Pending"})
+        )
+        gate = _gate(tmp_path, enabled=True)
+        tok = gate.token_store.issue("defender.isolate_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2", confirmation_token=tok)
+        assert post.called
+        assert findings[0].finding_type.value == "action"
+        assert "machineaction-9" in [e.value for e in findings[0].evidence]
+        # audit line written
+        assert (tmp_path / "a.log").read_text().strip() != ""
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_403_degrades_to_permission_finding(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        router.post(SEC + "/machines/dev-1/isolate").mock(
+            return_value=httpx.Response(403, json={"error": {"message": "forbidden"}})
+        )
+        gate = _gate(tmp_path, enabled=True)
+        tok = gate.token_store.issue("defender.isolate_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2", confirmation_token=tok)
+        assert "Machine.Isolate" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_404_degrades(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        router.post(SEC + "/machines/dev-1/isolate").mock(
+            return_value=httpx.Response(404, json={"error": {"message": "machine not found"}})
+        )
+        gate = _gate(tmp_path, enabled=True)
+        tok = gate.token_store.issue("defender.isolate_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2", confirmation_token=tok)
+        assert findings[0].finding_type.value == "action"
+        assert "not applied" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_503_degrades(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        router.post(SEC + "/machines/dev-1/isolate").mock(
+            return_value=httpx.Response(503, json={"error": {"message": "upstream error"}})
+        )
+        gate = _gate(tmp_path, enabled=True)
+        tok = gate.token_store.issue("defender.isolate_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2", confirmation_token=tok)
+        assert "unavailable" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_release_host_valid_token_executes(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        post = router.post(SEC + "/machines/dev-1/unisolate").mock(
+            return_value=httpx.Response(201, json={"id": "machineaction-10"})
+        )
+        gate = GatedAction(
+            "defender.release_host",
+            enabled=True,
+            audit=AuditLog(str(tmp_path / "a.log")),
+            token_store=TokenStore(str(tmp_path / "pending")),
+        )
+        tok = gate.token_store.issue("defender.release_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await release_host(sec, gate, "dev-1", "cleared", confirmation_token=tok)
+        assert post.called
+        assert "machineaction-10" in [e.value for e in findings[0].evidence]

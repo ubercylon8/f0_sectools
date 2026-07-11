@@ -48,6 +48,28 @@ async def main() -> None:
             except Exception as e:  # noqa: BLE001 — smoke test: report and continue
                 print(f"\n=== {label}: ERROR ===\n{type(e).__name__}: {e}")
 
+    # ── Gated-write DRY RUN (no device is ever isolated) ──────────────
+    from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
+
+    sec = GraphClient(
+        cfg,
+        base_url="https://api.security.microsoft.com/api",
+        scope="https://api.security.microsoft.com/.default",
+    )
+    async with sec:
+        gate_off = GatedAction(
+            "defender.isolate_host", enabled=False,
+            audit=AuditLog("audit-logs/actions.log"), token_store=TokenStore(),
+        )
+        # 1) intent only (no token) — must NOT call the API
+        _show("isolate_host INTENT (no token)",
+              await tools.isolate_host(sec, gate_off, "smoke-device", "dry run"))
+        # 2) flag-off refusal (fake token) — must refuse, no state change
+        _show("isolate_host REFUSAL (flag off)",
+              await tools.isolate_host(sec, gate_off, "smoke-device", "dry run",
+                                       confirmation_token="not-a-real-token"))  # noqa: S106 — dummy refusal token, not a credential
+    print("\nDRY RUN complete — no device was isolated.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

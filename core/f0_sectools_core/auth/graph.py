@@ -28,10 +28,14 @@ class GraphError(Exception):
 
 class GraphClient:
     def __init__(
-        self, config: PlatformConfig, base_url: str = "https://graph.microsoft.com/v1.0"
+        self,
+        config: PlatformConfig,
+        base_url: str = "https://graph.microsoft.com/v1.0",
+        scope: str = "https://graph.microsoft.com/.default",
     ) -> None:
         self._cfg = config
         self.base_url = base_url.rstrip("/")
+        self._scope = scope
         self._client = httpx.AsyncClient(verify=config.verify_tls, timeout=60.0)
         self._token: str | None = None
         self._token_exp: float = 0.0
@@ -51,7 +55,7 @@ class GraphClient:
             "grant_type": "client_credentials",
             "client_id": self._cfg.client_id,
             "client_secret": self._cfg.client_secret,
-            "scope": "https://graph.microsoft.com/.default",
+            "scope": self._scope,
         }
         resp = await self._client.post(url, data=data)
         if resp.status_code != 200:
