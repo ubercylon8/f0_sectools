@@ -273,6 +273,18 @@ Task sets live as YAML in `evals/`. The eval can run locally against a GPU box o
 
 > If a tool passes Layer A but fails Layer B, **the tool's design is wrong** — simplify the schema, don't lower the bar.
 
+### Continuous Integration (GitHub Actions)
+
+Every push/PR runs (`.github/workflows/`):
+
+- **ci** — `uv run pytest` (offline contract + harness-logic tests) + `uv run ruff check .` (**hard gate**); mypy runs informational (its strict errors aren't a gate yet).
+- **secret-scan** (gitleaks) and **semgrep** (SAST, gate on `p/python`; `p/security-audit` advisory) — **hard gates**.
+- **deps** (pip-audit), **links** (lychee), **codeql** (dormant until the repo is public), **claude-review** (comment-only) — advisory, not required checks.
+
+Live-model evals and live-platform smoke scripts are **never** run in CI (no creds/GPU) — they stay local. Mark only `ci`, `secret-scan`, and `semgrep` as required status checks in branch protection.
+
+**To enable Claude PR review:** add an `ANTHROPIC_API_KEY` repository secret and set the repository variable `ENABLE_CLAUDE_REVIEW=true`. It posts advisory comments; it does not block merge and does not run on fork PRs (no secret access).
+
 ---
 
 ## Development Workflow
