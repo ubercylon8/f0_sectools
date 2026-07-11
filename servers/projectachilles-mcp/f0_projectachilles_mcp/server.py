@@ -74,7 +74,11 @@ async def list_agents(
 
 @mcp.tool()
 async def get_fleet_health() -> list[dict]:
-    """Test-agent fleet health: online/offline counts and uptime."""
+    """ProjectAchilles validation-agent fleet health: attack-simulation agents online/offline.
+
+    The ProjectAchilles breach-&-attack-simulation validation fleet — not LimaCharlie
+    endpoint sensors (use get_org_overview) or Microsoft tenant posture (use get_secure_score).
+    """
     async with _client() as pa:
         return _render(await tools.get_fleet_health(pa))
 

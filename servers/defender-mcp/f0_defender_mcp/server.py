@@ -51,7 +51,11 @@ _ACTOR = os.environ.get("DEFENDER_AUDIT_ACTOR", "mcp-operator")
 
 @mcp.tool()
 async def get_secure_score() -> list[dict]:
-    """Get the current Microsoft Secure Score (overall security posture %)."""
+    """Get the Microsoft Secure Score — Microsoft 365 / Defender config-hardening posture (%).
+
+    Microsoft tenant configuration only — not the LimaCharlie endpoint deployment
+    (use get_org_overview) or the ProjectAchilles validation fleet (use get_fleet_health).
+    """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
         return _render(await tools.get_secure_score(gc))
@@ -81,12 +85,13 @@ async def list_alerts(severity_min: str = "high", limit: int = 25) -> list[dict]
 
 @mcp.tool()
 async def run_hunting_query(kql: str) -> list[dict]:
-    """Run a Microsoft Defender advanced hunting query (KQL, last 30 days).
+    """Run a Microsoft Defender advanced hunting query (KQL) over M365 / Entra / devices (30d).
 
-    Use for ANY "run a hunting query / hunt for X" request. Construct a `kql`
-    query string. Common tables: DeviceProcessEvents (processes), SigninLogs or
-    AADSignInEventsBeta (sign-ins), DeviceNetworkEvents (network), EmailEvents
-    (email). Always bound results with `| take 50`.
+    For LimaCharlie endpoint (EDR sensor) telemetry, use query_telemetry instead —
+    this tool is Microsoft/Defender + KQL only. Construct a `kql` query string.
+    Common tables: DeviceProcessEvents (processes), SigninLogs or AADSignInEventsBeta
+    (sign-ins), DeviceNetworkEvents (network), EmailEvents (email). Always bound
+    results with `| take 50`.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:

@@ -32,7 +32,11 @@ def _client() -> LimaCharlieClient:
 
 @mcp.tool()
 async def get_org_overview() -> list[dict]:
-    """LimaCharlie org posture: sensor counts, D&R rule count, recent detection volume."""
+    """LimaCharlie EDR deployment posture: sensor counts, D&R rule count, recent detection volume.
+
+    The LimaCharlie endpoint/detection deployment — not Microsoft tenant config
+    (use get_secure_score) or the ProjectAchilles validation fleet (use get_fleet_health).
+    """
     return _render(await asyncio.to_thread(tools.get_org_overview, _client()))
 
 
@@ -73,12 +77,13 @@ async def query_telemetry(
     limit: int = 50,
     lcql: str | None = None,
 ) -> list[dict]:
-    """Hunt endpoint telemetry with a guided preset — no need to write LCQL.
+    """Hunt LimaCharlie endpoint (EDR sensor) telemetry with a guided preset — no LCQL needed.
 
-    Use for ANY "hunt / query telemetry" request. Pick a `hunt` preset:
-    new_processes, powershell_activity, dns_requests, or network_connections.
-    hours_back bounds the window. Advanced: pass a raw `lcql` query to override
-    the preset (shape: time | sensor-selector | event-types | filter | projection).
+    For Microsoft Defender / KQL hunts, use run_hunting_query instead — this tool
+    is LimaCharlie sensor telemetry only. Pick a `hunt` preset: new_processes,
+    powershell_activity, dns_requests, or network_connections. hours_back bounds the
+    window. Advanced: pass a raw `lcql` query to override the preset (shape: time |
+    sensor-selector | event-types | filter | projection).
     """
     return _render(
         await asyncio.to_thread(
