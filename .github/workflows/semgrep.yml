@@ -1,0 +1,22 @@
+name: Semgrep
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep gate (p/python — curated, blocking)
+        run: semgrep scan --config p/python --error --skip-unknown-extensions
+      - name: Semgrep advisory (p/security-audit — high-noise, non-blocking)
+        run: semgrep scan --config p/security-audit --skip-unknown-extensions
+        continue-on-error: true

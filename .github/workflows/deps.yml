@@ -1,0 +1,21 @@
+name: Dependency audit
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Export resolved deps
+        run: uv export --frozen --format requirements-txt --no-hashes --all-packages > requirements-audit.txt
+      - name: pip-audit (informational — Dependabot files the fix PRs)
+        run: uvx pip-audit -r requirements-audit.txt
+        continue-on-error: true

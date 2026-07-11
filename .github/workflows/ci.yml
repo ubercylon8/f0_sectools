@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install workspace
+        run: uv sync --all-packages
+      - name: Tests (offline — no live platform/model)
+        run: uv run pytest
+      - name: Lint
+        run: uv run ruff check .
+      - name: Type check (informational — mypy debt not yet a gate)
+        run: uv run mypy .
+        continue-on-error: true
