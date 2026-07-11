@@ -15,6 +15,7 @@ from pathlib import Path
 import yaml
 
 from evals.run import (
+    SERVER_MODULES,
     ModelClient,
     combined_tasks,
     combined_tool_schemas,
@@ -53,7 +54,10 @@ async def _tools_and_tasks(server: str):
 
 
 def _load_results(out_path: Path) -> dict:
-    if out_path.exists():
+    # size check (not just exists()) matters for --no-write, which points
+    # out_path at os.devnull: that path exists and reads back as "", which
+    # would otherwise blow up json.loads with a JSONDecodeError.
+    if out_path.exists() and out_path.stat().st_size > 0:
         return json.loads(out_path.read_text())
     return {"cells": {}}
 
@@ -101,3 +105,112 @@ async def run_matrix(
                 results["cells"][key] = {"status": "error", "error": str(e)[:200]}
             _write_results(out_path, results)
     return results
+
+
+SCORECARD_MD = EVALS / "SCORECARD.md"
+
+
+def render_scorecard_md(results: dict) -> str:
+    """Render the model x server matrix as a markdown table.
+
+    Renders the UNION of results["models"]/["servers"] and whatever tags/servers
+    actually appear in results["cells"]. A resumed sweep invoked with a narrower
+    --models/--servers subset only overwrites those two metadata lists (see
+    run_matrix), so a cell persisted by an earlier, wider sweep can still be
+    present on disk even though the metadata no longer mentions its model/server.
+    Deriving the displayed rows/columns from the union — rather than trusting
+    the metadata alone — guarantees no present cell is ever silently dropped
+    from the table. Tags found only in cell keys fall back to the tag itself
+    as their display name (no display name was ever recorded for them here).
+    """
+    cells = results.get("cells", {})
+    cell_pairs = [k.split("::", 1) for k in cells if "::" in k]
+
+    servers = list(results.get("servers", []))
+    for _, server in cell_pairs:
+        if server not in servers:
+            servers.append(server)
+
+    models = list(results.get("models", []))
+    known_tags = {m["tag"] for m in models}
+    for tag, _ in cell_pairs:
+        if tag not in known_tags:
+            models.append({"tag": tag, "display": tag})
+            known_tags.add(tag)
+
+    head = "| Model | " + " | ".join(servers) + " |"
+    sep = "|" + "---|" * (len(servers) + 1)
+    lines = [
+        "# Small-model tool-calling scorecard",
+        "",
+        f"Endpoint `{results.get('base_url', '')}` · runs/task {results.get('runs', 1)} "
+        f"· generated {results.get('date', '')}",
+        "",
+        "Each cell is **tool-selection% / argument-filling%** over the server's task "
+        "set. `all` = every server's 22 tools registered at once (composition test). "
+        "`err` = model/endpoint error; `–` = not run.",
+        "",
+        head,
+        sep,
+    ]
+    for m in models:
+        row = [m["display"]]
+        for s in servers:
+            cell = cells.get(cell_key(m["tag"], s))
+            if not cell:
+                row.append("–")
+            elif cell.get("status") == "error":
+                row.append("err")
+            else:
+                row.append(f"{cell['tool_rate']:.0%}/{cell['args_rate']:.0%}")
+        lines.append("| " + " | ".join(row) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def write_scorecard_md(results: dict, path: Path | None = None) -> None:
+    (path or SCORECARD_MD).write_text(render_scorecard_md(results))
+
+
+def main() -> None:
+    import argparse
+    import asyncio
+    from datetime import UTC, datetime
+
+    p = argparse.ArgumentParser(description="f0_sectools scorecard matrix (model x server)")
+    p.add_argument("--base-url", default="http://localhost:11434/v1",
+                   help="OpenAI-compatible endpoint (default: local Ollama)")
+    p.add_argument("--runs", type=int, default=1)
+    p.add_argument("--models", default=None,
+                   help="comma-separated tags; default all in models.yaml")
+    p.add_argument("--servers", default=None,
+                   help="comma-separated; default all servers + 'all'")
+    p.add_argument("--out", default=None,
+                   help="results JSON path; default evals/results/<date>.json")
+    p.add_argument("--date", default=None, help="date stamp; default today (UTC)")
+    p.add_argument("--force", action="store_true", help="re-run cells already present")
+    p.add_argument("--no-write", action="store_true",
+                   help="skip writing results JSON and SCORECARD.md")
+    args = p.parse_args()
+
+    date = args.date or datetime.now(UTC).date().isoformat()
+    models = load_models()
+    if args.models:
+        wanted = {t.strip() for t in args.models.split(",")}
+        models = [m for m in models if m["tag"] in wanted]
+    servers = ([s.strip() for s in args.servers.split(",")] if args.servers
+               else [*sorted(SERVER_MODULES), "all"])
+    out_path = Path(args.out) if args.out else (EVALS / "results" / f"{date}.json")
+    if args.no_write:
+        out_path = Path(os.devnull)
+
+    results = asyncio.run(
+        run_matrix(models, servers, args.base_url, args.runs, out_path, date, force=args.force)
+    )
+    print(render_scorecard_md(results))
+    if not args.no_write:
+        write_scorecard_md(results)
+        print(f"\nWrote {SCORECARD_MD}")
+
+
+if __name__ == "__main__":
+    main()

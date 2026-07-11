@@ -3,11 +3,13 @@ client returns canned tool calls; JSON persistence and resume use tmp paths."""
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import pytest
 
 from evals.run import ToolCall
-from evals.scorecard import cell_key, load_models, run_matrix
+from evals.scorecard import cell_key, load_models, render_scorecard_md, run_matrix
 
 
 class _FakeClient:
@@ -97,3 +99,65 @@ async def test_run_matrix_records_error_cells_without_aborting(tmp_path):
     )
     assert res["cells"][cell_key("m1", "defender")]["status"] == "error"
     assert res["cells"][cell_key("m1", "entra")]["status"] == "error"  # sweep continued
+
+
+def test_render_scorecard_md_table():
+    results = {
+        "date": "2026-01-01", "base_url": "http://x/v1", "runs": 1,
+        "models": [{"tag": "m1", "display": "M1"}, {"tag": "m2", "display": "M2"}],
+        "servers": ["defender", "all"],
+        "cells": {
+            "m1::defender": {"status": "ok", "tool_rate": 1.0, "args_rate": 1.0},
+            "m1::all": {"status": "ok", "tool_rate": 0.9, "args_rate": 0.8},
+            "m2::defender": {"status": "error", "error": "down"},
+            # m2::all intentionally missing → renders as a dash
+        },
+    }
+    md = render_scorecard_md(results)
+    assert "| Model | defender | all |" in md
+    assert "| M1 | 100%/100% | 90%/80% |" in md
+    assert "err" in md  # m2::defender
+    assert "M2" in md
+
+
+def test_render_scorecard_md_unions_cells_with_narrowed_metadata():
+    """A resumed sweep invoked with --models/--servers narrower than what was
+    already persisted must not drop rows/columns for cells that are still
+    present on disk. render_scorecard_md must derive the displayed models and
+    servers from the UNION of results['models']/['servers'] and the keys
+    actually present in results['cells'], never dropping a present cell."""
+    results = {
+        "date": "2026-01-01", "base_url": "http://x/v1", "runs": 1,
+        # metadata narrowed to a single model/server by a resumed --models run
+        "models": [{"tag": "m1", "display": "M1"}],
+        "servers": ["defender"],
+        "cells": {
+            "m1::defender": {"status": "ok", "tool_rate": 1.0, "args_rate": 1.0},
+            "m2::defender": {"status": "ok", "tool_rate": 0.5, "args_rate": 0.5},
+            "m2::entra": {"status": "ok", "tool_rate": 0.4, "args_rate": 0.4},
+        },
+    }
+    md = render_scorecard_md(results)
+    assert "M1" in md
+    assert "| m2 |" in md  # tag-only fallback display since not in results["models"]
+    assert "defender" in md
+    assert "entra" in md
+    # both model rows must render both server columns' data
+    assert "100%/100%" in md
+    assert "50%/50%" in md
+    assert "40%/40%" in md
+
+
+@pytest.mark.asyncio
+async def test_run_matrix_with_devnull_out_path_does_not_crash():
+    """CLI --no-write points out_path at os.devnull. /dev/null exists and reads
+    back as an empty string, so a naive json.loads() of its content raises
+    JSONDecodeError. run_matrix must treat a pre-existing but empty/unreadable
+    results file as "no prior results" instead of crashing, so --no-write can
+    still compute and print a scorecard without writing anything real."""
+    out = Path(os.devnull)
+    res = await run_matrix(
+        [{"tag": "m1", "display": "M1"}], ["defender"], "http://x/v1", 1, out,
+        "2026-01-01", client_factory=_fake_factory("get_secure_score"),
+    )
+    assert res["cells"][cell_key("m1", "defender")]["status"] == "ok"
