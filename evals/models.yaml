@@ -1,11 +1,17 @@
 # Broad-sweep model matrix for the scorecard. Every entry is tool-capable and
 # servable via Ollama's OpenAI-compatible endpoint. `tag` is the model id sent to
 # the API; `display` is the row label in SCORECARD.md.
-- { tag: "gpt-oss:20b-c128k",        display: "GPT-OSS 20B" }
-- { tag: "qwen3:8b-c40k",            display: "Qwen3 8B" }
-- { tag: "qwen3:4b-c256k",           display: "Qwen3 4B" }
-- { tag: "qwen3.5:latest",           display: "Qwen3.5 (9.7B)" }
-- { tag: "gemma4:e4b",               display: "Gemma 4 E4B" }
-- { tag: "gemma4:12b",               display: "Gemma 4 12B" }
-- { tag: "ministral-3:latest-c256k", display: "Ministral 3 (8.9B)" }
-- { tag: "granite4:tiny-h-c128k",    display: "Granite 4 Tiny" }
+#
+# Context note: a model TAG that forces a huge context (e.g. `-c256k`) makes Ollama
+# preallocate a KV cache that can OOM a modest box on load. The eval prompts are
+# small, so cap the context with a one-line Modelfile derive (no sudo):
+#   printf 'FROM <base-tag>\nPARAMETER num_ctx 16384\n' | ollama create <name> -f -
+# The `*:ctx16k` tags below are such derives of `-c256k` bases, created to fit ~30GB.
+- { tag: "gpt-oss:20b-c128k",     display: "GPT-OSS 20B" }
+- { tag: "qwen3:8b-c40k",         display: "Qwen3 8B" }
+- { tag: "qwen3:4b-ctx16k",       display: "Qwen3 4B" }
+- { tag: "qwen3.5:latest",        display: "Qwen3.5 (9.7B)" }
+- { tag: "gemma4:e4b",            display: "Gemma 4 E4B" }
+- { tag: "gemma4:12b",            display: "Gemma 4 12B" }
+- { tag: "ministral-3:ctx16k",    display: "Ministral 3 (8.9B)" }
+- { tag: "granite4:tiny-h-c128k", display: "Granite 4 Tiny" }

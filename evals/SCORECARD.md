@@ -8,11 +8,11 @@ Each cell is **tool-selection% / argument-filling%** over the server's task set.
 |---|---|---|---|---|---|
 | GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% |
 | Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 95%/95% |
-| Qwen3 4B | err | err | err | err | err |
+| Qwen3 4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 98%/98% |
 | Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
 | Gemma 4 E4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% |
 | Gemma 4 12B | 75%/67% | 100%/100% | 100%/100% | 100%/100% | 93%/93% |
-| Ministral 3 (8.9B) | err | err | err | err | err |
+| Ministral 3 (8.9B) | 0%/0% | 0%/0% | 0%/0% | 0%/0% | 12%/12% |
 | Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 95%/95% |
 
 <!-- findings below: hand-annotated, preserved when the table is regenerated -->
@@ -49,15 +49,23 @@ does not select `isolate_host` for "isolate device dev-1" (0/2), and misses one
 Defender at 100%, so this is a 12B-specific callability gap on the gated actions —
 worth a description/prompt revisit for that action class.
 
-**Gemma 4 E4B dips on ProjectAchilles (88%)** single-server but is 100% combined —
-low-confidence, likely run variance at `runs=1`.
+**Ministral 3 cannot drive the tools at all (0%).** Ollama labels it "tool-capable",
+but against the OpenAI tool-calling interface it emits **no `tool_calls`** — it
+narrates its intent in prose ("*I'll check your Microsoft Secure Score… Let me fetch
+the latest data*") instead of returning a structured call. This is the scorecard's
+sharpest divider: a model can be conversationally tool-aware yet unusable by an agent
+that dispatches tools programmatically. The 12% on `all` is incidental. Not a
+description defect — the model simply doesn't produce tool calls here.
+
+**Gemma 4 E4B and Qwen3 4B dip on ProjectAchilles (88%)** single-server but are
+100%/98% combined — low-confidence, likely run variance at `runs=1`.
 
 ## Notes
 
-- **Qwen3 4B and Ministral 3 show `err`** because their pulled variants are
-  256k-context builds (`-c256k`) whose KV cache overruns this box's ~30 GB on load
-  (the process momentarily disconnects). This is a local hardware/model-variant
-  limit, not a harness fault — standard-context builds of these families would run.
-  See the Ollama memory note in [`README.md`](README.md).
+- **All eight models were measured** (40/40 cells). The two whose pulled tags forced a
+  256k context (`qwen3:4b-c256k`, `ministral-3:latest-c256k`) OOM'd this ~30 GB box on
+  load; they were re-run as small-context derives (`*:ctx16k`, `num_ctx=16384` via a
+  one-line Modelfile — see `models.yaml`). Same weights, tiny KV cache, no OOM. The
+  Ollama multi-model memory note is in [`README.md`](README.md).
 - Matrix run at `runs=1` (temperature 0); the notable cells above were re-checked at
   `runs=3`. One resident model at a time (Ollama evicted between models).
