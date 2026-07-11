@@ -101,6 +101,8 @@ async def run_matrix(
                     "tool_rate": rep["overall_tool_rate"],
                     "args_rate": rep["overall_args_rate"],
                 }
+            except ValueError:
+                raise  # e.g. tool-name collision in the combined registry — fail loud
             except Exception as e:  # noqa: BLE001 - one dead cell must not kill the sweep
                 results["cells"][key] = {"status": "error", "error": str(e)[:200]}
             _write_results(out_path, results)
@@ -108,6 +110,9 @@ async def run_matrix(
 
 
 SCORECARD_MD = EVALS / "SCORECARD.md"
+_FINDINGS_MARKER = (
+    "<!-- findings below: hand-annotated, preserved when the table is regenerated -->"
+)
 
 
 def render_scorecard_md(results: dict) -> str:
@@ -168,7 +173,18 @@ def render_scorecard_md(results: dict) -> str:
 
 
 def write_scorecard_md(results: dict, path: Path | None = None) -> None:
-    (path or SCORECARD_MD).write_text(render_scorecard_md(results))
+    """Regenerate the table and rewrite the file, but preserve everything from
+    the hand-annotated findings marker onward (see _FINDINGS_MARKER). This is a
+    full-file overwrite ONLY of the table portion — the findings/notes a human
+    appended below the marker survive a plain re-run."""
+    path = path or SCORECARD_MD
+    table = render_scorecard_md(results)
+    existing = path.read_text() if path.exists() else ""
+    if _FINDINGS_MARKER in existing:
+        tail = _FINDINGS_MARKER + existing.split(_FINDINGS_MARKER, 1)[1]
+    else:
+        tail = _FINDINGS_MARKER + "\n"
+    path.write_text(table + "\n" + tail)
 
 
 def main() -> None:

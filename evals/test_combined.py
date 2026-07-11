@@ -37,6 +37,21 @@ def test_collision_guard_is_reachable():
     assert sorted(names) == sorted(set(names))
 
 
+@pytest.mark.asyncio
+async def test_combined_registry_raises_on_duplicate_name(monkeypatch):
+    """Force every server to expose the same tool name so the union hits the
+    duplicate-name branch, and assert combined_tool_schemas raises instead of
+    silently deduplicating or overwriting."""
+    import evals.run as run
+
+    async def fake(server):
+        return [{"type": "function", "function": {"name": "dup", "parameters": {}}}]
+
+    monkeypatch.setattr(run, "server_tool_schemas", fake)
+    with pytest.raises(ValueError):
+        await run.combined_tool_schemas()
+
+
 def test_combined_tasks_tagged_with_origin_and_include_probes():
     import yaml
     tasks = combined_tasks()
@@ -44,7 +59,8 @@ def test_combined_tasks_tagged_with_origin_and_include_probes():
     # Distinguish by checking against native task prompts.
     native_prompts = set()
     for server in ["defender", "entra", "limacharlie", "projectachilles"]:
-        native = yaml.safe_load(open(f"evals/{server}/tasks.yaml"))
+        with open(f"evals/{server}/tasks.yaml") as fh:
+            native = yaml.safe_load(fh)
         native_prompts.update(t["prompt"] for t in (native or []))
     per_server = [t for t in tasks if t["prompt"] in native_prompts]
     assert len(per_server) == 36

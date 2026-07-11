@@ -9,7 +9,14 @@ from pathlib import Path
 import pytest
 
 from evals.run import ToolCall
-from evals.scorecard import cell_key, load_models, render_scorecard_md, run_matrix
+from evals.scorecard import (
+    _FINDINGS_MARKER,
+    cell_key,
+    load_models,
+    render_scorecard_md,
+    run_matrix,
+    write_scorecard_md,
+)
 
 
 class _FakeClient:
@@ -146,6 +153,36 @@ def test_render_scorecard_md_unions_cells_with_narrowed_metadata():
     assert "100%/100%" in md
     assert "50%/50%" in md
     assert "40%/40%" in md
+
+
+def test_write_scorecard_preserves_findings_below_marker(tmp_path):
+    """write_scorecard_md must regenerate only the table and preserve everything
+    from the hand-annotated findings marker onward, even when called with a
+    different results dict than produced the existing file."""
+    path = tmp_path / "SCORECARD.md"
+    custom_findings = (
+        f"{_FINDINGS_MARKER}\n\n"
+        "> Some accurate note.\n\n"
+        "## Findings\n\n"
+        "**Totally custom hand-annotated text that must survive regeneration.**\n"
+    )
+    path.write_text("# Old stale table\n\nstale content\n\n" + custom_findings)
+
+    results = {
+        "date": "2026-02-02", "base_url": "http://x/v1", "runs": 1,
+        "models": [{"tag": "m1", "display": "M1"}],
+        "servers": ["defender"],
+        "cells": {
+            "m1::defender": {"status": "ok", "tool_rate": 1.0, "args_rate": 1.0},
+        },
+    }
+    write_scorecard_md(results, path=path)
+
+    written = path.read_text()
+    assert "| M1 | 100%/100% |" in written
+    assert "stale content" not in written
+    assert "Totally custom hand-annotated text that must survive regeneration." in written
+    assert _FINDINGS_MARKER in written
 
 
 @pytest.mark.asyncio
