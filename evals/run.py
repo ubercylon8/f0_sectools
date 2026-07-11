@@ -71,6 +71,62 @@ async def server_tool_schemas(server: str) -> list[dict]:
     return build_openai_tools(await module.mcp.list_tools())
 
 
+async def combined_tool_schemas() -> list[dict]:
+    """Union of every server's tool schemas — the registry an operator sees with
+    all servers registered at once. Raises if two servers expose the same tool
+    name (would make the OpenAI tool list ambiguous)."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for server in sorted(SERVER_MODULES):
+        for schema in await server_tool_schemas(server):
+            name = schema["function"]["name"]
+            if name in seen:
+                raise ValueError(f"tool name collision across servers: {name!r}")
+            seen.add(name)
+            out.append(schema)
+    return out
+
+
+def combined_tasks() -> list[dict]:
+    """Every per-server task tagged with its origin server, plus the cross-platform
+    routing probes. This is the task set for the combined 22-tool registry."""
+    tasks: list[dict] = []
+    for server in sorted(SERVER_MODULES):
+        for t in load_tasks(server):
+            tasks.append({**t, "origin": server})
+    probes_path = EVALS / "combined" / "probes.yaml"
+    if probes_path.exists():
+        for p in yaml.safe_load(probes_path.read_text()) or []:
+            tasks.append(dict(p))  # probes already carry `origin`
+    return tasks
+
+
+def aggregate_by_origin(tasks: list[dict], report: dict) -> dict:
+    """Group the suite report's per-task rows by their `origin` server. Relies on
+    run_suite preserving task order. For each origin: mean tool/args rate, count,
+    and which wrong tools its prompts were misrouted to."""
+    groups: dict[str, dict] = {}
+    for task, row in zip(tasks, report["tasks"], strict=True):
+        origin = task.get("origin", "unknown")
+        g = groups.setdefault(origin, {"tool": [], "args": [], "misroutes": {}})
+        g["tool"].append(row["tool_rate"])
+        g["args"].append(row["args_rate"])
+        if row["tool_rate"] < 1.0:
+            for called in row.get("calls", []):
+                if called and called != task["expect_tool"]:
+                    g["misroutes"][called] = g["misroutes"].get(called, 0) + 1
+    out: dict[str, dict] = {}
+    for origin, g in groups.items():
+        n = len(g["tool"]) or 1
+        out[origin] = {
+            "tool_rate": sum(g["tool"]) / n,
+            "args_rate": sum(g["args"]) / n,
+            "n": len(g["tool"]),
+            "misroutes": g["misroutes"],
+        }
+    return out
+
+
 class ModelClient:
     """Minimal OpenAI-compatible chat client for tool-calling evals."""
 
@@ -149,6 +205,7 @@ async def run_suite(
                 "tool_rate": sum(a["tool_correct"] for a in attempts) / n,
                 "args_rate": sum(a["args_correct"] for a in attempts) / n,
                 "runs": n,
+                "calls": [a["called"] for a in attempts],
             }
         )
     total = len(task_rows) or 1
@@ -174,18 +231,42 @@ def format_report(server: str, model: str, report: dict) -> str:
     return "\n".join(lines)
 
 
+def format_combined_report(model: str, report: dict, origin_agg: dict) -> str:
+    lines = [f"\nCombined eval (all 22 tools)  x  {model}", "-" * 72]
+    for origin in sorted(origin_agg):
+        g = origin_agg[origin]
+        mis = ", ".join(f"{k}x{v}" for k, v in sorted(g["misroutes"].items())) or "-"
+        lines.append(
+            f"  {origin:16} tool {g['tool_rate']:5.0%}  args {g['args_rate']:5.0%}  "
+            f"(n={g['n']})  misrouted-> {mis}"
+        )
+    lines.append("-" * 72)
+    lines.append(
+        f"  OVERALL  tool-selection {report['overall_tool_rate']:.0%}  "
+        f"argument-filling {report['overall_args_rate']:.0%}"
+    )
+    return "\n".join(lines)
+
+
 async def _amain(args: argparse.Namespace) -> None:
-    tasks = load_tasks(args.server)
-    tools = await server_tool_schemas(args.server)
     api_key = args.api_key or os.environ.get("OPENAI_API_KEY")
+    if args.server == "all":
+        tools = await combined_tool_schemas()
+        tasks = combined_tasks()
+    else:
+        tools = await server_tool_schemas(args.server)
+        tasks = load_tasks(args.server)
     async with ModelClient(args.base_url, args.model, api_key) as client:
         report = await run_suite(tools, tasks, client, runs=args.runs)
-    print(format_report(args.server, args.model, report))
+    if args.server == "all":
+        print(format_combined_report(args.model, report, aggregate_by_origin(tasks, report)))
+    else:
+        print(format_report(args.server, args.model, report))
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description="f0_sectools small-model tool-calling eval")
-    p.add_argument("--server", required=True, choices=sorted(SERVER_MODULES))
+    p.add_argument("--server", required=True, choices=[*sorted(SERVER_MODULES), "all"])
     p.add_argument(
         "--base-url", required=True, help="OpenAI-compatible base URL (e.g. http://localhost:8000/v1)"
     )

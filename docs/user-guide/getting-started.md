@@ -65,5 +65,15 @@ uv run python -m evals.run --server defender \
   --base-url http://localhost:8000/v1 --model <model-id> --runs 3
 ```
 
+Pass `--server all` to test the combined registry — every server's tools
+registered at once — the same shape a multi-platform agent actually sees:
+
+```bash
+uv run python -m evals.run --server all \
+  --base-url http://localhost:8000/v1 --model <model-id> --runs 3
+```
+
 A low score means the tool's schema is too hard for that model — pick a stronger
-model or simplify the tool. See [`evals/`](../../evals/).
+model or simplify the tool. To sweep every model in `evals/models.yaml` against
+every server at once, see the scorecard in [`evals/`](../../evals/) (writes
+[`evals/SCORECARD.md`](../../evals/SCORECARD.md)).
