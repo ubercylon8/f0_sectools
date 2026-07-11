@@ -58,29 +58,47 @@ def _rows(resp: Any) -> list:
     return []
 
 
+# The PA dashboard is locked to any-stage scoring (multi-stage test bundles
+# count as one unit; totals come from aggregations, immune to the ES 10k
+# hits.total cap). Omitting scoringMode selects the legacy per-execution path
+# whose capped total inflates the score — so always request any-stage.
+_SCORING_MODE = "any-stage"
+
+
 async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
     frm, to = _window(days)
     try:
-        d = await pa.get("/analytics/defense-score", params={"from": frm, "to": to})
+        d = await pa.get(
+            "/analytics/defense-score",
+            params={"from": frm, "to": to, "scoringMode": _SCORING_MODE},
+        )
     except Exception as e:
         finding = map_pa_error(e, "ProjectAchilles defense score")
         if finding:
             return [finding]
         raise
     score = float(d.get("score", 0) or 0)
+    evidence = [
+        Evidence(key="protected", value=str(d.get("protectedCount", 0))),
+        Evidence(key="detected", value=str(d.get("detectedCount", 0))),
+        Evidence(key="unprotected", value=str(d.get("unprotectedCount", 0))),
+        Evidence(key="total", value=str(d.get("totalExecutions", 0))),
+        Evidence(key="risk_accepted", value=str(d.get("riskAcceptedCount", 0))),
+    ]
+    raw = d.get("rawScore")
+    if raw is not None:
+        evidence.append(Evidence(key="score_before_exclusions", value=f"{float(raw):.1f}%"))
+    real = d.get("realScore")
+    if real is not None:
+        evidence.append(Evidence(key="score_blocked_only", value=f"{float(real):.1f}%"))
     return [
         Finding(
             source="projectachilles",
             finding_type=FindingType.posture,
             severity=_score_severity(score),
-            title=f"Defense score: {score:.0f}% (blocked/detected vs total)",
+            title=f"Defense score: {score:.1f}% (blocked/detected, risk-adjusted)",
             entity=Entity(kind=EntityKind.tenant, id="org"),
-            evidence=[
-                Evidence(key="protected", value=str(d.get("protectedCount", 0))),
-                Evidence(key="detected", value=str(d.get("detectedCount", 0))),
-                Evidence(key="unprotected", value=str(d.get("unprotectedCount", 0))),
-                Evidence(key="total", value=str(d.get("totalExecutions", 0))),
-            ],
+            evidence=evidence,
             recommended_action=RecommendedAction(
                 summary="Investigate the lowest-scoring techniques and unprotected results."
             ),
@@ -93,7 +111,13 @@ async def get_defense_score_trend(pa: Any, days: int = 30, interval: str = "day"
     try:
         d = await pa.get(
             "/analytics/defense-score/trend",
-            params={"from": frm, "to": to, "interval": interval, "windowDays": days},
+            params={
+                "from": frm,
+                "to": to,
+                "interval": interval,
+                "windowDays": days,
+                "scoringMode": _SCORING_MODE,
+            },
         )
     except Exception as e:
         finding = map_pa_error(e, "ProjectAchilles defense-score trend")
