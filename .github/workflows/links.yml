@@ -17,3 +17,5 @@ jobs:
         with:
           args: "--no-progress './**/*.md'"
           fail: false  # external links rot; report, don't block
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # avoid anon GitHub rate limits
