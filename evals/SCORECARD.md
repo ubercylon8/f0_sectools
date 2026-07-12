@@ -32,14 +32,19 @@ for every model.**
 **The cost shows up only in composition.** Registering all **28 tools** at once (5
 servers) is the hard test. **Qwen3.5 and Qwen3 4B drive the full registry at 100%**;
 Qwen3 8B 98%; GPT-OSS 20B, Gemma 4 E4B, and Granite 4 Tiny 96%; Gemma 4 12B 92% (its
-Defender gap carries in). No model errors. Adding Intune widened the registry (22→28)
-with **no single-server regressions**, but the ~4-point combined dip for GPT-OSS /
-Gemma E4B / Granite is a small composition cost as the tool count grew — a candidate
-**#2.5-style disambiguation follow-up** (a per-origin probe would show whether an Intune
-name like `get_compliance_summary` vs `get_secure_score`, or `list_managed_devices` vs
-the incident/alert lists, draws a mis-route). Left as follow-up; single-server Intune is
-already clean. The `--server all` per-origin report names the historical collisions
-(mostly fixed in #2.5, below):
+Defender gap carries in). No model errors.
+
+**Adding Intune costs ZERO routing accuracy — verified, not assumed.** A per-origin
+`--server all` probe at `runs=3` on the two "dropped" models (GPT-OSS 20B and Granite 4
+Tiny) shows the **`intune` origin at 100% with zero misroutes**, and **nothing misroutes
+*to* an Intune tool**. Intune's 6 tools compose cleanly into the 28-tool registry. The
+combined-column movement vs the old 22-tool figures is **not** an Intune collision — it's
+(a) `runs=1` matrix variance (GPT-OSS's old 22-tool 100% was a single pass that missed the
+ambiguous hunting prompt) surfacing the **pre-existing `defender → query_telemetry` hunting
+residual** that **#2.5 deliberately left** ("*unqualified 'hunt for PowerShell'*" is
+genuinely ambiguous), plus a defender `list_incidents`/`get_fleet_health` intra-platform
+wobble. The remaining collisions are all **pre-existing, non-Intune** — see #2.5 below.
+The `--server all` per-origin report names them:
 
 - **Hunting tools collide.** Defender's `run_hunting_query` and LimaCharlie's
   `query_telemetry` are both "run a hunting query"; Qwen3 8B routed Defender hunting
