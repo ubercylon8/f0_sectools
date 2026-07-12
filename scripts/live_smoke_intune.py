@@ -37,11 +37,17 @@ async def main() -> None:
     print(f"Tenant {cfg.tenant_id[:8]}…  client {cfg.client_id[:8]}…  (secrets not shown)")
     async with GraphClient(cfg) as gc:
         _show("get_compliance_summary", await tools.get_compliance_summary(gc))
-        _show("list_managed_devices", await tools.list_managed_devices(gc, limit=5))
+        devices = await tools.list_managed_devices(gc, limit=5)
+        _show("list_managed_devices", devices)
         _show(
             "list_managed_devices(noncompliant)",
             await tools.list_managed_devices(gc, "noncompliant", 5),
         )
+        # get_managed_device by name (the cross-platform triage pivot): reuse a real
+        # device name surfaced above so the smoke test is self-contained.
+        if devices and devices[0].entity is not None:
+            name = devices[0].entity.name or devices[0].entity.id
+            _show(f"get_managed_device({name})", await tools.get_managed_device(gc, name))
         _show("list_stale_devices", await tools.list_stale_devices(gc, days=30, limit=5))
         _show("list_compliance_policies", await tools.list_compliance_policies(gc, limit=5))
         _show("list_configuration_profiles", await tools.list_configuration_profiles(gc, limit=5))

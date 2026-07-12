@@ -124,9 +124,17 @@ def _parse_dt(value: str) -> datetime | None:
 
 
 async def list_stale_devices(gc: Any, days: int = 30, limit: int = 25) -> list[Finding]:
-    # Prefer oldest-first so a bounded page surfaces the stalest devices; filter by cutoff
-    # client-side (managedDevices doesn't reliably support a $filter on lastSyncDateTime).
-    params = {"$top": limit, "$select": _DEVICE_SELECT, "$orderby": "lastSyncDateTime asc"}
+    # managedDevices silently IGNORES $orderby on lastSyncDateTime (confirmed live: asc and
+    # desc return identical unordered pages), so an oldest-first page is impossible. It DOES
+    # honor a server-side $filter, so select stale devices directly and bound to `limit`.
+    # The client-side cutoff check below stays as a defensive backstop.
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+    params = {
+        "$top": limit,
+        "$select": _DEVICE_SELECT,
+        "$filter": f"lastSyncDateTime le {cutoff_iso}",
+    }
     try:
         resp = await gc.get("/deviceManagement/managedDevices", params=params)
     except GraphError as e:
@@ -134,7 +142,6 @@ async def list_stale_devices(gc: Any, days: int = 30, limit: int = 25) -> list[F
         if finding:
             return [finding]
         raise
-    cutoff = datetime.now(UTC) - timedelta(days=days)
     out: list[Finding] = []
     for d in resp.get("value") or []:
         dt = _parse_dt(str(d.get("lastSyncDateTime", "")))

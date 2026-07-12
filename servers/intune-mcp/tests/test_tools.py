@@ -106,9 +106,17 @@ async def test_list_stale_devices_filters_by_cutoff():
     stale = _device("OLD", last_sync="2026-01-01T00:00:00Z")
     with respx.mock as router:
         _token(router)
-        router.get(DEV).mock(return_value=httpx.Response(200, json={"value": [fresh, stale]}))
+        route = router.get(DEV).mock(
+            return_value=httpx.Response(200, json={"value": [fresh, stale]})
+        )
         async with GraphClient(CFG) as gc:
             findings = await list_stale_devices(gc, days=30)
+    # managedDevices ignores $orderby on lastSyncDateTime but honors a server-side
+    # $filter (confirmed live) — assert we push the cutoff to the server, not $orderby.
+    query = str(route.calls.last.request.url)
+    assert "lastSyncDateTime+le+" in query or "lastSyncDateTime%20le%20" in query
+    assert "orderby" not in query
+    # client-side cutoff check remains a defensive backstop
     names = [f.entity.name for f in findings]
     assert "OLD" in names and "FRESH" not in names
 
