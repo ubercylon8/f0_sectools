@@ -11,6 +11,6 @@ safety-critical and cross-cutting logic lives here — never in a server.**
 | `paging/`     | Pagination, truncation, and rate-limiting so payloads stay small-model-safe. |
 | `smallmodel/` | Tool helpers: flat-argument builders, enum guards, argument validation. |
 | `gating/`     | Gated write-action machinery (flag + confirmation token) and the local audit log. |
-| `renderers/`  | Persona renderers (SOC analyst, security engineer, CISO, threat hunter). |
+| `renderers/`  | Persona renderers (SOC analyst, security engineer, CISO, threat hunter, detection engineer). Public API: `render_finding` / `render_findings`. |
 
 See [../CLAUDE.md](../CLAUDE.md) for the architectural rules these modules enforce.
