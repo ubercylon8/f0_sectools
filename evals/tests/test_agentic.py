@@ -153,13 +153,21 @@ def test_goal_keywords_grounded_in_mocks_not_task(path):
     """Each goal keyword must appear in the mock tool OUTPUT and NOT in the task
     prompt — so goal-reached measures fact-derivation from tools, not echoing the
     question. (Guards the intune-scenario parroting bug found in review.)"""
+    from evals.agentic import _synonyms
     s = load_scenario(path)
     mocks = str(s["mocks"]).lower()
     task = s["task"].lower()
-    for kw in s["goal_keywords"]:
-        k = kw.lower()
-        assert k in mocks, f"{path.name}: goal keyword '{kw}' not grounded in any mock"
-        assert k not in task, f"{path.name}: goal keyword '{kw}' is in the task (parroting risk)"
+    for concept in s["goal_keywords"]:
+        syns = _synonyms(concept)
+        # the concept must be reachable: at least one synonym appears in the mock output
+        assert any(syn.lower() in mocks for syn in syns), (
+            f"{path.name}: concept {concept!r} not grounded in any mock"
+        )
+        # and not parroteable: no synonym appears in the task prompt
+        for syn in syns:
+            assert syn.lower() not in task, (
+                f"{path.name}: goal synonym '{syn}' is in the task (parroting risk)"
+            )
 
 
 def test_render_agentic_md_matrix():
@@ -193,3 +201,22 @@ def test_render_agentic_md_has_speed_footprint_table():
     assert "## Speed & footprint" in md
     assert "4.2s" in md          # median s/skill from the cell latency
     assert "6.1 GB" in md        # resident VRAM
+
+
+def test_score_run_concept_group_matches_any_synonym():
+    """A goal 'concept' can be a list of synonyms; the concept is satisfied if the
+    answer contains ANY of them (fixes phrasing brittleness, e.g. 'flagged' for 'risky')."""
+    scenario = {"required_tools": ["a"],
+                "goal_keywords": ["web-01", ["risky", "high-risk", "flagged"]]}
+    # answer says 'flagged', never the literal 'risky' — concept still captured
+    run = AgentRun(trajectory=["a"],
+                   final_answer="host web-01: the user is flagged for impossible travel.",
+                   steps=1, error=None)
+    s = score_run(scenario, run)
+    assert s["goal_reached"] and s["passed"]
+
+
+def test_score_run_concept_group_all_synonyms_absent_fails():
+    scenario = {"required_tools": ["a"], "goal_keywords": [["risky", "flagged"]]}
+    run = AgentRun(trajectory=["a"], final_answer="everything looks fine", steps=1, error=None)
+    assert not score_run(scenario, run)["goal_reached"]

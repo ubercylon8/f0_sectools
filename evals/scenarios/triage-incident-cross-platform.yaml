@@ -3,7 +3,12 @@
 skill: cross-platform/triage-incident-cross-platform
 task: "Triage our top active Defender incident and give me the full cross-platform picture."
 required_tools: [list_incidents, list_risky_users, get_sensor, query_telemetry, get_weak_techniques]
-goal_keywords: ["web-01", "T1110", "risky"]
+# Each entry is a CONCEPT — a list is a group of accepted synonyms (any one counts),
+# so a faithful synthesis isn't punished for phrasing (e.g. "flagged" for "risky").
+goal_keywords:
+  - ["web-01"]
+  - ["T1110", "brute force", "brute-force"]
+  - ["risky", "high-risk", "flagged"]
 mocks:
   list_incidents:
     - schema_version: "1.0"
