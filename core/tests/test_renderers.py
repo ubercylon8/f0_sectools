@@ -162,3 +162,52 @@ def test_public_render_findings_accepts_str_persona():
 def test_public_render_findings_unknown_persona_raises():
     with pytest.raises(ValueError, match="Unknown persona"):
         render_findings(_mixed(), "nope")
+
+
+# ── Fix 1: per-persona robustness ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("persona", [p.value for p in Persona])
+def test_render_finding_sparse_is_robust_for_every_persona(persona):
+    out = render_finding(_sparse(), persona)
+    assert out
+    assert "None" not in out
+
+
+@pytest.mark.parametrize("persona", [p.value for p in Persona])
+def test_render_findings_mixed_is_robust_for_every_persona(persona):
+    out = render_findings(_mixed(), persona)
+    assert out
+    assert "None" not in out
+
+
+# ── Fix 2: detection_engineer single-finding body ─────────────────────────────
+
+
+def test_detection_engineer_single_shows_technique_and_source():
+    out = render_finding(_rich(), "detection_engineer")
+    assert "T1486" in out
+    assert "defender" in out
+
+
+def test_detection_engineer_single_sparse_is_unmapped():
+    out = render_finding(_sparse(), "detection_engineer")
+    assert "unmapped" in out
+
+
+# ── Fix 3: soc_analyst tie-break by observed_at within equal severity ─────────
+
+
+def test_soc_analyst_list_breaks_severity_ties_by_time():
+    earlier = Finding(
+        source="defender", finding_type=FindingType.incident, severity=Severity.high,
+        title="Earlier high-severity finding",
+        observed_at="2026-06-28T08:00:00Z",
+    )
+    later = Finding(
+        source="defender", finding_type=FindingType.incident, severity=Severity.high,
+        title="Later high-severity finding",
+        observed_at="2026-06-28T14:00:00Z",
+    )
+    out = get_renderer(Persona.soc_analyst).render_findings([later, earlier])
+    assert out.index("Earlier high-severity finding") < out.index("Later high-severity finding")

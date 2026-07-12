@@ -25,7 +25,7 @@ class SocAnalystRenderer(Renderer):
         return "\n".join(lines)
 
     def _aggregate(self, findings: list[Finding]) -> str:
-        ordered = self._sort_by_severity(findings)
+        ordered = self._sort_by_severity_then_time(findings)
         header = f"{len(ordered)} findings ({self._severity_counts(ordered)})"
         return header + "\n\n" + "\n\n".join(self._finding_body(f) for f in ordered)
 

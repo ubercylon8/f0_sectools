@@ -29,10 +29,6 @@ class Renderer:
 
     persona: Persona = Persona.soc_analyst
 
-    def __init__(self, persona: Persona | None = None) -> None:
-        if persona is not None:
-            self.persona = persona
-
     # ── public template methods ──────────────────────────────────────
     def render_finding(self, finding: Finding) -> str:
         return redact_text(self._finding_body(finding))
@@ -93,6 +89,14 @@ class Renderer:
     @staticmethod
     def _sort_by_severity(findings: list[Finding]) -> list[Finding]:
         return sorted(findings, key=lambda f: _SEVERITY_ORDER.get(f.severity.value, 99))
+
+    @staticmethod
+    def _sort_by_severity_then_time(findings: list[Finding]) -> list[Finding]:
+        return sorted(findings, key=lambda f: (
+            _SEVERITY_ORDER.get(f.severity.value, 99),
+            f.observed_at is None,
+            f.observed_at or "",
+        ))
 
     @staticmethod
     def _sort_by_time(findings: list[Finding]) -> list[Finding]:
