@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from evals.agentic import SCENARIOS_DIR, SKILLS_DIR, load_scenario, make_mock_fn, score_run
+from evals.agentic_scorecard import render_agentic_md
 from evals.run import AgentRun, ModelClient
 
 
@@ -131,3 +132,19 @@ def test_goal_keywords_grounded_in_mocks_not_task(path):
         k = kw.lower()
         assert k in mocks, f"{path.name}: goal keyword '{kw}' not grounded in any mock"
         assert k not in task, f"{path.name}: goal keyword '{kw}' is in the task (parroting risk)"
+
+
+def test_render_agentic_md_matrix():
+    results = {
+        "base_url": "http://localhost:11434/v1", "runs": 1, "date": "2026-07-12",
+        "models": [{"tag": "granite4:tiny-h-c128k", "display": "Granite 4 Tiny"}],
+        "skills": ["intune-coverage-gap-review"],
+        "cells": {
+            "granite4:tiny-h-c128k::intune-coverage-gap-review":
+                {"coverage": 1.0, "goal_rate": 1.0, "runs": 1},
+        },
+    }
+    md = render_agentic_md(results)
+    assert "Granite 4 Tiny" in md
+    assert "intune-coverage-gap-review" in md
+    assert "100% / 100%" in md
