@@ -20,6 +20,7 @@ import asyncio
 import importlib
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,17 @@ SERVER_MODULES = {
 class ToolCall:
     name: str
     args: dict[str, Any]
+
+
+@dataclass
+class AgentRun:
+    """The outcome of a multi-step run: the ordered tool names called, the model's
+    final answer, how many turns it took, and an error string if the loop failed
+    or hit max_steps."""
+    trajectory: list[str]
+    final_answer: str
+    steps: int
+    error: str | None = None
 
 
 def load_tasks(server: str) -> list[dict]:
@@ -144,19 +156,19 @@ class ModelClient:
     async def __aexit__(self, *exc: object) -> None:
         await self._client.aclose()
 
-    async def call(self, prompt: str, tools: list[dict]) -> ToolCall | None:
+    async def _post_chat(self, messages: list[dict], tools: list[dict]) -> dict:
+        """POST one chat turn and return the assistant `message` dict. Retries
+        transient blips (connection drops, read timeouts, 5xx) so a single hiccup
+        over a long sequential sweep doesn't crash the run; a 4xx raises at once."""
         body = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "tools": tools,
             "tool_choice": "auto",
             "temperature": 0,
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}
         url = f"{self.base_url}/chat/completions"
-        # Retry transient blips (connection drops, read timeouts, 5xx overload) so a
-        # single hiccup over a long sequential sweep doesn't crash the whole run. A
-        # 4xx (bad request) still raises immediately; exhausting retries re-raises.
         last_exc: BaseException | None = None
         attempts = 3
         for attempt in range(attempts):
@@ -175,20 +187,69 @@ class ModelClient:
                 if attempt < attempts - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
                 continue
-            message = resp.json()["choices"][0]["message"]
-            calls = message.get("tool_calls") or []
-            if not calls:
-                return None
-            fn = calls[0]["function"]
-            try:
-                args = json.loads(fn.get("arguments") or "{}")
-            except (ValueError, TypeError):
-                args = {}
-            return ToolCall(name=fn["name"], args=args if isinstance(args, dict) else {})
-        # The loop only falls through here after a failed attempt, so last_exc is set.
+            return resp.json()["choices"][0]["message"]
         if last_exc is None:  # pragma: no cover - unreachable
             raise RuntimeError("model call failed with no captured error")
-        raise last_exc  # exhausted retries
+        raise last_exc
+
+    async def call(self, prompt: str, tools: list[dict]) -> ToolCall | None:
+        message = await self._post_chat([{"role": "user", "content": prompt}], tools)
+        calls = message.get("tool_calls") or []
+        if not calls:
+            return None
+        fn = calls[0]["function"]
+        try:
+            args = json.loads(fn.get("arguments") or "{}")
+        except (ValueError, TypeError):
+            args = {}
+        return ToolCall(name=fn["name"], args=args if isinstance(args, dict) else {})
+
+    async def run_agent(
+        self,
+        system: str,
+        user: str,
+        tools: list[dict],
+        mock_fn: Callable[[str, dict], list],
+        max_steps: int = 8,
+    ) -> AgentRun:
+        """Drive a multi-step tool-calling loop against deterministic mock tool
+        results. Returns the ordered trajectory of tool names, the final answer,
+        step count, and an error (transport failure or max_steps) if any."""
+        messages: list[dict] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        trajectory: list[str] = []
+        for step in range(max_steps):
+            try:
+                message = await self._post_chat(messages, tools)
+            except Exception as e:  # noqa: BLE001 — record and stop, don't crash the sweep
+                return AgentRun(trajectory, "", step, error=f"{type(e).__name__}: {e}")
+            calls = message.get("tool_calls") or []
+            if not calls:
+                return AgentRun(trajectory, message.get("content") or "", step, None)
+            messages.append({
+                "role": "assistant",
+                "content": message.get("content") or "",
+                "tool_calls": calls,
+            })
+            for c in calls:
+                fn = c["function"]
+                name = fn["name"]
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                    if not isinstance(args, dict):
+                        args = {}
+                except (ValueError, TypeError):
+                    args = {}
+                trajectory.append(name)
+                result = mock_fn(name, args)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": c.get("id", name),
+                    "content": json.dumps(result, default=str),
+                })
+        return AgentRun(trajectory, "", max_steps, error="max_steps reached")
 
 
 def _args_match(task: dict, args: dict) -> bool:
