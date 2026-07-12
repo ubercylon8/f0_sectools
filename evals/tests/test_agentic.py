@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from evals.agentic import make_mock_fn, score_run
+from evals.agentic import SCENARIOS_DIR, SKILLS_DIR, load_scenario, make_mock_fn, score_run
 from evals.run import AgentRun, ModelClient
 
 
@@ -98,3 +98,22 @@ def test_score_run_goal_missed_fails():
         steps=4, error=None)
     s = score_run(_scenario(), run)
     assert s["coverage"] == 1.0 and not s["goal_reached"] and not s["passed"]
+
+
+_SCENARIO_FILES = sorted(SCENARIOS_DIR.glob("*.yaml"))
+
+
+def test_scenarios_exist():
+    assert len(_SCENARIO_FILES) == 3
+
+
+@pytest.mark.parametrize("path", _SCENARIO_FILES, ids=lambda p: p.stem)
+def test_scenario_valid(path):
+    s = load_scenario(path)
+    for key in ("skill", "task", "required_tools", "goal_keywords", "mocks"):
+        assert s.get(key), f"{path.name}: missing '{key}'"
+    # the skill's SKILL.md exists and has a Procedure
+    assert (SKILLS_DIR / s["skill"] / "SKILL.md").exists(), f"{path.name}: skill not found"
+    # every required tool has a mock (so a full run is deterministic)
+    for tool in s["required_tools"]:
+        assert tool in s["mocks"], f"{path.name}: required tool '{tool}' has no mock"

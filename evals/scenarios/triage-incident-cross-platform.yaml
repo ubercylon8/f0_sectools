@@ -1,0 +1,59 @@
+# Cross-platform 4-server pivot: Defender incident -> Entra user risk -> LC host
+# telemetry -> PA technique weakness. The marquee multi-step skill.
+skill: cross-platform/triage-incident-cross-platform
+task: "Triage our top active Defender incident and give me the full cross-platform picture."
+required_tools: [list_incidents, list_risky_users, get_sensor, query_telemetry, get_weak_techniques]
+goal_keywords: ["web-01", "T1110", "risky"]
+mocks:
+  list_incidents:
+    - schema_version: "1.0"
+      source: defender
+      finding_type: incident
+      severity: high
+      title: "Multi-stage incident on host web-01 involving alice@corp.local"
+      entity: { kind: host, id: web-01, name: web-01.corp.local }
+      evidence:
+        - { key: user, value: alice@corp.local }
+        - { key: status, value: active }
+      references: [ { type: mitre, id: T1110 } ]
+  list_alerts:
+    - schema_version: "1.0"
+      source: defender
+      finding_type: alert
+      severity: high
+      title: "Brute-force authentication against web-01"
+      references: [ { type: mitre, id: T1110 } ]
+  list_risky_users:
+    - schema_version: "1.0"
+      source: entra
+      finding_type: risk
+      severity: high
+      title: "Risky user alice@corp.local (risk level: high)"
+      entity: { kind: user, id: alice@corp.local, name: Alice }
+      evidence: [ { key: risk_level, value: high } ]
+  list_risk_detections:
+    - schema_version: "1.0"
+      source: entra
+      finding_type: risk
+      severity: high
+      title: "Impossible travel sign-in for alice@corp.local"
+  get_sensor:
+    - schema_version: "1.0"
+      source: limacharlie
+      finding_type: posture
+      severity: info
+      title: "Sensor web-01 online (windows)"
+      entity: { kind: host, id: web-01, name: web-01.corp.local }
+  query_telemetry:
+    - schema_version: "1.0"
+      source: limacharlie
+      finding_type: hunt_result
+      severity: medium
+      title: "web-01: repeated failed logons then a successful NTLM auth"
+  get_weak_techniques:
+    - schema_version: "1.0"
+      source: projectachilles
+      finding_type: risk
+      severity: high
+      title: "T1110 Brute Force — weak (12% blocked)"
+      references: [ { type: mitre, id: T1110 } ]
