@@ -4,6 +4,8 @@ import respx
 from f0_intune_mcp.tools import (
     get_compliance_summary,
     get_managed_device,
+    list_compliance_policies,
+    list_configuration_profiles,
     list_managed_devices,
     list_stale_devices,
 )
@@ -14,6 +16,8 @@ CFG = PlatformConfig(tenant_id="t", client_id="c", client_secret="s")
 TOKEN_URL = "https://login.microsoftonline.com/t/oauth2/v2.0/token"
 GRAPH = "https://graph.microsoft.com/v1.0"
 DEV = GRAPH + "/deviceManagement/managedDevices"
+CPOL = GRAPH + "/deviceManagement/deviceCompliancePolicies"
+CONF = GRAPH + "/deviceManagement/deviceConfigurations"
 
 
 def _token(router):
@@ -124,3 +128,42 @@ async def test_get_compliance_summary_counts():
     ev = {e.key: e.value for e in findings[0].evidence}
     assert ev["compliant"] == "40" and ev["noncompliant"] == "5"
     assert findings[0].severity.value in ("low", "medium", "high")  # 5 noncompliant present
+
+
+@pytest.mark.asyncio
+async def test_list_compliance_policies_maps():
+    with respx.mock as router:
+        _token(router)
+        router.get(CPOL).mock(return_value=httpx.Response(200, json={"value": [
+            {"id": "p1", "displayName": "Win10 baseline",
+             "description": "encryption required",
+             "@odata.type": "#microsoft.graph.windows10CompliancePolicy"}]}))
+        async with GraphClient(CFG) as gc:
+            findings = await list_compliance_policies(gc)
+    assert findings[0].entity.kind.value == "policy"
+    assert "Win10 baseline" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_list_configuration_profiles_maps():
+    with respx.mock as router:
+        _token(router)
+        router.get(CONF).mock(return_value=httpx.Response(200, json={"value": [
+            {"id": "c1", "displayName": "Disk encryption",
+             "description": "BitLocker",
+             "@odata.type": "#microsoft.graph.windows10GeneralConfiguration"}]}))
+        async with GraphClient(CFG) as gc:
+            findings = await list_configuration_profiles(gc)
+    assert "Disk encryption" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_list_compliance_policies_403_names_config_permission():
+    with respx.mock as router:
+        _token(router)
+        router.get(CPOL).mock(
+            return_value=httpx.Response(403, json={"error": {"message": "Forbidden"}})
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_compliance_policies(gc)
+    assert "DeviceManagementConfiguration.Read.All" in findings[0].title

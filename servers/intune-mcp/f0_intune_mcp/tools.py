@@ -191,3 +191,59 @@ async def get_compliance_summary(gc: Any) -> list[Finding]:
             ),
         )
     ]
+
+
+def _policy_finding(p: dict, kind_label: str) -> Finding:
+    name = p.get("displayName") or p.get("id", "unknown")
+    odata = str(p.get("@odata.type", "")).split(".")[-1]
+    return Finding(
+        source="intune",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=f"Intune {kind_label}: {name}",
+        entity=Entity(
+            kind=EntityKind.policy,
+            id=str(p.get("id", "")),
+            name=p.get("displayName"),
+        ),
+        evidence=[
+            Evidence(key="type", value=odata),
+            Evidence(key="description", value=str(p.get("description") or "")),
+        ],
+    )
+
+
+async def list_compliance_policies(gc: Any, limit: int = 25) -> list[Finding]:
+    try:
+        resp = await gc.get(
+            "/deviceManagement/deviceCompliancePolicies", params={"$top": limit}
+        )
+    except GraphError as e:
+        finding = map_graph_error(
+            e, "intune", _CONFIG_PERM, "Intune compliance policies"
+        )
+        if finding:
+            return [finding]
+        raise
+    return [
+        _policy_finding(p, "compliance policy")
+        for p in (resp.get("value") or [])[:limit]
+    ]
+
+
+async def list_configuration_profiles(gc: Any, limit: int = 25) -> list[Finding]:
+    try:
+        resp = await gc.get(
+            "/deviceManagement/deviceConfigurations", params={"$top": limit}
+        )
+    except GraphError as e:
+        finding = map_graph_error(
+            e, "intune", _CONFIG_PERM, "Intune configuration profiles"
+        )
+        if finding:
+            return [finding]
+        raise
+    return [
+        _policy_finding(p, "configuration profile")
+        for p in (resp.get("value") or [])[:limit]
+    ]
