@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from evals.agentic import make_mock_fn, score_run
 from evals.run import AgentRun, ModelClient
 
 
@@ -56,3 +57,44 @@ async def test_run_agent_halts_at_max_steps():
         run = await client.run_agent("SYS", "go", tools=[], mock_fn=lambda n, a: [{}], max_steps=3)
     assert run.error == "max_steps reached"
     assert len(run.trajectory) == 3
+
+
+def _scenario() -> dict:
+    return {
+        "skill": "intune/coverage-gap-review",
+        "task": "Which devices are stale or non-compliant?",
+        "required_tools": ["get_compliance_summary", "list_stale_devices", "list_managed_devices"],
+        "goal_keywords": ["stale", "unencrypt"],
+        "mocks": {"get_compliance_summary": [{"x": 1}]},
+    }
+
+
+def test_make_mock_fn_returns_canned_then_graceful():
+    fn = make_mock_fn(_scenario())
+    assert fn("get_compliance_summary", {}) == [{"x": 1}]
+    # a tool with no mock → graceful, non-crashing
+    assert fn("list_stale_devices", {})[0]["note"].startswith("no mock")
+
+
+def test_score_run_full_coverage_and_goal():
+    run = AgentRun(
+        trajectory=["get_compliance_summary", "list_stale_devices", "list_managed_devices"],
+        final_answer="3 stale devices and several unencrypted ones.", steps=4, error=None)
+    s = score_run(_scenario(), run)
+    assert s["coverage"] == 1.0 and s["goal_reached"] and s["passed"]
+
+
+def test_score_run_partial_coverage_fails():
+    run = AgentRun(trajectory=["get_compliance_summary"],  # missing 2 required tools
+                   final_answer="stale and unencrypt", steps=2, error=None)
+    s = score_run(_scenario(), run)
+    assert s["coverage"] == pytest.approx(1 / 3) and not s["passed"]
+
+
+def test_score_run_goal_missed_fails():
+    run = AgentRun(
+        trajectory=["get_compliance_summary", "list_stale_devices", "list_managed_devices"],
+        final_answer="everything looks fine",  # no goal keywords
+        steps=4, error=None)
+    s = score_run(_scenario(), run)
+    assert s["coverage"] == 1.0 and not s["goal_reached"] and not s["passed"]
