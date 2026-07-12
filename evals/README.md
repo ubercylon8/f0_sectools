@@ -67,10 +67,22 @@ Then resume the sweep — the recorded `ok` cells are skipped and only the faile
 ones re-run (delete the error cells from the results JSON first, since any
 present cell is skipped without `--force`).
 
-## Future: multi-step (agentic) skill eval
+## Multi-step (agentic) skill eval
 
-Today the harness measures **single** tool selection per prompt. The cross-platform
-correlation skills (`skills/cross-platform/`) chain several tools across servers with
-state between steps — measuring whether a small model drives the *whole chain*
-end-to-end needs a new multi-step/agentic eval (drive a skill, score each step's tool
-choice + the final synthesis). Tracked as a roadmap item; not built yet.
+`evals/agentic.py` + `evals/agentic_scorecard.py` measure whether a model can drive a
+whole `SKILL.md` **procedure**, not just pick one tool. Each scenario in
+`evals/scenarios/*.yaml` injects the skill's live `## Procedure`, runs a multi-step
+tool-calling loop against deterministic mock tool results, and scores a dual metric —
+**tool-coverage%** (order-tolerant) and **goal-reached%** (keyword check on the final
+answer, where keywords are grounded in tool output, not the task). It is local-only
+(needs Ollama); the harness logic is covered offline by `evals/tests/test_agentic.py`.
+
+Run the matrix (evict between models on a memory-constrained box, as with the scorecard):
+
+    for tag in $(python -c "import yaml;[print(m['tag']) for m in yaml.safe_load(open('evals/models.yaml'))]"); do
+      uv run python -m evals.agentic_scorecard --models "$tag" --date 2026-07-12
+      curl -s http://localhost:11434/api/chat -d "{\"model\":\"$tag\",\"messages\":[],\"keep_alive\":0}" >/dev/null
+    done
+
+Results render to `evals/AGENTIC.md` (a skill × model matrix). Ministral 3 was removed
+from `models.yaml` — it emits no OpenAI `tool_calls`, so it scores 0 on both evals.

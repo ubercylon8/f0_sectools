@@ -1,0 +1,23 @@
+# Single-platform multi-step: pull the incident, then its correlated alerts,
+# summarize what happened + technique.
+skill: defender/triage-incident
+task: "Triage our active high-severity Defender incidents."
+required_tools: [list_incidents, list_alerts]
+goal_keywords: ["pc-9", "T1059"]
+mocks:
+  list_incidents:
+    - schema_version: "1.0"
+      source: defender
+      finding_type: incident
+      severity: high
+      title: "Suspicious PowerShell activity on host pc-9"
+      entity: { kind: host, id: pc-9, name: pc-9.corp.local }
+      references: [ { type: mitre, id: T1059 } ]
+  list_alerts:
+    - schema_version: "1.0"
+      source: defender
+      finding_type: alert
+      severity: high
+      title: "Encoded PowerShell command line on pc-9"
+      entity: { kind: host, id: pc-9, name: pc-9.corp.local }
+      references: [ { type: mitre, id: T1059 } ]

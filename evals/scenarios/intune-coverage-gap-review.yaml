@@ -1,0 +1,36 @@
+# Single-platform multi-step: scope the fleet, find stale devices, list the
+# non-compliant ones, flag unencrypted.
+skill: intune/coverage-gap-review
+task: "Where are our Intune device coverage gaps, and which devices should we remediate first?"
+required_tools: [get_compliance_summary, list_stale_devices, list_managed_devices]
+# Keywords are grounded ONLY in tool OUTPUT (not the task prompt), so goal-reached
+# measures fact-derivation from the mocks, not echoing the question.
+goal_keywords: ["stale", "unencrypted"]
+mocks:
+  get_compliance_summary:
+    - schema_version: "1.0"
+      source: intune
+      finding_type: posture
+      severity: high
+      title: "Intune device compliance: 983/1479 compliant, 306 non-compliant"
+      evidence:
+        - { key: total, value: "1479" }
+        - { key: noncompliant, value: "306" }
+        - { key: unknown, value: "187" }
+  list_stale_devices:
+    - schema_version: "1.0"
+      source: intune
+      finding_type: posture
+      severity: medium
+      title: "Stale device SBTV8893: last sync 2025-11-18T17:55:02Z"
+      entity: { kind: device, id: SBTV8893, name: SBTV8893 }
+  list_managed_devices:
+    - schema_version: "1.0"
+      source: intune
+      finding_type: posture
+      severity: high
+      title: "Managed device LAP-204: noncompliant, unencrypted"
+      entity: { kind: device, id: LAP-204, name: LAP-204 }
+      evidence:
+        - { key: compliance, value: noncompliant }
+        - { key: encrypted, value: "False" }

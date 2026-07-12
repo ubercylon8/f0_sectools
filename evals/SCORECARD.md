@@ -2,18 +2,17 @@
 
 Endpoint `http://localhost:11434/v1` · runs/task 1 · generated 2026-07-11
 
-Each cell is **tool-selection% / argument-filling%** over the server's task set. `all` = every server's 22 tools registered at once (composition test). `err` = model/endpoint error; `–` = not run.
+Each cell is **tool-selection% / argument-filling%** over the server's task set. `all` = every server's 28 tools registered at once (composition test). `err` = model/endpoint error; `–` = not run.
 
-| Model | defender | entra | limacharlie | projectachilles | all |
-|---|---|---|---|---|---|
-| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% |
-| Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 95%/95% |
-| Qwen3 4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 98%/98% |
-| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
-| Gemma 4 E4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% |
-| Gemma 4 12B | 75%/67% | 100%/100% | 100%/100% | 100%/100% | 93%/93% |
-| Ministral 3 (8.9B) | 0%/0% | 0%/0% | 0%/0% | 0%/0% | 12%/12% |
-| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 95%/95% |
+| Model | defender | entra | limacharlie | projectachilles | intune | all |
+|---|---|---|---|---|---|---|
+| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 96%/96% |
+| Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
+| Qwen3 4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% | 100%/100% |
+| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% |
+| Gemma 4 E4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% | 96%/96% |
+| Gemma 4 12B | 75%/67% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 92%/92% |
+| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 96%/96% |
 
 <!-- findings below: hand-annotated, preserved when the table is regenerated -->
 
@@ -24,13 +23,23 @@ Each cell is **tool-selection% / argument-filling%** over the server's task set.
 
 ## Findings
 
-**GPT-OSS 20B is the standout** — 100% tool-selection and argument-filling on every
-server *and* on the combined 22-tool registry. It is the only model with no
-composition cost.
+**Every model is perfect per-server (100%/100%)** on all five platforms — Defender,
+Entra, LimaCharlie, ProjectAchilles, and the new **Intune** server — except Gemma 4
+12B's Defender gated-write gap (below) and low-confidence 88% dips on ProjectAchilles
+for the two smallest models. **Intune's 6 tools are cleanly small-model-safe: 100%/100%
+for every model.**
 
-**Composition costs a few points for everyone else.** Registering all 22 tools at
-once drops Qwen3.5 to 98%, Qwen3 8B and Granite 4 Tiny to 95%, Gemma 4 12B to 93%.
-The `--server all` per-origin report (runs=3) names the collisions:
+**The cost shows up only in composition.** Registering all **28 tools** at once (5
+servers) is the hard test. **Qwen3.5 and Qwen3 4B drive the full registry at 100%**;
+Qwen3 8B 98%; GPT-OSS 20B, Gemma 4 E4B, and Granite 4 Tiny 96%; Gemma 4 12B 92% (its
+Defender gap carries in). No model errors. Adding Intune widened the registry (22→28)
+with **no single-server regressions**, but the ~4-point combined dip for GPT-OSS /
+Gemma E4B / Granite is a small composition cost as the tool count grew — a candidate
+**#2.5-style disambiguation follow-up** (a per-origin probe would show whether an Intune
+name like `get_compliance_summary` vs `get_secure_score`, or `list_managed_devices` vs
+the incident/alert lists, draws a mis-route). Left as follow-up; single-server Intune is
+already clean. The `--server all` per-origin report names the historical collisions
+(mostly fixed in #2.5, below):
 
 - **Hunting tools collide.** Defender's `run_hunting_query` and LimaCharlie's
   `query_telemetry` are both "run a hunting query"; Qwen3 8B routed Defender hunting
@@ -61,23 +70,26 @@ does not select `isolate_host` for "isolate device dev-1" (0/2), and misses one
 Defender at 100%, so this is a 12B-specific callability gap on the gated actions —
 worth a description/prompt revisit for that action class.
 
-**Ministral 3 cannot drive the tools at all (0%).** Ollama labels it "tool-capable",
-but against the OpenAI tool-calling interface it emits **no `tool_calls`** — it
-narrates its intent in prose ("*I'll check your Microsoft Secure Score… Let me fetch
-the latest data*") instead of returning a structured call. This is the scorecard's
-sharpest divider: a model can be conversationally tool-aware yet unusable by an agent
-that dispatches tools programmatically. The 12% on `all` is incidental. Not a
-description defect — the model simply doesn't produce tool calls here.
+**Ministral 3 was removed from the model set (2026-07-12) — it cannot drive the tools
+at all.** Ollama labels it "tool-capable", but against the OpenAI tool-calling interface
+it emitted **no `tool_calls`** — it narrated intent in prose ("*I'll check your Microsoft
+Secure Score… Let me fetch the latest data*") instead of returning a structured call
+(0% on every server, an incidental 14% on `all`). This is the scorecard's sharpest
+divider: a model can be conversationally tool-aware yet unusable by an agent that
+dispatches tools programmatically. Dropped from `models.yaml` as unusable for this
+repo's purpose — kept here as the instructive negative result.
 
-**Gemma 4 E4B and Qwen3 4B dip on ProjectAchilles (88%)** single-server but are
-100%/98% combined — low-confidence, likely run variance at `runs=1`.
+**Gemma 4 E4B and Qwen3 4B dip on ProjectAchilles (88%)** single-server but are 96%
+(Gemma E4B) / **100%** (Qwen3 4B) on the combined registry — low-confidence, likely run
+variance at `runs=1`. (Qwen3 4B's `intune`/`all` cells first came back `err` under sweep
+memory pressure; a clean re-run on a free box scored 100%/100% — the `err` was transient.)
 
 ## Notes
 
-- **All eight models were measured** (40/40 cells). The two whose pulled tags forced a
-  256k context (`qwen3:4b-c256k`, `ministral-3:latest-c256k`) OOM'd this ~30 GB box on
-  load; they were re-run as small-context derives (`*:ctx16k`, `num_ctx=16384` via a
-  one-line Modelfile — see `models.yaml`). Same weights, tiny KV cache, no OOM. The
-  Ollama multi-model memory note is in [`README.md`](README.md).
+- **Seven models measured** (42/42 cells: 5 servers + combined). Ministral 3 was dropped
+  from `models.yaml` (see above). `qwen3:4b` forced a 256k context on its pulled tag and
+  OOM'd this ~30 GB box on load; it runs as a small-context derive (`qwen3:4b-ctx16k`,
+  `num_ctx=16384` via a one-line Modelfile — see `models.yaml`). Same weights, tiny KV
+  cache, no OOM. The Ollama multi-model memory note is in [`README.md`](README.md).
 - Matrix run at `runs=1` (temperature 0); the notable cells above were re-checked at
   `runs=3`. One resident model at a time (Ollama evicted between models).
