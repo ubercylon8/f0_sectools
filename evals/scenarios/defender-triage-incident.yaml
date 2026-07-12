@@ -3,7 +3,10 @@
 skill: defender/triage-incident
 task: "Triage our active high-severity Defender incidents."
 required_tools: [list_incidents, list_alerts]
-goal_keywords: ["pc-9", "T1059"]
+# Each entry is a CONCEPT — a list is a group of accepted synonyms (any one counts).
+goal_keywords:
+  - ["pc-9"]
+  - ["T1059", "powershell"]
 mocks:
   list_incidents:
     - schema_version: "1.0"

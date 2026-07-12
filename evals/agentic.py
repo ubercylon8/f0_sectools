@@ -54,12 +54,28 @@ def make_mock_fn(scenario: dict) -> Callable[[str, dict], list]:
     return mock_fn
 
 
+def _synonyms(concept: str | list) -> list[str]:
+    """A goal 'concept' is either a single keyword (str) or a list of synonyms.
+    Normalize to a list of acceptable surface forms."""
+    return concept if isinstance(concept, list) else [concept]
+
+
+def _goal_reached(goal_keywords: list, answer_lower: str) -> bool:
+    """Goal is reached when EVERY concept is captured — a concept is captured if ANY
+    of its synonyms appears. Concept groups (e.g. ['risky','high-risk','flagged'])
+    fix phrasing brittleness while still requiring each distinct concept to appear."""
+    return all(
+        any(syn.lower() in answer_lower for syn in _synonyms(concept))
+        for concept in goal_keywords
+    )
+
+
 def score_run(scenario: dict, run: AgentRun) -> dict:
     required = scenario.get("required_tools", [])
     called = set(run.trajectory)
     coverage = (sum(1 for t in required if t in called) / len(required)) if required else 1.0
     answer = (run.final_answer or "").lower()
-    goal = all(kw.lower() in answer for kw in scenario.get("goal_keywords", []))
+    goal = _goal_reached(scenario.get("goal_keywords", []), answer)
     goal_reached = bool(goal) and run.error is None
     return {
         "coverage": coverage,
