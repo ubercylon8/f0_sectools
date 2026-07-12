@@ -6,6 +6,8 @@ before returning it to the agent.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
@@ -20,12 +22,12 @@ load_dotenv(".env.intune")
 mcp = FastMCP("f0-intune")
 
 
-def _render(findings: list[Finding]) -> list[dict]:
+def _render(findings: list[Finding]) -> list[dict[str, Any]]:
     return [redact_obj(f.model_dump()) for f in findings]
 
 
 @mcp.tool()
-async def list_managed_devices(compliance: str = "all", limit: int = 25) -> list[dict]:
+async def list_managed_devices(compliance: str = "all", limit: int = 25) -> list[dict[str, Any]]:
     """List Intune-managed devices with compliance/encryption/owner/sync state.
 
     compliance: one of all|compliant|noncompliant|ingraceperiod|unknown. limit: max devices.
@@ -36,7 +38,7 @@ async def list_managed_devices(compliance: str = "all", limit: int = 25) -> list
 
 
 @mcp.tool()
-async def get_compliance_summary() -> list[dict]:
+async def get_compliance_summary() -> list[dict[str, Any]]:
     """Intune device-compliance rollup: how many managed devices are compliant vs not."""
     cfg = PlatformConfig.from_env("INTUNE")
     async with GraphClient(cfg) as gc:
@@ -44,7 +46,7 @@ async def get_compliance_summary() -> list[dict]:
 
 
 @mcp.tool()
-async def get_managed_device(device_name: str) -> list[dict]:
+async def get_managed_device(device_name: str) -> list[dict[str, Any]]:
     """Get one Intune-managed device by its device name (compliance, encryption, owner, sync)."""
     cfg = PlatformConfig.from_env("INTUNE")
     async with GraphClient(cfg) as gc:
@@ -52,7 +54,7 @@ async def get_managed_device(device_name: str) -> list[dict]:
 
 
 @mcp.tool()
-async def list_stale_devices(days: int = 30, limit: int = 25) -> list[dict]:
+async def list_stale_devices(days: int = 30, limit: int = 25) -> list[dict[str, Any]]:
     """List Intune devices not synced in the last `days` (coverage drift / abandoned)."""
     cfg = PlatformConfig.from_env("INTUNE")
     async with GraphClient(cfg) as gc:
@@ -60,7 +62,7 @@ async def list_stale_devices(days: int = 30, limit: int = 25) -> list[dict]:
 
 
 @mcp.tool()
-async def list_compliance_policies(limit: int = 25) -> list[dict]:
+async def list_compliance_policies(limit: int = 25) -> list[dict[str, Any]]:
     """List Intune device COMPLIANCE POLICIES.
 
     Rules that define whether a device is compliant.
@@ -71,7 +73,7 @@ async def list_compliance_policies(limit: int = 25) -> list[dict]:
 
 
 @mcp.tool()
-async def list_configuration_profiles(limit: int = 25) -> list[dict]:
+async def list_configuration_profiles(limit: int = 25) -> list[dict[str, Any]]:
     """List Intune device CONFIGURATION PROFILES.
 
     Settings pushed to devices (not the compliance rules).

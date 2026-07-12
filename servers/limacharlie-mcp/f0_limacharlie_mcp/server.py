@@ -6,7 +6,7 @@ the event loop. Findings are redacted before they leave the server.
 from __future__ import annotations
 
 import asyncio
-from typing import Literal
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import LimaCharlieConfig
@@ -22,7 +22,7 @@ load_dotenv(".env.limacharlie")
 mcp = FastMCP("f0-limacharlie")
 
 
-def _render(findings: list[Finding]) -> list[dict]:
+def _render(findings: list[Finding]) -> list[dict[str, Any]]:
     return [redact_obj(f.model_dump()) for f in findings]
 
 
@@ -31,7 +31,7 @@ def _client() -> LimaCharlieClient:
 
 
 @mcp.tool()
-async def get_org_overview() -> list[dict]:
+async def get_org_overview() -> list[dict[str, Any]]:
     """LimaCharlie EDR deployment posture: sensor counts, D&R rule count, recent detection volume.
 
     The LimaCharlie endpoint/detection deployment — not Microsoft tenant config
@@ -41,19 +41,19 @@ async def get_org_overview() -> list[dict]:
 
 
 @mcp.tool()
-async def list_sensors(online_only: bool = False, limit: int = 50) -> list[dict]:
+async def list_sensors(online_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
     """List LimaCharlie sensors (endpoints): hostname, platform, online status."""
     return _render(await asyncio.to_thread(tools.list_sensors, _client(), online_only, limit))
 
 
 @mcp.tool()
-async def get_sensor(hostname: str) -> list[dict]:
+async def get_sensor(hostname: str) -> list[dict[str, Any]]:
     """Get LimaCharlie sensor detail by hostname."""
     return _render(await asyncio.to_thread(tools.get_sensor, _client(), hostname))
 
 
 @mcp.tool()
-async def list_dr_rules(namespace: str = "general", limit: int = 50) -> list[dict]:
+async def list_dr_rules(namespace: str = "general", limit: int = 50) -> list[dict[str, Any]]:
     """List Detection & Response (D&R) rules in the org (coverage). namespace: general|managed."""
     return _render(await asyncio.to_thread(tools.list_dr_rules, _client(), namespace, limit))
 
@@ -61,7 +61,7 @@ async def list_dr_rules(namespace: str = "general", limit: int = 50) -> list[dic
 @mcp.tool()
 async def list_detections(
     hours_back: int = 24, limit: int = 50, category: str | None = None
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """List recent LimaCharlie detections (D&R hits) within the last hours_back hours."""
     return _render(
         await asyncio.to_thread(tools.list_detections, _client(), hours_back, limit, category)
@@ -76,7 +76,7 @@ async def query_telemetry(
     hours_back: int = 24,
     limit: int = 50,
     lcql: str | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Hunt LimaCharlie endpoint (EDR sensor) telemetry with a guided preset — no LCQL needed.
 
     For Microsoft Defender / KQL hunts, use run_hunting_query instead — this tool

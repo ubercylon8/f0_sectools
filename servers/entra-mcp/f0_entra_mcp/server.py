@@ -6,6 +6,8 @@ findings, and redacts every payload before returning it to the agent.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
@@ -21,13 +23,13 @@ load_dotenv(".env.entra")
 mcp = FastMCP("f0-entra")
 
 
-def _render(findings: list[Finding]) -> list[dict]:
+def _render(findings: list[Finding]) -> list[dict[str, Any]]:
     """Dump findings and redact every payload before it leaves the server."""
     return [redact_obj(f.model_dump()) for f in findings]
 
 
 @mcp.tool()
-async def list_risky_users(limit: int = 25) -> list[dict]:
+async def list_risky_users(limit: int = 25) -> list[dict[str, Any]]:
     """List Entra ID Protection risky users (requires Entra ID P2)."""
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
@@ -35,7 +37,7 @@ async def list_risky_users(limit: int = 25) -> list[dict]:
 
 
 @mcp.tool()
-async def list_risk_detections(limit: int = 25) -> list[dict]:
+async def list_risk_detections(limit: int = 25) -> list[dict[str, Any]]:
     """List Entra ID Protection risk detections (requires Entra ID P2)."""
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
@@ -43,7 +45,7 @@ async def list_risk_detections(limit: int = 25) -> list[dict]:
 
 
 @mcp.tool()
-async def list_conditional_access_policies() -> list[dict]:
+async def list_conditional_access_policies() -> list[dict[str, Any]]:
     """List Conditional Access policies, flagging disabled and report-only ones."""
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
@@ -51,7 +53,7 @@ async def list_conditional_access_policies() -> list[dict]:
 
 
 @mcp.tool()
-async def list_privileged_role_assignments(limit: int = 100) -> list[dict]:
+async def list_privileged_role_assignments(limit: int = 100) -> list[dict[str, Any]]:
     """List directory role assignments, highlighting critical privileged roles."""
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:

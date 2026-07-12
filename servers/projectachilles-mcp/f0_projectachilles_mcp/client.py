@@ -6,6 +6,8 @@ them to graceful findings.
 """
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 from f0_sectools_core.auth.config import ProjectAchillesConfig
 from f0_sectools_core.redaction.redact import redact_text
@@ -33,7 +35,7 @@ class ProjectAchillesClient:
     async def __aexit__(self, *exc: object) -> None:
         await self._client.aclose()
 
-    async def get(self, path: str, params: dict | None = None) -> dict:
+    async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         resp = await self._client.get(f"{self.base_url}/api{path}", params=params)
         if resp.status_code // 100 != 2:
             try:

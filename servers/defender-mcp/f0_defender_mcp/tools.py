@@ -235,7 +235,7 @@ def _gate_refusal(action_name: str, device_id: str, exc: GateDenied) -> Finding:
 
 async def _run_machine_action(
     sec: Any, gate: GatedAction, device_id: str, comment: str, confirmation_token: str,
-    actor: str, path: str, body: dict, verb: str, intent_extra: list[Evidence],
+    actor: str, path: str, body: dict[str, Any], verb: str, intent_extra: list[Evidence],
 ) -> list[Finding]:
     if not confirmation_token:
         return [_intent_finding(gate.name, verb, device_id, comment, intent_extra)]

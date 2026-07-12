@@ -59,3 +59,14 @@ pythonpath = ["."]
 [tool.mypy]
 python_version = "3.11"
 strict = true
+# The hard gate covers shipped source only (core + each server's package).
+# Tests (mocks/fixtures/respx), the eval harness, and smoke scripts are excluded:
+# strict-typing them is high-noise, low-value, and the duplicate `test_tools.py`
+# filenames across servers otherwise jam module resolution before any check runs.
+exclude = [
+    '(^|/)tests/',
+    '(^|/)test_[^/]*\.py$',
+    '^evals/',
+    '^scripts/',
+    '^skills/',
+]

@@ -281,7 +281,7 @@ Task sets live as YAML in `evals/`. The eval can run locally against a GPU box o
 
 Every push/PR runs (`.github/workflows/`):
 
-- **ci** — `uv run pytest` (offline contract + harness-logic tests) + `uv run ruff check .` (**hard gate**); mypy runs informational (its strict errors aren't a gate yet).
+- **ci** — `uv run pytest` (offline contract + harness-logic tests) + `uv run ruff check .` + `uv run mypy .` (strict) — all **hard gates**. mypy is scoped to shipped source (`core/` + each server's package); tests, `evals/`, `scripts/`, and `skills/` are excluded (strict-typing mocks/fixtures/tooling is high-noise, low-value).
 - **secret-scan** (gitleaks) and **semgrep** (SAST, gate on `p/python`; `p/security-audit` advisory) — **hard gates**.
 - **deps** (pip-audit), **links** (lychee), **codeql** (dormant until the repo is public), **claude-review** (comment-only) — advisory, not required checks.
 
