@@ -117,3 +117,17 @@ def test_scenario_valid(path):
     # every required tool has a mock (so a full run is deterministic)
     for tool in s["required_tools"]:
         assert tool in s["mocks"], f"{path.name}: required tool '{tool}' has no mock"
+
+
+@pytest.mark.parametrize("path", _SCENARIO_FILES, ids=lambda p: p.stem)
+def test_goal_keywords_grounded_in_mocks_not_task(path):
+    """Each goal keyword must appear in the mock tool OUTPUT and NOT in the task
+    prompt — so goal-reached measures fact-derivation from tools, not echoing the
+    question. (Guards the intune-scenario parroting bug found in review.)"""
+    s = load_scenario(path)
+    mocks = str(s["mocks"]).lower()
+    task = s["task"].lower()
+    for kw in s["goal_keywords"]:
+        k = kw.lower()
+        assert k in mocks, f"{path.name}: goal keyword '{kw}' not grounded in any mock"
+        assert k not in task, f"{path.name}: goal keyword '{kw}' is in the task (parroting risk)"
