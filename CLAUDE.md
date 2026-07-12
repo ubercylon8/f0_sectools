@@ -80,7 +80,7 @@ f0_sectools/
     paging/                 # pagination, truncation, rate-limiting
     smallmodel/             # tool helpers: flat-arg builders, enum guards, arg validation
     gating/                 # gated write-action machinery + audit log
-    renderers/              # persona renderers (analyst/engineer/ciso/hunter)
+    renderers/              # persona renderers (analyst/engineer/ciso/hunter/detection-engineer)
   servers/                  # one thin MCP server per platform
     defender-mcp/           # built + live-validated
     entra-mcp/              # built + live-validated
@@ -145,10 +145,11 @@ The same finding is rendered differently per audience via `core/renderers/`:
 - **Security engineer** — config-level: the misconfig/coverage gap and the fix.
 - **CISO / risk leader** — aggregated rollups, risk scoring, exec-framed summaries.
 - **Threat hunter / IR** — timeline, pivots, case-building across MISP/TheHive/OpenCTI.
+- **Detection engineer** — alert quality and coverage: findings grouped by ATT&CK technique, unmapped findings flagged.
 
 Tools always emit the structured finding; the persona view is a presentation layer, never a different data contract.
 
-> **Two persona layers, don't confuse them.** `core/renderers/` (above, planned) shapes how a *finding's text* is presented. The **agent personas** in [Skills, Personas & Runtimes](#skills-personas--runtimes) shape the *agent's behaviour* — which skills/tools it favours and how it frames a whole response. They compose; the renderer is optional polish, the agent persona is the primary mechanism today.
+> **Two persona layers, don't confuse them.** `core/renderers/` (above) shapes how a *finding's text* is presented. The **agent personas** in [Skills, Personas & Runtimes](#skills-personas--runtimes) shape the *agent's behaviour* — which skills/tools it favours and how it frames a whole response. They compose; the renderer is optional polish, the agent persona is the primary mechanism today.
 
 ---
 
