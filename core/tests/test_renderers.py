@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 from f0_sectools_core.redaction.patterns import REDACTED
+from f0_sectools_core.renderers import render_finding, render_findings
 from f0_sectools_core.renderers.base import Persona, Renderer
 from f0_sectools_core.renderers.personas import REGISTRY, get_renderer
 from f0_sectools_core.schema.findings import (
@@ -143,3 +144,21 @@ def test_soc_analyst_single_shows_next_step_and_gated_action():
 def test_security_engineer_list_is_a_checklist():
     out = get_renderer(Persona.security_engineer).render_findings(_mixed())
     assert "- [ ]" in out
+
+
+# ── Task 3: public API ────────────────────────────────────────────────────────
+
+
+def test_public_render_finding_default_persona_is_soc_analyst():
+    # default persona shows the SOC-analyst "Next step:" framing
+    assert "Next step:" in render_finding(_rich())
+
+
+def test_public_render_findings_accepts_str_persona():
+    out = render_findings(_mixed(), "ciso")
+    assert "Security posture rollup" in out
+
+
+def test_public_render_findings_unknown_persona_raises():
+    with pytest.raises(ValueError, match="Unknown persona"):
+        render_findings(_mixed(), "nope")
