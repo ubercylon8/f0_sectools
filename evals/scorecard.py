@@ -152,7 +152,7 @@ def render_scorecard_md(results: dict) -> str:
         f"· generated {results.get('date', '')}",
         "",
         "Each cell is **tool-selection% / argument-filling%** over the server's task "
-        "set. `all` = every server's 22 tools registered at once (composition test). "
+        "set. `all` = every server's 28 tools registered at once (composition test). "
         "`err` = model/endpoint error; `–` = not run.",
         "",
         head,

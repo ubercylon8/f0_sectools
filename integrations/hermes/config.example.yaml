@@ -35,8 +35,9 @@ agent:
       Prefer the defender-posture-summary skill — report Secure Score, open
       incidents by severity, the top 2-3 exposures, and the single highest-value
       next step. For endpoint posture, use LimaCharlie's get_org_overview
-      (sensor coverage, detection volume). Quantify risk plainly; never
-      speculate beyond tool results.
+      (sensor coverage, detection volume). For device-management posture, use the
+      intune-device-compliance-review skill (managed / compliant / encrypted
+      counts). Quantify risk plainly; never speculate beyond tool results.
 
     threat-hunter: >
       Operate as a threat hunter. Be hypothesis-driven and technical. Hunt with
@@ -44,7 +45,9 @@ agent:
       limacharlie-threat-hunt skill (LCQL endpoint telemetry); correlate with
       triage-defender-incident and investigate-lc-endpoint. Reference MITRE
       ATT&CK techniques, reconstruct timelines, and state what evidence confirms
-      or refutes the hypothesis. Bound every query; report only returned rows.
+      or refutes the hypothesis. For a device's Intune management state during
+      triage, use the intune-device-triage skill. Bound every query; report only
+      returned rows.
 
     detection-engineer: >
       Operate as a detection engineer. Focus on detection quality, coverage, and
@@ -60,6 +63,8 @@ agent:
       Use Secure Score improvement actions and the Entra tools (conditional
       access policies, privileged role assignments) to surface misconfigurations
       and excessive privilege; use LimaCharlie sensors for endpoint coverage
-      gaps (e.g. offline or missing agents). Recommend specific, actionable fixes
-      (enable a disabled CA policy, reduce Global Admin count, deploy a missing
-      sensor). Report exactly what the tools show.
+      gaps (e.g. offline or missing agents); and use the intune-coverage-gap-review
+      skill for device gaps (stale, non-compliant, and unencrypted devices).
+      Recommend specific, actionable fixes (enable a disabled CA policy, reduce
+      Global Admin count, deploy a missing sensor, remediate an unencrypted
+      device). Report exactly what the tools show.

@@ -1,0 +1,23 @@
+# gitleaks configuration for f0_sectools.
+#
+# Keeps the FULL default gitleaks ruleset (useDefault = true) and adds a NARROW,
+# path-scoped allowlist for the only known false positives: env-var NAMES shown
+# with empty/placeholder values in (1) credential TEMPLATES and (2) design docs.
+#
+# Real secrets never live in the repo — per Critical Rule 2 / 7 they live solely
+# in gitignored `.env.<platform>` files. The allowlist paths below deliberately
+# require the `.example` suffix (templates) or the `docs/superpowers/` design-doc
+# tree, so a real `.env.<platform>` (no `.example`) is NEVER allowlisted: if one
+# were ever committed, gitleaks would still flag it. Verified locally with
+# gitleaks 8.24.3 (the CI version): both false-positive classes clear, while a
+# real `.env.intune` and a populated `*_SECRET=<value>` still trip the scanner.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Env credential templates and design docs: env-var names with empty/placeholder values (never real secrets)"
+paths = [
+  '''.*\.env\.[^/]*\.example$''',
+  '''docs/superpowers/.*\.md$''',
+]

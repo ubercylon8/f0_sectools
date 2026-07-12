@@ -103,6 +103,34 @@ The `review-validation-fleet` skill uses `get_fleet_health`, `list_agents`, and
 offline/stale agents that leave endpoints unvalidated, and the risks formally
 accepted.
 
+## Intune device compliance (CISO / security engineer) — default focus
+
+> **Prompt:** "How compliant are our Intune-managed devices?"
+
+The `intune-device-compliance-review` skill runs `get_compliance_summary` and
+`list_compliance_policies` to report how many devices are compliant vs
+non-compliant/unknown, what the enforcing policies are, and the highest-value
+next step. Unknown means unevaluated, not "safe".
+
+## Intune coverage gaps (security engineer)
+
+> **Prompt:** "Which devices are stale, non-compliant, or unencrypted?"
+
+The `intune-coverage-gap-review` skill uses `get_compliance_summary`,
+`list_stale_devices`, and `list_managed_devices` (non-compliant) to build a
+prioritized remediation list — stale (not syncing), unencrypted, and
+non-compliant devices first. (`list_stale_devices` is bounded to `limit`; raise
+it to widen the net.)
+
+## Intune device triage (SOC analyst) — cross-platform pivot
+
+> **Prompt:** "What's the Intune state of the device in this incident?"
+
+The `intune-device-triage` skill takes a device name (often from a Defender
+incident) and runs `get_managed_device` to report its compliance, encryption,
+owner, last sync, and assigned user — a device-first pivot during triage. If the
+Defender name doesn't match, try the hostname variant.
+
 ## Cross-platform incident triage (SOC analyst / threat hunter)
 
 > **Prompt:** "Triage this Defender incident and give me the full picture."

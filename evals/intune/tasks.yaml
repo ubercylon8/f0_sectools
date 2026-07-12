@@ -1,0 +1,29 @@
+# Small-model tool-calling eval task set — Microsoft Intune server.
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every Intune tool has a task and every task names a real tool.
+
+- prompt: "List our Intune-managed devices."
+  expect_tool: list_managed_devices
+
+- prompt: "Show me the non-compliant devices in Intune."
+  expect_tool: list_managed_devices
+  expect_args: { compliance: noncompliant }
+
+- prompt: "How many of our devices are compliant?"
+  expect_tool: get_compliance_summary
+
+- prompt: "What's our device compliance posture?"
+  expect_tool: get_compliance_summary
+
+- prompt: "Look up the Intune device named PC-7."
+  expect_tool: get_managed_device
+  expect_args_contains: { device_name: PC-7 }
+
+- prompt: "Which devices haven't checked in for a month?"
+  expect_tool: list_stale_devices
+
+- prompt: "List our Intune device compliance policies."
+  expect_tool: list_compliance_policies
+
+- prompt: "Show the Intune configuration profiles pushed to devices."
+  expect_tool: list_configuration_profiles
