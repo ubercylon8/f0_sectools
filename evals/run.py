@@ -35,6 +35,7 @@ SERVER_MODULES = {
     "entra": "f0_entra_mcp.server",
     "limacharlie": "f0_limacharlie_mcp.server",
     "projectachilles": "f0_projectachilles_mcp.server",
+    "intune": "f0_intune_mcp.server",
 }
 
 

@@ -86,6 +86,7 @@ f0_sectools/
     entra-mcp/              # built + live-validated
     limacharlie-mcp/        # built + live-validated
     projectachilles-mcp/    # built + live-validated
+    intune-mcp/             # built (live-validation pending)
     # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
     #          sophos, misp, thehive, opencti (see Platform Integrations)
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
@@ -212,6 +213,7 @@ Targets (build incrementally — start with Wazuh as the reference implementatio
 | OpenCTI | Threat intel (OSS) | API token | entities, relationships | — |
 | LimaCharlie | SecOps/EDR/XDR | OID + API key (SDK) | sensors, detections, D&R rules, LCQL telemetry | isolate sensor (future) |
 | ProjectAchilles | Security validation (F0RT1KA) | `pa_` API key (Bearer) | defense score, test results, weak techniques, agents | — |
+| Intune | Identity/Endpoint mgmt | Entra app | devices, compliance, policies | — |
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
 

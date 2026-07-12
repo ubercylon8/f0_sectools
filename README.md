@@ -55,7 +55,8 @@ workflows, and troubleshooting.
 
 **Working today:** the `core/` foundation; the **Microsoft Defender**, **Microsoft
 Entra ID**, **LimaCharlie**, and **ProjectAchilles** MCP servers (all
-live-validated); the eval harness; nine skills; the four role personas; and the
+live-validated); the **Microsoft Intune** MCP server (built, live-validation
+pending); the eval harness; nine skills; the four role personas; and the
 Hermes integration. Next: ProjectAchilles skills, then more platforms.
 
 ## License
