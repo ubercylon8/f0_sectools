@@ -17,7 +17,7 @@ the schema, do not lower the bar.
 ## Scorecard & multi-server eval
 
 To score a single server against a single model, use `evals/run.py` directly
-(pass `--server all` to run the combined 22-tool registry — every server's
+(pass `--server all` to run the combined 28-tool registry — every server's
 tools registered at once — which is the ad-hoc composition test: does a model
 still pick the right tool when many platforms' tools are all on the table
 together):
