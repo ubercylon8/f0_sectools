@@ -22,6 +22,5 @@ jobs:
         run: uv run pytest
       - name: Lint
         run: uv run ruff check .
-      - name: Type check (informational — mypy debt not yet a gate)
+      - name: Type check (strict — hard gate on shipped source)
         run: uv run mypy .
-        continue-on-error: true
