@@ -46,6 +46,7 @@ Nothing leaves the host. Today: Microsoft **Defender** and **Entra ID**.
 | Microsoft Entra ID | `f0-entra-mcp` | ✅ live-validated | risky users*, risk detections*, conditional access, privileged roles |
 | LimaCharlie | `f0-limacharlie-mcp` | ✅ live-validated | org overview, sensors, D&R rules, detections, LCQL telemetry |
 | ProjectAchilles | `f0-projectachilles-mcp` | ✅ live-validated | defense score, score trend, weak techniques, test results, risk acceptances, agents, fleet health |
+| Microsoft Intune | `f0-intune-mcp` | ✅ live-validated | managed devices, compliance summary, stale devices, compliance policies, config profiles |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph
 permissions; otherwise they return a graceful "permission/throttled" finding.
