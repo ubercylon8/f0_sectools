@@ -176,3 +176,20 @@ def test_render_agentic_md_matrix():
     assert "Granite 4 Tiny" in md
     assert "intune-coverage-gap-review" in md
     assert "100% / 100%" in md
+
+
+def test_render_agentic_md_has_speed_footprint_table():
+    results = {
+        "base_url": "http://localhost:11434/v1", "runs": 1, "date": "2026-07-12",
+        "models": [{"tag": "granite4:tiny-h-c128k", "display": "Granite 4 Tiny"}],
+        "skills": ["intune-coverage-gap-review"],
+        "cells": {
+            "granite4:tiny-h-c128k::intune-coverage-gap-review":
+                {"coverage": 1.0, "goal_rate": 1.0, "runs": 1, "latency_s": 4.2},
+        },
+        "perf": {"granite4:tiny-h-c128k": {"vram_gb": 6.1}},
+    }
+    md = render_agentic_md(results)
+    assert "## Speed & footprint" in md
+    assert "4.2s" in md          # median s/skill from the cell latency
+    assert "6.1 GB" in md        # resident VRAM
