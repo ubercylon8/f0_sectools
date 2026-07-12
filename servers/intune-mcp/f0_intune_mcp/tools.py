@@ -51,7 +51,7 @@ def _sev(state: str) -> Severity:
     return _COMPLIANCE_SEV.get(str(state).lower(), Severity.info)
 
 
-def _device_finding(d: dict) -> Finding:
+def _device_finding(d: dict[str, Any]) -> Finding:
     name = d.get("deviceName") or d.get("id", "unknown")
     os_str = f"{d.get('operatingSystem', '')} {d.get('osVersion', '')}".strip()
     return Finding(
@@ -73,7 +73,7 @@ def _device_finding(d: dict) -> Finding:
 
 
 async def list_managed_devices(gc: Any, compliance: str = "all", limit: int = 25) -> list[Finding]:
-    params: dict = {"$top": limit, "$select": _DEVICE_SELECT}
+    params: dict[str, Any] = {"$top": limit, "$select": _DEVICE_SELECT}
     filt = _COMPLIANCE_FILTER.get(str(compliance).lower())
     if filt:
         params["$filter"] = f"complianceState eq '{filt}'"
@@ -200,7 +200,7 @@ async def get_compliance_summary(gc: Any) -> list[Finding]:
     ]
 
 
-def _policy_finding(p: dict, kind_label: str) -> Finding:
+def _policy_finding(p: dict[str, Any], kind_label: str) -> Finding:
     name = p.get("displayName") or p.get("id", "unknown")
     odata = str(p.get("@odata.type", "")).split(".")[-1]
     return Finding(

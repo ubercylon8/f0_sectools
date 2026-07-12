@@ -48,7 +48,7 @@ def _score_severity(score: float) -> Severity:
     return Severity.info
 
 
-def _rows(resp: Any) -> list:
+def _rows(resp: Any) -> list[dict[str, Any]]:
     """Extract a list of rows. Some PA endpoints return a bare array, others
     wrap it as ``{"data": [...]}`` — handle both."""
     if isinstance(resp, list):
@@ -248,7 +248,7 @@ async def list_risk_acceptances(pa: Any, status: str = "active", limit: int = 50
 async def list_agents(
     pa: Any, status: str | None = None, online_only: bool = False, limit: int = 50
 ) -> list[Finding]:
-    params: dict = {"limit": limit, "online_only": str(online_only).lower()}
+    params: dict[str, Any] = {"limit": limit, "online_only": str(online_only).lower()}
     if status:
         params["status"] = status
     try:

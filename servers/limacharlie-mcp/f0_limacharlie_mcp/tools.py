@@ -37,7 +37,7 @@ _PLATFORMS = {
 }
 
 
-def _first(d: dict, *keys: str, default: Any = None) -> Any:
+def _first(d: dict[str, Any], *keys: str, default: Any = None) -> Any:
     for k in keys:
         if k in d and d[k] not in (None, ""):
             return d[k]
@@ -50,7 +50,7 @@ def _platform_name(value: Any) -> str:
     return str(value)
 
 
-def _sensor_findings(sensors: list[dict], cap: int = _MAX_ITEMS) -> list[Finding]:
+def _sensor_findings(sensors: list[dict[str, Any]], cap: int = _MAX_ITEMS) -> list[Finding]:
     out: list[Finding] = []
     for s in sensors[: min(cap, _MAX_ITEMS)]:
         host = _first(s, "hostname", "host_name", default="unknown")

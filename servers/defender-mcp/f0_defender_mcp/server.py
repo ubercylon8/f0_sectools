@@ -7,6 +7,7 @@ findings, and redacts every payload before returning it to the agent.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
@@ -24,7 +25,7 @@ load_dotenv(".env.defender")
 mcp = FastMCP("f0-defender")
 
 
-def _render(findings: list[Finding]) -> list[dict]:
+def _render(findings: list[Finding]) -> list[dict[str, Any]]:
     """Dump findings and redact every payload before it leaves the server."""
     return [redact_obj(f.model_dump()) for f in findings]
 
@@ -50,7 +51,7 @@ _ACTOR = os.environ.get("DEFENDER_AUDIT_ACTOR", "mcp-operator")
 
 
 @mcp.tool()
-async def get_secure_score() -> list[dict]:
+async def get_secure_score() -> list[dict[str, Any]]:
     """Get the Microsoft Secure Score — Microsoft 365 / Defender config-hardening posture (%).
 
     Microsoft tenant configuration only — not the LimaCharlie endpoint deployment
@@ -62,7 +63,7 @@ async def get_secure_score() -> list[dict]:
 
 
 @mcp.tool()
-async def list_incidents(severity_min: str = "medium", limit: int = 25) -> list[dict]:
+async def list_incidents(severity_min: str = "medium", limit: int = 25) -> list[dict[str, Any]]:
     """List Defender XDR incidents (correlated alert groups).
 
     severity_min: one of info|low|medium|high|critical. limit: max incidents.
@@ -73,7 +74,7 @@ async def list_incidents(severity_min: str = "medium", limit: int = 25) -> list[
 
 
 @mcp.tool()
-async def list_alerts(severity_min: str = "high", limit: int = 25) -> list[dict]:
+async def list_alerts(severity_min: str = "high", limit: int = 25) -> list[dict[str, Any]]:
     """List Defender XDR alerts (alerts_v2).
 
     severity_min: one of info|low|medium|high|critical. limit: max alerts.
@@ -84,7 +85,7 @@ async def list_alerts(severity_min: str = "high", limit: int = 25) -> list[dict]
 
 
 @mcp.tool()
-async def run_hunting_query(kql: str) -> list[dict]:
+async def run_hunting_query(kql: str) -> list[dict[str, Any]]:
     """Run a Microsoft Defender advanced hunting query (KQL) over M365 / Entra / devices (30d).
 
     For LimaCharlie endpoint (EDR sensor) telemetry, use query_telemetry instead —
@@ -99,7 +100,9 @@ async def run_hunting_query(kql: str) -> list[dict]:
 
 
 @mcp.tool()
-async def isolate_host(device_id: str, comment: str, confirmation_token: str = "") -> list[dict]:
+async def isolate_host(
+    device_id: str, comment: str, confirmation_token: str = ""
+) -> list[dict[str, Any]]:
     """Isolate a device from the network (GATED WRITE).
 
     Call WITHOUT confirmation_token first: returns the intended action only, no
@@ -118,7 +121,9 @@ async def isolate_host(device_id: str, comment: str, confirmation_token: str = "
 
 
 @mcp.tool()
-async def release_host(device_id: str, comment: str, confirmation_token: str = "") -> list[dict]:
+async def release_host(
+    device_id: str, comment: str, confirmation_token: str = ""
+) -> list[dict[str, Any]]:
     """Release a device from isolation (GATED WRITE).
 
     Same two-step flow as isolate_host: call without a token to preview, then run

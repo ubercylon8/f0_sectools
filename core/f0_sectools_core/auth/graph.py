@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 import httpx
 
@@ -73,9 +74,9 @@ class GraphClient:
         method: str,
         path: str,
         *,
-        params: dict | None = None,
-        json_body: dict | None = None,
-    ) -> dict:
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         for attempt in range(MAX_RETRIES + 1):
             token = await self.get_token()
             headers = {"Authorization": f"Bearer {token}"}
@@ -97,14 +98,16 @@ class GraphClient:
             return resp.json() if resp.content else {}
         raise GraphError(429, "exceeded retry budget")
 
-    async def get(self, path: str, params: dict | None = None) -> dict:
+    async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return await self._request("GET", path, params=params)
 
-    async def post(self, path: str, json_body: dict) -> dict:
+    async def post(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
         return await self._request("POST", path, json_body=json_body)
 
-    async def get_all(self, path: str, params: dict | None = None) -> list[dict]:
-        items: list[dict] = []
+    async def get_all(
+        self, path: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
         page = await self._request("GET", path, params=params)
         items.extend(page.get("value", []))
         next_link = page.get("@odata.nextLink")
