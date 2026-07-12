@@ -3,7 +3,14 @@ from __future__ import annotations
 
 import pytest
 
-from evals.agentic import SCENARIOS_DIR, SKILLS_DIR, load_scenario, make_mock_fn, score_run
+from evals.agentic import (
+    SCENARIOS_DIR,
+    SKILLS_DIR,
+    load_scenario,
+    make_mock_fn,
+    run_scenario,
+    score_run,
+)
 from evals.agentic_scorecard import render_agentic_md
 from evals.run import AgentRun, ModelClient
 
@@ -48,6 +55,7 @@ async def test_run_agent_captures_trajectory_and_feeds_mocks():
     assert calls_seen == ["list_incidents", "get_sensor"]  # mocks were invoked
     assert "web-01" in run.final_answer
     assert run.error is None
+    assert run.steps == 2  # two tool-call turns before the final answer
 
 
 @pytest.mark.asyncio
@@ -99,6 +107,26 @@ def test_score_run_goal_missed_fails():
         steps=4, error=None)
     s = score_run(_scenario(), run)
     assert s["coverage"] == 1.0 and not s["goal_reached"] and not s["passed"]
+
+
+@pytest.mark.asyncio
+async def test_run_scenario_end_to_end_scoring():
+    """Offline integration test: FakeModelClient drives the real intune scenario's
+    3 required tools then answers, through run_scenario (which also exercises
+    combined_tool_schemas() — offline, reads server tool modules, no network)."""
+    scenario = load_scenario(SCENARIOS_DIR / "intune-coverage-gap-review.yaml")
+    client = FakeModelClient([
+        _tool_msg("get_compliance_summary"),
+        _tool_msg("list_stale_devices"),
+        _tool_msg("list_managed_devices"),
+        _final("306 devices are stale and some remain unencrypted."),
+    ])
+    async with client:
+        scored = await run_scenario(client, scenario)
+
+    assert scored["coverage"] == 1.0
+    assert scored["goal_reached"]
+    assert scored["passed"]
 
 
 _SCENARIO_FILES = sorted(SCENARIOS_DIR.glob("*.yaml"))

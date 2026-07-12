@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .agentic import SCENARIOS_DIR, load_scenario, run_scenario
@@ -106,15 +107,19 @@ async def _amain(args: argparse.Namespace) -> None:
                 if key in cells and not args.force:
                     continue
                 cov_sum = goal_sum = 0.0
-                err = None
+                err_count = 0
+                last_err = None
                 for _ in range(args.runs):
                     scored = await run_scenario(client, scenario)
                     cov_sum += scored["coverage"]
                     goal_sum += 1.0 if scored["goal_reached"] else 0.0
-                    err = scored["error"] or err
+                    if scored["error"]:
+                        err_count += 1
+                        last_err = scored["error"]
                 cells[key] = {"coverage": cov_sum / args.runs,
                               "goal_rate": goal_sum / args.runs,
-                              "runs": args.runs, "error": err}
+                              "runs": args.runs,
+                              "error": last_err if err_count == args.runs else None}
         results_path.write_text(json.dumps(results, indent=2, default=str))
         write_agentic_md(results)
         print(f"scored {m['tag']}")
@@ -132,9 +137,12 @@ def main() -> None:
         default=None,
         help="comma-separated tags; default all in models.yaml",
     )
-    p.add_argument("--date", default="2026-07-12", help="date stamp for the results file")
+    p.add_argument("--date", default=None, help="date stamp; default today (UTC)")
     p.add_argument("--force", action="store_true", help="re-run cells already present")
-    asyncio.run(_amain(p.parse_args()))
+    args = p.parse_args()
+    if not args.date:
+        args.date = datetime.now(UTC).date().isoformat()
+    asyncio.run(_amain(args))
 
 
 if __name__ == "__main__":

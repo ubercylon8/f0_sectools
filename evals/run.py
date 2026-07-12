@@ -210,7 +210,7 @@ class ModelClient:
         user: str,
         tools: list[dict],
         mock_fn: Callable[[str, dict], list],
-        max_steps: int = 8,
+        max_steps: int = 12,
     ) -> AgentRun:
         """Drive a multi-step tool-calling loop against deterministic mock tool
         results. Returns the ordered trajectory of tool names, the final answer,

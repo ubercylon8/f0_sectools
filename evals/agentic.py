@@ -7,6 +7,7 @@ harness logic here is covered by evals/tests/test_agentic.py (offline, fake mode
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -31,14 +32,13 @@ def load_procedure(skill: str) -> str:
     """Return the text of the `## Procedure` section of skills/<skill>/SKILL.md
     (up to the next `## ` heading)."""
     text = (SKILLS_DIR / skill / "SKILL.md").read_text()
-    marker = "## Procedure"
-    if marker not in text:
+    m = re.search(r"^## Procedure\s*$", text, re.MULTILINE)
+    if not m:
         return ""
-    after = text.split(marker, 1)[1]
-    # cut at the next top-level section heading
+    after = text[m.end():]
     end = after.find("\n## ")
     body = after if end == -1 else after[:end]
-    return marker + body.rstrip() + "\n"
+    return "## Procedure" + body.rstrip() + "\n"
 
 
 def build_system_prompt(skill: str) -> str:
