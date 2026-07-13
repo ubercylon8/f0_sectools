@@ -61,15 +61,16 @@ async def test_combined_registry_raises_on_duplicate_name(monkeypatch):
 def test_combined_tasks_tagged_with_origin_and_include_probes():
     import yaml
     tasks = combined_tasks()
-    # 12 defender + 8 entra + 8 limacharlie + 8 projectachilles + 8 intune = 44, plus probes.
+    # 12 defender + 8 entra + 8 limacharlie + 8 projectachilles + 8 intune + 8 tenable
+    # = 52, plus probes.
     # Distinguish by checking against native task prompts.
     native_prompts = set()
-    for server in ["defender", "entra", "limacharlie", "projectachilles", "intune"]:
+    for server in ["defender", "entra", "limacharlie", "projectachilles", "intune", "tenable"]:
         with open(f"evals/{server}/tasks.yaml") as fh:
             native = yaml.safe_load(fh)
         native_prompts.update(t["prompt"] for t in (native or []))
     per_server = [t for t in tasks if t["prompt"] in native_prompts]
-    assert len(per_server) == 44
+    assert len(per_server) == 52
     probes = [t for t in tasks if t["prompt"] not in native_prompts]
     assert len(probes) >= 6, "expected the cross-platform probe set"
     assert all("origin" in t and "prompt" in t and "expect_tool" in t for t in tasks)
