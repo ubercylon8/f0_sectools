@@ -133,7 +133,7 @@ _SCENARIO_FILES = sorted(SCENARIOS_DIR.glob("*.yaml"))
 
 
 def test_scenarios_exist():
-    assert len(_SCENARIO_FILES) == 3
+    assert len(_SCENARIO_FILES) == 4
 
 
 @pytest.mark.parametrize("path", _SCENARIO_FILES, ids=lambda p: p.stem)
