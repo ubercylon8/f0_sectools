@@ -85,3 +85,7 @@ uv run python -m evals.run --server defender \
 
 See [`evals/README.md`](../evals/README.md). A model that scores poorly on a tool
 means the tool's schema is too hard for it — simplify, don't lower the bar.
+
+For **which runtime and which model to choose** (Ollama vs vLLM vs llama.cpp
+benchmarks, single-turn vs multi-step model selection, and deployment guidance),
+see [`runtime-performance.md`](runtime-performance.md).
