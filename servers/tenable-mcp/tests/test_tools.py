@@ -21,10 +21,12 @@ class FakeClient:
 
     async def get(self, path, params=None):
         self.calls.append((path, params or {}))
-        for p, err in self._raise.items():
+        # Longest-prefix-first so e.g. "/workbenches/assets/<uuid>/vulnerabilities"
+        # matches its own canned response rather than the shorter "/workbenches/assets".
+        for p, err in sorted(self._raise.items(), key=lambda kv: -len(kv[0])):
             if path.startswith(p):
                 raise err
-        for p, resp in self._responses.items():
+        for p, resp in sorted(self._responses.items(), key=lambda kv: -len(kv[0])):
             if path.startswith(p):
                 return resp
         return {}
@@ -103,3 +105,65 @@ async def test_list_top_vulnerabilities_permission_error_is_graceful():
     tio = FakeClient(raise_on={"/workbenches/vulnerabilities": TenableError(403, "forbidden")})
     findings = await tools.list_top_vulnerabilities(tio)
     assert len(findings) == 1 and findings[0].finding_type.value == "posture"
+
+
+_UUID = "12345678-1234-1234-1234-1234567890ab"
+
+
+@pytest.mark.asyncio
+async def test_get_asset_vulnerabilities_uuid_direct():
+    tio = FakeClient(responses={
+        f"/workbenches/assets/{_UUID}/vulnerabilities": {"vulnerabilities": [
+            {"plugin_id": 19506, "plugin_name": "SSL cert", "severity": 4, "count": 1,
+             "cves": ["CVE-2021-1234"]},
+        ]},
+    })
+    findings = await tools.get_asset_vulnerabilities(tio, _UUID)
+    assert findings[0].entity.kind.value == "host"
+    assert findings[0].severity.value == "critical"
+    # went straight to the uuid endpoint, no asset search
+    assert any(_UUID in c[0] for c in tio.calls)
+
+
+@pytest.mark.asyncio
+async def test_get_asset_vulnerabilities_resolves_hostname():
+    tio = FakeClient(responses={
+        "/workbenches/assets": {"assets": [
+            {"id": _UUID, "fqdn": ["web-01.corp"], "ipv4": ["10.0.0.5"]}]},
+        f"/workbenches/assets/{_UUID}/vulnerabilities": {"vulnerabilities": [
+            {"plugin_id": 11219, "plugin_name": "x", "severity": 3, "count": 2}]},
+    })
+    findings = await tools.get_asset_vulnerabilities(tio, "web-01", severity_min="high")
+    assert findings and findings[0].severity.value == "high"
+
+
+@pytest.mark.asyncio
+async def test_get_asset_vulnerabilities_no_match_is_graceful():
+    tio = FakeClient(responses={"/workbenches/assets": {"assets": []}})
+    findings = await tools.get_asset_vulnerabilities(tio, "ghost-host")
+    assert len(findings) == 1
+    assert findings[0].finding_type.value == "posture"
+    assert "ghost-host" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_get_vulnerability_info_maps_detail():
+    tio = FakeClient(responses={"/workbenches/vulnerabilities/19506/info": {"info": {
+        "plugin_details": {"name": "SSL cert", "severity": 4},
+        "description": "the desc", "solution": "patch it",
+        "cvss_base_score": "7.5", "vpr": {"score": 9.1}, "cve": ["CVE-2021-1234"]}}})
+    findings = await tools.get_vulnerability_info(tio, "19506")
+    f = findings[0]
+    assert f.finding_type.value == "misconfig"
+    assert any("patch it" in e.value for e in f.evidence)
+    assert f.references[0].id == "CVE-2021-1234"
+
+
+@pytest.mark.asyncio
+async def test_list_scans_maps_status():
+    tio = FakeClient(responses={"/scans": {"scans": [
+        {"id": 7, "name": "Weekly", "status": "completed",
+         "last_modification_date": 1783900000}]}})
+    findings = await tools.list_scans(tio, limit=5)
+    assert findings[0].title.startswith("Tenable scan")
+    assert any(e.key == "status" for e in findings[0].evidence)

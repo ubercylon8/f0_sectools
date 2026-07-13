@@ -176,3 +176,125 @@ async def list_assets(
             )
         )
     return out
+
+
+async def _resolve_asset_uuid(tio: Any, asset: str) -> str | None:
+    """A UUID passes through; else match the first asset whose fqdn/ipv4 contains `asset`."""
+    if _UUID_RE.match(asset):
+        return asset
+    d = await tio.get("/workbenches/assets")
+    needle = asset.lower()
+    for a in _rows(d, "assets"):
+        hay = " ".join(str(x).lower() for x in
+                       (a.get("fqdn") or []) + (a.get("ipv4") or []) + [a.get("id", "")])
+        if needle in hay:
+            return str(a.get("id"))
+    return None
+
+
+async def get_asset_vulnerabilities(
+    tio: Any, asset: str, severity_min: str = "high", limit: int = 25
+) -> list[Finding]:
+    try:
+        uuid = await _resolve_asset_uuid(tio, asset)
+        if uuid is None:
+            return [Finding(
+                source="tenable",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Tenable: no asset matches '{asset}'",
+                recommended_action=RecommendedAction(
+                    summary="Check the hostname/IP, or list_assets to find the exact name.",
+                ),
+            )]
+        d = await tio.get(f"/workbenches/assets/{uuid}/vulnerabilities")
+    except Exception as e:
+        finding = map_tenable_error(e, "Tenable asset vulnerabilities")
+        if finding:
+            return [finding]
+        raise
+    floor = _SEV_MIN.get(severity_min, 3)
+    rows = [r for r in _rows(d, "vulnerabilities")
+            if int(r.get("severity", 0) or 0) >= floor]
+    rows.sort(key=lambda r: int(r.get("severity", 0) or 0), reverse=True)
+    out: list[Finding] = []
+    for r in rows[:limit]:
+        out.append(
+            Finding(
+                source="tenable",
+                finding_type=FindingType.misconfig,
+                severity=_sev(r.get("severity")),
+                title=f"Tenable: {r.get('plugin_name', 'vulnerability')} on {asset}",
+                entity=Entity(kind=EntityKind.host, id=str(uuid), name=asset),
+                evidence=[Evidence(key="instances", value=str(r.get("count", 0)))],
+                references=_cves(r),
+            )
+        )
+    return out
+
+
+async def get_vulnerability_info(tio: Any, plugin_id: str) -> list[Finding]:
+    try:
+        d = await tio.get(f"/workbenches/vulnerabilities/{plugin_id}/info")
+    except Exception as e:
+        finding = map_tenable_error(e, "Tenable vulnerability detail")
+        if finding:
+            return [finding]
+        raise
+    info = d.get("info", {}) if isinstance(d, dict) else {}
+    details = info.get("plugin_details", {})
+    name = details.get("name", f"plugin {plugin_id}")
+    evidence = []
+    if info.get("description"):
+        evidence.append(Evidence(key="description", value=str(info["description"])[:500]))
+    if info.get("solution"):
+        evidence.append(Evidence(key="solution", value=str(info["solution"])[:500]))
+    if info.get("cvss_base_score"):
+        evidence.append(Evidence(key="cvss", value=str(info["cvss_base_score"])))
+    vpr = info.get("vpr") or {}
+    if isinstance(vpr, dict) and vpr.get("score") is not None:
+        evidence.append(Evidence(key="vpr", value=str(vpr["score"])))
+    refs = [Reference(type="cve", id=str(c)) for c in info.get("cve") or []]
+    refs.append(Reference(type="tenable_plugin", id=str(plugin_id)))
+    return [
+        Finding(
+            source="tenable",
+            finding_type=FindingType.misconfig,
+            severity=_sev(details.get("severity")),
+            title=f"Tenable plugin {plugin_id}: {name}",
+            entity=Entity(kind=EntityKind.rule, id=str(plugin_id), name=name),
+            evidence=evidence,
+            references=refs,
+            recommended_action=RecommendedAction(
+                summary="Apply the solution above to the affected assets.",
+            ),
+        )
+    ]
+
+
+async def list_scans(tio: Any, limit: int = 25) -> list[Finding]:
+    try:
+        d = await tio.get("/scans")
+    except Exception as e:
+        finding = map_tenable_error(e, "Tenable scans")
+        if finding:
+            return [finding]
+        raise
+    out: list[Finding] = []
+    for s in _rows(d, "scans")[:limit]:
+        evidence = [Evidence(key="status", value=str(s.get("status", "unknown")))]
+        if s.get("last_modification_date"):
+            evidence.append(
+                Evidence(key="last_run", value=str(s.get("last_modification_date"))))
+        out.append(
+            Finding(
+                source="tenable",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Tenable scan: {s.get('name', s.get('id', 'scan'))}",
+                entity=Entity(kind=EntityKind.rule, id=str(s.get("id", "?")),
+                              name=s.get("name")),
+                evidence=evidence,
+            )
+        )
+    return out
