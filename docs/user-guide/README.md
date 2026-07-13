@@ -47,6 +47,7 @@ Nothing leaves the host. Today: Microsoft **Defender** and **Entra ID**.
 | LimaCharlie | `f0-limacharlie-mcp` | ✅ live-validated | org overview, sensors, D&R rules, detections, LCQL telemetry |
 | ProjectAchilles | `f0-projectachilles-mcp` | ✅ live-validated | defense score, score trend, weak techniques, test results, risk acceptances, agents, fleet health |
 | Microsoft Intune | `f0-intune-mcp` | ✅ live-validated | managed devices, compliance summary, stale devices, compliance policies, config profiles |
+| Tenable Vulnerability Management | `f0-tenable-mcp` | 🔶 built, live-validation pending | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph
 permissions; otherwise they return a graceful "permission/throttled" finding.
@@ -67,3 +68,12 @@ permissions; otherwise they return a graceful "permission/throttled" finding.
 
 CISO · threat hunter · detection engineer · security engineer — see
 [using skills & personas](using-skills-and-personas.md).
+
+### Example workflow: Tenable exposure review
+
+> **Prompt:** "As a security engineer, give me our Tenable exposure posture."
+
+The `exposure-posture-review` skill (Tenable's default focus) calls
+`get_vulnerability_summary` for the headline severity breakdown, then
+`list_top_vulnerabilities` for the fix-first list and `list_scans` to flag any
+stale-scan caveat. See [workflows](workflows.md) for more end-to-end examples.

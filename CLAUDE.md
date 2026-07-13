@@ -87,12 +87,14 @@ f0_sectools/
     limacharlie-mcp/        # built + live-validated
     projectachilles-mcp/    # built + live-validated
     intune-mcp/             # built (live-validation pending)
+    tenable-mcp/            # built (live-validation pending)
     # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
     #          sophos, misp, thehive, opencti (see Platform Integrations)
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
     defender/               # triage-incident, posture-summary, threat-hunt
     entra/                  # identity-risk-review, conditional-access-audit, privileged-access-review
     limacharlie/            # endpoint-investigation, detection-coverage-review, threat-hunt
+    tenable/                # exposure-posture-review, host-vulnerability-triage, scan-coverage-review
     cross-platform/         # multi-server correlation: incident triage, offensive<->defensive loop
   integrations/             # runtime-specific wiring (NO skill content — see rule 9)
     hermes/                 # SOUL.md + config.example.yaml (mcp_servers, external skills dir, 4 personas)
@@ -164,7 +166,7 @@ How a local model actually drives these tools. The mechanism differs by runtime,
 
 Skills live in `skills/` as **[agentskills.io](https://agentskills.io) `SKILL.md`** packages (the open standard, originally Anthropic's, now adopted by Hermes, Claude Code, Goose, OpenHands, Cursor, …). A skill is a directory with a `SKILL.md` (YAML frontmatter: `name`, `description` ≤60 chars, `version`, optional `metadata.hermes`) plus `## When to Use / Procedure / Pitfalls / Verification`, and optional `references/`. Loaded via progressive disclosure. The same files work in **every** skills-aware runtime — never fork them per runtime (Critical Rule 9). Each skill refers to tools by **base name** (`list_incidents`); runtimes prefix differently (Hermes `mcp_f0-defender_list_incidents`, Claude Code `mcp__f0-defender__list_incidents`).
 
-Current skills: `defender/{triage-incident,posture-summary,threat-hunt}`, `entra/{identity-risk-review,conditional-access-audit,privileged-access-review}`, `limacharlie/{endpoint-investigation,detection-coverage-review,threat-hunt}` (endpoint investigation is the LimaCharlie default focus), `projectachilles/{defense-posture-review,coverage-gap-analysis,validation-fleet-review}`, `intune/{device-compliance-review,coverage-gap-review,device-triage}` (device-compliance review is the Intune default focus), and `cross-platform/{triage-incident-cross-platform,validation-coverage-loop}` (multi-server correlation playbooks — favour a capable local model). A test (`skills/test_skills_valid.py`) enforces valid frontmatter and the ≤60-char description limit on every `SKILL.md`.
+Current skills: `defender/{triage-incident,posture-summary,threat-hunt}`, `entra/{identity-risk-review,conditional-access-audit,privileged-access-review}`, `limacharlie/{endpoint-investigation,detection-coverage-review,threat-hunt}` (endpoint investigation is the LimaCharlie default focus), `projectachilles/{defense-posture-review,coverage-gap-analysis,validation-fleet-review}`, `intune/{device-compliance-review,coverage-gap-review,device-triage}` (device-compliance review is the Intune default focus), `tenable/{exposure-posture-review,host-vulnerability-triage,scan-coverage-review}` (exposure-posture review is the Tenable default focus), and `cross-platform/{triage-incident-cross-platform,validation-coverage-loop}` (multi-server correlation playbooks — favour a capable local model). A test (`skills/test_skills_valid.py`) enforces valid frontmatter and the ≤60-char description limit on every `SKILL.md`.
 
 ### Personas (four role lenses)
 
@@ -214,6 +216,7 @@ Targets (build incrementally — start with Wazuh as the reference implementatio
 | LimaCharlie | SecOps/EDR/XDR | OID + API key (SDK) | sensors, detections, D&R rules, LCQL telemetry | isolate sensor (future) |
 | ProjectAchilles | Security validation (F0RT1KA) | `pa_` API key (Bearer) | defense score, test results, weak techniques, agents | — |
 | Intune | Identity/Endpoint mgmt | Entra app | devices, compliance, policies | — |
+| Tenable | Vulnerability Management | API key (access+secret) | vulnerabilities, assets, scans | — |
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
 
