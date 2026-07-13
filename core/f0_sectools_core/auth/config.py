@@ -100,3 +100,39 @@ class ProjectAchillesConfig:
             verify_tls=verify,
             allow_write=allow_write,
         )
+
+
+@dataclass
+class TenableConfig:
+    """Tenable Vulnerability Management credentials: an access key + secret key.
+
+    Sent as ``X-ApiKeys: accessKey=<>;secretKey=<>``. Read-only server, so there
+    is no allow_write flag. Loaded from .env.tenable. Secrets never leave this
+    layer or get logged.
+    """
+
+    access_key: str
+    secret_key: str
+    base_url: str = "https://cloud.tenable.com"
+    verify_tls: bool = True
+
+    @classmethod
+    def from_env(
+        cls, prefix: str = "TENABLE", env: Mapping[str, str] | None = None
+    ) -> TenableConfig:
+        env = env if env is not None else os.environ
+        required = {
+            "access_key": f"{prefix}_ACCESS_KEY",
+            "secret_key": f"{prefix}_SECRET_KEY",
+        }
+        missing = [name for name in required.values() if not env.get(name)]
+        if missing:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        verify = env.get(f"{prefix}_VERIFY_TLS", "true").strip().lower() in _TRUE
+        base_url = env.get(f"{prefix}_BASE_URL", "https://cloud.tenable.com").rstrip("/")
+        return cls(
+            access_key=env[required["access_key"]],
+            secret_key=env[required["secret_key"]],
+            base_url=base_url,
+            verify_tls=verify,
+        )

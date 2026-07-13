@@ -37,6 +37,7 @@ SERVER_MODULES = {
     "limacharlie": "f0_limacharlie_mcp.server",
     "projectachilles": "f0_projectachilles_mcp.server",
     "intune": "f0_intune_mcp.server",
+    "tenable": "f0_tenable_mcp.server",
 }
 
 
@@ -102,7 +103,7 @@ async def combined_tool_schemas() -> list[dict]:
 
 def combined_tasks() -> list[dict]:
     """Every per-server task tagged with its origin server, plus the cross-platform
-    routing probes. This is the task set for the combined 28-tool registry."""
+    routing probes. This is the task set for the combined 34-tool registry."""
     tasks: list[dict] = []
     for server in sorted(SERVER_MODULES):
         for t in load_tasks(server):
@@ -316,7 +317,7 @@ def format_report(server: str, model: str, report: dict) -> str:
 
 
 def format_combined_report(model: str, report: dict, origin_agg: dict) -> str:
-    lines = [f"\nCombined eval (all 28 tools)  x  {model}", "-" * 72]
+    lines = [f"\nCombined eval (all 34 tools)  x  {model}", "-" * 72]
     for origin in sorted(origin_agg):
         g = origin_agg[origin]
         mis = ", ".join(f"{k}x{v}" for k, v in sorted(g["misroutes"].items())) or "-"

@@ -1,0 +1,30 @@
+# Small-model tool-calling eval task set — Tenable server.
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every Tenable tool has at least one task.
+
+- prompt: "What's our overall Tenable vulnerability exposure?"
+  expect_tool: get_vulnerability_summary
+
+- prompt: "Give me the vulnerability posture across the environment."
+  expect_tool: get_vulnerability_summary
+
+- prompt: "Which vulnerabilities should we patch first?"
+  expect_tool: list_top_vulnerabilities
+
+- prompt: "Show me the most critical vulnerabilities by risk."
+  expect_tool: list_top_vulnerabilities
+  expect_args: { severity_min: critical }
+
+- prompt: "List the assets Tenable has scanned."
+  expect_tool: list_assets
+
+- prompt: "What vulnerabilities are on host web-01?"
+  expect_tool: get_asset_vulnerabilities
+  expect_args_contains: { asset: "web-01" }
+
+- prompt: "Explain Tenable plugin 19506 and how to fix it."
+  expect_tool: get_vulnerability_info
+  expect_args_contains: { plugin_id: "19506" }
+
+- prompt: "Are our Tenable scans running and up to date?"
+  expect_tool: list_scans

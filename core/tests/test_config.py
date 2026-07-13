@@ -3,6 +3,7 @@ from f0_sectools_core.auth.config import (
     LimaCharlieConfig,
     PlatformConfig,
     ProjectAchillesConfig,
+    TenableConfig,
 )
 
 
@@ -84,4 +85,33 @@ def test_projectachilles_config_strips_trailing_slash():
     }
     cfg = ProjectAchillesConfig.from_env(env=env)
     assert cfg.base_url == "https://tpsgl.projectachilles.io"
+    assert cfg.verify_tls is False
+
+
+def test_tenable_config_loads():
+    env = {
+        "TENABLE_ACCESS_KEY": "ak-123",
+        "TENABLE_SECRET_KEY": "sk-456",
+    }
+    cfg = TenableConfig.from_env(env=env)
+    assert cfg.access_key == "ak-123"
+    assert cfg.secret_key == "sk-456"
+    assert cfg.base_url == "https://cloud.tenable.com"  # default
+    assert cfg.verify_tls is True
+
+
+def test_tenable_config_missing_raises():
+    with pytest.raises(ValueError, match="TENABLE_SECRET_KEY"):
+        TenableConfig.from_env(env={"TENABLE_ACCESS_KEY": "ak-123"})
+
+
+def test_tenable_config_custom_base_url_strips_slash():
+    env = {
+        "TENABLE_ACCESS_KEY": "ak-123",
+        "TENABLE_SECRET_KEY": "sk-456",
+        "TENABLE_BASE_URL": "https://cloud.tenable.eu/",
+        "TENABLE_VERIFY_TLS": "false",
+    }
+    cfg = TenableConfig.from_env(env=env)
+    assert cfg.base_url == "https://cloud.tenable.eu"
     assert cfg.verify_tls is False

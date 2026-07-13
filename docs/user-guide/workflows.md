@@ -131,6 +131,32 @@ incident) and runs `get_managed_device` to report its compliance, encryption,
 owner, last sync, and assigned user — a device-first pivot during triage. If the
 Defender name doesn't match, try the hostname variant.
 
+## Tenable exposure posture (security engineer) — default focus
+
+> **Prompt:** "As a security engineer, give me our Tenable exposure posture."
+
+The `review-exposure-posture` skill (Tenable's default focus) calls
+`get_vulnerability_summary` for the headline severity breakdown, then
+`list_top_vulnerabilities` for the fix-first list and `list_scans` to flag any
+stale-scan caveat.
+
+## Tenable host vulnerability triage (SOC analyst)
+
+> **Prompt:** "What's wrong with host web-01 in Tenable?"
+
+The `triage-host-vulnerabilities` skill calls `list_assets` to confirm the
+host, `get_asset_vulnerabilities` (severity_min=high) to enumerate its
+vulnerabilities, and `get_vulnerability_info` for remediation detail on the
+top findings.
+
+## Tenable scan coverage review (security engineer)
+
+> **Prompt:** "Are our Tenable scans covering everything?"
+
+The `review-scan-coverage` skill runs `list_scans` to flag failed/stale scans
+and `list_assets` to gauge the inventory those scans should cover, then
+reports where coverage looks thin.
+
 ## Cross-platform incident triage (SOC analyst / threat hunter)
 
 > **Prompt:** "Triage this Defender incident and give me the full picture."

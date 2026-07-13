@@ -25,6 +25,7 @@ SERVERS = [
     ("limacharlie", "f0_limacharlie_mcp.server"),
     ("projectachilles", "f0_projectachilles_mcp.server"),
     ("intune", "f0_intune_mcp.server"),
+    ("tenable", "f0_tenable_mcp.server"),
 ]
 
 
