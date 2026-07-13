@@ -155,6 +155,12 @@ tool-calling enabled.
   illustrative. The *ordering* and the *patterns* are what generalize.
 - **Config dominates.** Quant (Q4 vs fp16), `-ngl`, `--parallel` / `OLLAMA_NUM_PARALLEL`, and
   `--gpu-memory-utilization` move the numbers far more than the runtime name. Tune before concluding.
+- **Power delivery is a hidden latency axis.** A laptop GPU on an underpowered adapter (or on battery)
+  gets software-power-capped: clocks throttle hard while `HW Thermal Slowdown` stays off — we observed an
+  SM clock pinned at ~9% of max with `SW Power Cap: Active`, roughly a 10× latency hit. This throttles
+  *latency, not correctness*: deterministic decoding (temperature 0) emits identical tokens at any clock,
+  so accuracy and VRAM are unaffected. Check `nvidia-smi -q -d PERFORMANCE` and measure speed only on the
+  machine's full-power adapter.
 - **The agentic numbers are mock-driven** (deterministic canned tool output), `runs`-averaged, and
   `goal-reached` is *directional* for the hard multi-step skill (high run-variance even at
   temperature 0) — read **coverage%** as the stable capability signal. See `AGENTIC.md`.
