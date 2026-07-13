@@ -7,6 +7,7 @@ names are validated by the live smoke test (recipe step 9).
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from f0_sectools_core.schema.findings import (
@@ -81,6 +82,40 @@ def _cves(row: dict[str, Any]) -> list[Reference]:
     return out
 
 
+def _cvss(row: dict[str, Any]) -> str | None:
+    """Best CVSS base score from a Workbenches vuln row: CVSSv3 preferred, else v2.
+
+    The Workbenches vulnerabilities list carries CVSS (cvss3_base_score /
+    cvss_base_score), not VPR — VPR is only on the per-plugin /info endpoint.
+    """
+    for key in ("cvss3_base_score", "cvss_base_score"):
+        v = row.get(key)
+        if v not in (None, ""):
+            return str(v)
+    return None
+
+
+def _info_cves(info: dict[str, Any]) -> list[str]:
+    """CVE ids from a plugin /info 'reference_information' block (name == 'cve')."""
+    out: list[str] = []
+    for ref in info.get("reference_information") or []:
+        if isinstance(ref, dict) and str(ref.get("name", "")).lower() == "cve":
+            out.extend(str(v) for v in ref.get("values") or [])
+    return out
+
+
+def _epoch_to_iso(value: Any) -> str:
+    """Unix epoch seconds -> ISO-8601 UTC; non-numeric values pass through unchanged.
+
+    Tenable's /scans returns last_modification_date as a unix timestamp; an ISO
+    date is what a model needs to judge scan freshness.
+    """
+    try:
+        return datetime.fromtimestamp(int(value), tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError, OSError):
+        return str(value)
+
+
 async def get_vulnerability_summary(tio: Any) -> list[Finding]:
     try:
         d = await tio.get("/workbenches/vulnerabilities")
@@ -131,14 +166,15 @@ async def list_top_vulnerabilities(
     rows = [r for r in _rows(d, "vulnerabilities")
             if _sev_rank(r.get("severity")) >= floor]
     rows.sort(
-        key=lambda r: (_sev_rank(r.get("severity")), _num(r.get("vpr_score"))),
+        key=lambda r: (_sev_rank(r.get("severity")), _num(_cvss(r))),
         reverse=True,
     )
     out: list[Finding] = []
     for r in rows[:limit]:
         evidence = [Evidence(key="affected_hosts", value=str(r.get("count", 0)))]
-        if r.get("vpr_score") is not None:
-            evidence.append(Evidence(key="vpr", value=str(r.get("vpr_score"))))
+        cvss = _cvss(r)
+        if cvss is not None:
+            evidence.append(Evidence(key="cvss", value=cvss))
         out.append(
             Finding(
                 source="tenable",
@@ -267,12 +303,14 @@ async def get_vulnerability_info(tio: Any, plugin_id: str) -> list[Finding]:
         evidence.append(Evidence(key="description", value=str(info["description"])[:500]))
     if info.get("solution"):
         evidence.append(Evidence(key="solution", value=str(info["solution"])[:500]))
-    if info.get("cvss_base_score"):
-        evidence.append(Evidence(key="cvss", value=str(info["cvss_base_score"])))
+    risk = info.get("risk_information") or {}
+    cvss = risk.get("cvss3_base_score") or risk.get("cvss_base_score")
+    if cvss:
+        evidence.append(Evidence(key="cvss", value=str(cvss)))
     vpr = info.get("vpr") or {}
     if isinstance(vpr, dict) and vpr.get("score") is not None:
         evidence.append(Evidence(key="vpr", value=str(vpr["score"])))
-    refs = [Reference(type="cve", id=str(c)) for c in info.get("cve") or []]
+    refs = [Reference(type="cve", id=str(c)) for c in _info_cves(info)]
     refs.append(Reference(type="tenable_plugin", id=str(plugin_id)))
     return [
         Finding(
@@ -303,7 +341,7 @@ async def list_scans(tio: Any, limit: int = 25) -> list[Finding]:
         evidence = [Evidence(key="status", value=str(s.get("status", "unknown")))]
         if s.get("last_modification_date"):
             evidence.append(
-                Evidence(key="last_run", value=str(s.get("last_modification_date"))))
+                Evidence(key="last_run", value=_epoch_to_iso(s.get("last_modification_date"))))
         out.append(
             Finding(
                 source="tenable",

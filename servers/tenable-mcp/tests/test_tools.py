@@ -61,10 +61,14 @@ def test_tenable_error_redacts_message():
     assert "Tenable_SuperLongSecretToken_12345" not in str(e) or "«redacted»" in str(e)
 
 
+# Shapes mirror the live Workbenches /vulnerabilities response: rows carry
+# cvss3_base_score / cvss_base_score (NOT vpr_score), and no CVE field (CVEs are
+# only on the per-plugin /info endpoint). Validated live 2026-07-13.
 _VULNS = {"vulnerabilities": [
-    {"plugin_id": 19506, "plugin_name": "SSL cert", "severity": 4, "count": 12, "vpr_score": 9.1,
-     "cves": ["CVE-2021-1234"]},
-    {"plugin_id": 11219, "plugin_name": "Open port", "severity": 1, "count": 40, "vpr_score": 2.0},
+    {"plugin_id": 19506, "plugin_name": "SSL cert", "severity": 4, "count": 12,
+     "cvss3_base_score": 9.1, "cvss_base_score": 8.8},
+    {"plugin_id": 11219, "plugin_name": "Open port", "severity": 1, "count": 40,
+     "cvss_base_score": 2.0},
 ]}
 
 
@@ -87,8 +91,12 @@ async def test_list_top_vulnerabilities_filters_and_sorts():
     # only the critical plugin passes severity_min=high; low one is filtered out
     assert len(findings) == 1
     assert findings[0].severity.value == "critical"
-    assert findings[0].references[0].id == "CVE-2021-1234"
-    assert any(e.key == "affected_hosts" for e in findings[0].evidence)
+    # list rows carry no CVE (CVEs are on the /info endpoint); only the plugin ref
+    assert findings[0].references[0].type == "tenable_plugin"
+    assert findings[0].references[0].id == "19506"
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["affected_hosts"] == "12"
+    assert ev["cvss"] == "9.1"  # CVSSv3 preferred over v2
 
 
 @pytest.mark.asyncio
@@ -123,7 +131,7 @@ async def test_list_assets_finds_hostname_beyond_page_and_fetches_unbounded():
 async def test_list_top_vulnerabilities_tolerates_string_severity():
     tio = FakeClient(responses={"/workbenches/vulnerabilities": {"vulnerabilities": [
         {"plugin_id": 1, "plugin_name": "x", "severity": "critical", "count": 1,
-         "vpr_score": "n/a"},
+         "cvss3_base_score": "n/a"},
     ]}})
     findings = await tools.list_top_vulnerabilities(tio, severity_min="high")
     assert len(findings) == 1 and findings[0].severity.value == "critical"
@@ -177,14 +185,20 @@ async def test_get_asset_vulnerabilities_no_match_is_graceful():
 
 @pytest.mark.asyncio
 async def test_get_vulnerability_info_maps_detail():
+    # Live /info shape: cvss under risk_information, CVEs under reference_information,
+    # vpr at top level. Validated live 2026-07-13.
     tio = FakeClient(responses={"/workbenches/vulnerabilities/19506/info": {"info": {
         "plugin_details": {"name": "SSL cert", "severity": 4},
         "description": "the desc", "solution": "patch it",
-        "cvss_base_score": "7.5", "vpr": {"score": 9.1}, "cve": ["CVE-2021-1234"]}}})
+        "risk_information": {"cvss3_base_score": "6.5", "cvss_base_score": "7.5"},
+        "vpr": {"score": 9.1},
+        "reference_information": [{"name": "cve", "values": ["CVE-2021-1234"]}]}}})
     findings = await tools.get_vulnerability_info(tio, "19506")
     f = findings[0]
     assert f.finding_type.value == "misconfig"
-    assert any("patch it" in e.value for e in f.evidence)
+    ev = {e.key: e.value for e in f.evidence}
+    assert "patch it" in ev["solution"]
+    assert ev["cvss"] == "6.5" and ev["vpr"] == "9.1"
     assert f.references[0].id == "CVE-2021-1234"
 
 
@@ -195,7 +209,11 @@ async def test_list_scans_maps_status():
          "last_modification_date": 1783900000}]}})
     findings = await tools.list_scans(tio, limit=5)
     assert findings[0].title.startswith("Tenable scan")
-    assert any(e.key == "status" for e in findings[0].evidence)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["status"] == "completed"
+    # last_run is converted from a unix epoch to ISO (so a model can judge freshness)
+    assert "T" in ev["last_run"] and ev["last_run"].endswith("Z")
+    assert ev["last_run"] != "1783900000"
 
 
 @pytest.mark.asyncio
