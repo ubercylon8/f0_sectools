@@ -53,16 +53,14 @@ async def list_top_vulnerabilities(
 
 
 @mcp.tool()
-async def list_assets(
-    hostname: str = "", severity_min: str = "", limit: int = 25
-) -> list[dict[str, Any]]:
+async def list_assets(hostname: str = "", limit: int = 25) -> list[dict[str, Any]]:
     """Tenable asset inventory — hosts Tenable has scanned.
 
     Optional hostname substring filter. Use to find or enumerate assets; for a
     specific host's vulnerabilities use get_asset_vulnerabilities.
     """
     async with _client() as tio:
-        return _render(await tools.list_assets(tio, hostname, severity_min, limit))
+        return _render(await tools.list_assets(tio, hostname, limit))
 
 
 @mcp.tool()

@@ -43,6 +43,23 @@ def _sev(value: Any) -> Severity:
     return {s.value: s for s in Severity}.get(str(value).lower(), Severity.info)
 
 
+_SEV_RANK = {Severity.info: 0, Severity.low: 1, Severity.medium: 2, Severity.high: 3,
+             Severity.critical: 4}
+
+
+def _sev_rank(value: Any) -> int:
+    """Tolerant severity rank 0-4 (reuses _sev, which accepts int or name)."""
+    return _SEV_RANK[_sev(value)]
+
+
+def _num(value: Any) -> float:
+    """Tolerant float; non-numeric -> 0.0 (never raises)."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _rows(resp: Any, key: str) -> list[dict[str, Any]]:
     """Extract a list of rows: a bare array, or ``{key: [...]}``."""
     if isinstance(resp, list):
@@ -112,9 +129,9 @@ async def list_top_vulnerabilities(
         raise
     floor = _SEV_MIN.get(severity_min, 3)
     rows = [r for r in _rows(d, "vulnerabilities")
-            if int(r.get("severity", 0) or 0) >= floor]
+            if _sev_rank(r.get("severity")) >= floor]
     rows.sort(
-        key=lambda r: (int(r.get("severity", 0) or 0), float(r.get("vpr_score", 0) or 0)),
+        key=lambda r: (_sev_rank(r.get("severity")), _num(r.get("vpr_score"))),
         reverse=True,
     )
     out: list[Finding] = []
@@ -142,21 +159,20 @@ async def list_top_vulnerabilities(
     return out
 
 
-async def list_assets(
-    tio: Any, hostname: str = "", severity_min: str = "", limit: int = 25
-) -> list[Finding]:
+async def list_assets(tio: Any, hostname: str = "", limit: int = 25) -> list[Finding]:
     try:
-        d = await tio.get("/workbenches/assets", params={"limit": limit} if limit else None)
+        params = None if hostname else ({"limit": limit} if limit else None)
+        d = await tio.get("/workbenches/assets", params=params)
     except Exception as e:
         finding = map_tenable_error(e, "Tenable assets")
         if finding:
             return [finding]
         raise
     out: list[Finding] = []
-    for a in _rows(d, "assets")[:limit]:
+    for a in _rows(d, "assets"):
         fqdns = a.get("fqdn") or []
         ipv4s = a.get("ipv4") or []
-        name = (fqdns[0] if fqdns else (ipv4s[0] if ipv4s else a.get("id", "asset")))
+        name = fqdns[0] if fqdns else (ipv4s[0] if ipv4s else a.get("id", "asset"))
         if hostname and hostname.lower() not in str(name).lower():
             continue
         evidence = []
@@ -175,6 +191,8 @@ async def list_assets(
                 observed_at=a.get("last_seen"),
             )
         )
+        if len(out) >= limit:
+            break
     return out
 
 
@@ -215,8 +233,8 @@ async def get_asset_vulnerabilities(
         raise
     floor = _SEV_MIN.get(severity_min, 3)
     rows = [r for r in _rows(d, "vulnerabilities")
-            if int(r.get("severity", 0) or 0) >= floor]
-    rows.sort(key=lambda r: int(r.get("severity", 0) or 0), reverse=True)
+            if _sev_rank(r.get("severity")) >= floor]
+    rows.sort(key=lambda r: _sev_rank(r.get("severity")), reverse=True)
     out: list[Finding] = []
     for r in rows[:limit]:
         out.append(

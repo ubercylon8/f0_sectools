@@ -5,6 +5,8 @@ Real Tenable field names are validated by the live smoke test (recipe step 9).
 """
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from f0_tenable_mcp import tools
 from f0_tenable_mcp.client import TenableError
@@ -98,6 +100,33 @@ async def test_list_assets_maps_host_entities():
     findings = await tools.list_assets(tio, limit=5)
     assert findings[0].entity.kind.value == "host"
     assert findings[0].entity.name == "web-01.corp"
+
+
+def test_list_assets_has_no_severity_min_param():
+    assert "severity_min" not in inspect.signature(tools.list_assets).parameters
+
+
+@pytest.mark.asyncio
+async def test_list_assets_finds_hostname_beyond_page_and_fetches_unbounded():
+    tio = FakeClient(responses={"/workbenches/assets": {"assets": [
+        {"id": "1", "fqdn": ["a.corp"]},
+        {"id": "2", "fqdn": ["b.corp"]},
+        {"id": "3", "fqdn": ["web-01.corp"]},
+    ]}})
+    findings = await tools.list_assets(tio, hostname="web-01", limit=1)
+    assert len(findings) == 1 and findings[0].entity.name == "web-01.corp"
+    # unbounded fetch when hostname set: no limit param
+    assert tio.calls[0][1] == {}
+
+
+@pytest.mark.asyncio
+async def test_list_top_vulnerabilities_tolerates_string_severity():
+    tio = FakeClient(responses={"/workbenches/vulnerabilities": {"vulnerabilities": [
+        {"plugin_id": 1, "plugin_name": "x", "severity": "critical", "count": 1,
+         "vpr_score": "n/a"},
+    ]}})
+    findings = await tools.list_top_vulnerabilities(tio, severity_min="high")
+    assert len(findings) == 1 and findings[0].severity.value == "critical"
 
 
 @pytest.mark.asyncio
