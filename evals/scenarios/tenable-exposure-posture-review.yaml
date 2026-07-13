@@ -1,0 +1,64 @@
+# Single-platform multi-step: env-wide vuln posture, the fix-first list, then a
+# scan-freshness caveat on the posture claim.
+skill: tenable/exposure-posture-review
+task: "Give me our Tenable exposure picture — overall risk and where to focus remediation first."
+required_tools: [get_vulnerability_summary, list_top_vulnerabilities, list_scans]
+# Keywords are grounded ONLY in tool OUTPUT (not the task prompt), so goal-reached
+# measures fact-derivation from the mocks, not echoing the question. Each entry is a
+# CONCEPT — a list is a group of accepted synonyms (any one counts).
+goal_keywords:
+  - ["log4shell", "log4j", "cve-2021-44228"]
+  - ["stale", "out of date", "not run recently"]
+mocks:
+  get_vulnerability_summary:
+    - schema_version: "1.0"
+      source: tenable
+      finding_type: posture
+      severity: critical
+      title: "Tenable vulnerability posture: 1240 findings across the environment"
+      entity: { kind: tenant, id: tenable }
+      evidence:
+        - { key: critical, value: "38" }
+        - { key: high, value: "412" }
+        - { key: medium, value: "610" }
+        - { key: low, value: "180" }
+  list_top_vulnerabilities:
+    - schema_version: "1.0"
+      source: tenable
+      finding_type: misconfig
+      severity: critical
+      title: "Tenable: Apache Log4Shell remote code execution (plugin 155999)"
+      entity: { kind: rule, id: "155999", name: "Apache Log4Shell RCE" }
+      evidence:
+        - { key: affected_hosts, value: "27" }
+        - { key: vpr, value: "9.8" }
+      references:
+        - { type: cve, id: CVE-2021-44228 }
+        - { type: tenable_plugin, id: "155999" }
+    - schema_version: "1.0"
+      source: tenable
+      finding_type: misconfig
+      severity: high
+      title: "Tenable: OpenSSL outdated version (plugin 20007)"
+      entity: { kind: rule, id: "20007", name: "OpenSSL outdated" }
+      evidence:
+        - { key: affected_hosts, value: "63" }
+  list_scans:
+    - schema_version: "1.0"
+      source: tenable
+      finding_type: posture
+      severity: info
+      title: "Tenable scan: Weekly Full Network — completed but stale (last run 2025-09-02)"
+      entity: { kind: rule, id: "7", name: "Weekly Full Network" }
+      evidence:
+        - { key: status, value: completed }
+        - { key: last_run, value: "2025-09-02T02:00:00Z" }
+    - schema_version: "1.0"
+      source: tenable
+      finding_type: posture
+      severity: info
+      title: "Tenable scan: Daily Critical Assets — completed"
+      entity: { kind: rule, id: "8", name: "Daily Critical Assets" }
+      evidence:
+        - { key: status, value: completed }
+        - { key: last_run, value: "2026-07-12T02:00:00Z" }
