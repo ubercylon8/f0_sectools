@@ -18,6 +18,7 @@ members = [
     "f0-projectachilles-mcp",
     "f0-sectools",
     "f0-sectools-core",
+    "f0-tenable-mcp",
 ]
 
 [[package]]
@@ -466,6 +467,23 @@ dependencies = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic", specifier = ">=2.7" },
+]
+
+[[package]]
+name = "f0-tenable-mcp"
+version = "0.0.1"
+source = { editable = "servers/tenable-mcp" }
+dependencies = [
+    { name = "f0-sectools-core" },
+    { name = "httpx" },
+    { name = "mcp" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "f0-sectools-core", editable = "core" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "mcp", specifier = ">=1.0" },
 ]
 
 [[package]]
