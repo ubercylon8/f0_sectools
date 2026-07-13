@@ -68,12 +68,3 @@ permissions; otherwise they return a graceful "permission/throttled" finding.
 
 CISO · threat hunter · detection engineer · security engineer — see
 [using skills & personas](using-skills-and-personas.md).
-
-### Example workflow: Tenable exposure review
-
-> **Prompt:** "As a security engineer, give me our Tenable exposure posture."
-
-The `exposure-posture-review` skill (Tenable's default focus) calls
-`get_vulnerability_summary` for the headline severity breakdown, then
-`list_top_vulnerabilities` for the fix-first list and `list_scans` to flag any
-stale-scan caveat. See [workflows](workflows.md) for more end-to-end examples.
