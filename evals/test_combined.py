@@ -17,13 +17,19 @@ from evals.run import (
 
 
 @pytest.mark.asyncio
-async def test_combined_registry_unions_all_28_tools():
+async def test_combined_registry_unions_all_34_tools():
     tools = await combined_tool_schemas()
     names = [t["function"]["name"] for t in tools]
-    assert len(names) == 28, f"expected 28 tools, got {len(names)}"
-    assert len(set(names)) == 28, "tool names must be unique across servers"
+    assert len(names) == 34, f"expected 34 tools, got {len(names)}"
+    assert len(set(names)) == 34, "tool names must be unique across servers"
     # spot-check one tool from each server is present
-    for expected in ("isolate_host", "list_risky_users", "query_telemetry", "get_defense_score"):
+    for expected in (
+        "isolate_host",
+        "list_risky_users",
+        "query_telemetry",
+        "get_defense_score",
+        "list_assets",
+    ):
         assert expected in names
 
 
