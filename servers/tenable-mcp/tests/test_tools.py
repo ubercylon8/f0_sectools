@@ -5,6 +5,8 @@ Real Tenable field names are validated by the live smoke test (recipe step 9).
 """
 from __future__ import annotations
 
+import pytest
+from f0_tenable_mcp import tools
 from f0_tenable_mcp.client import TenableError
 from f0_tenable_mcp.errors import map_tenable_error
 
@@ -53,3 +55,51 @@ def test_map_tenable_error_unknown_returns_none():
 def test_tenable_error_redacts_message():
     e = TenableError(401, "Authorization: Bearer Tenable_SuperLongSecretToken_12345")
     assert "Tenable_SuperLongSecretToken_12345" not in str(e) or "«redacted»" in str(e)
+
+
+_VULNS = {"vulnerabilities": [
+    {"plugin_id": 19506, "plugin_name": "SSL cert", "severity": 4, "count": 12, "vpr_score": 9.1,
+     "cves": ["CVE-2021-1234"]},
+    {"plugin_id": 11219, "plugin_name": "Open port", "severity": 1, "count": 40, "vpr_score": 2.0},
+]}
+
+
+@pytest.mark.asyncio
+async def test_get_vulnerability_summary_counts_by_severity():
+    tio = FakeClient(responses={"/workbenches/vulnerabilities": _VULNS})
+    findings = await tools.get_vulnerability_summary(tio)
+    f = findings[0]
+    assert f.finding_type.value == "posture"
+    assert f.severity.value == "critical"  # worst present (sev 4)
+    # evidence carries per-severity instance counts
+    ev = {e.key: e.value for e in f.evidence}
+    assert ev["critical"] == "12" and ev["low"] == "40"
+
+
+@pytest.mark.asyncio
+async def test_list_top_vulnerabilities_filters_and_sorts():
+    tio = FakeClient(responses={"/workbenches/vulnerabilities": _VULNS})
+    findings = await tools.list_top_vulnerabilities(tio, severity_min="high", limit=10)
+    # only the critical plugin passes severity_min=high; low one is filtered out
+    assert len(findings) == 1
+    assert findings[0].severity.value == "critical"
+    assert findings[0].references[0].id == "CVE-2021-1234"
+    assert any(e.key == "affected_hosts" for e in findings[0].evidence)
+
+
+@pytest.mark.asyncio
+async def test_list_assets_maps_host_entities():
+    tio = FakeClient(responses={"/workbenches/assets": {"assets": [
+        {"id": "abc", "fqdn": ["web-01.corp"], "ipv4": ["10.0.0.5"],
+         "last_seen": "2026-07-01T00:00:00Z"},
+    ]}})
+    findings = await tools.list_assets(tio, limit=5)
+    assert findings[0].entity.kind.value == "host"
+    assert findings[0].entity.name == "web-01.corp"
+
+
+@pytest.mark.asyncio
+async def test_list_top_vulnerabilities_permission_error_is_graceful():
+    tio = FakeClient(raise_on={"/workbenches/vulnerabilities": TenableError(403, "forbidden")})
+    findings = await tools.list_top_vulnerabilities(tio)
+    assert len(findings) == 1 and findings[0].finding_type.value == "posture"
