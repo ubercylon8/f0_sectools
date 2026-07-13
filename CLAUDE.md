@@ -87,7 +87,7 @@ f0_sectools/
     limacharlie-mcp/        # built + live-validated
     projectachilles-mcp/    # built + live-validated
     intune-mcp/             # built (live-validation pending)
-    tenable-mcp/            # built (live-validation pending)
+    tenable-mcp/            # built + live-validated
     # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
     #          sophos, misp, thehive, opencti (see Platform Integrations)
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
@@ -220,7 +220,7 @@ Targets (build incrementally — start with Wazuh as the reference implementatio
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
 
-**Implemented & live-validated:** `defender-mcp`, `entra-mcp`, `limacharlie-mcp` (the last uses the official `limacharlie` Python SDK and closes the offensive↔defensive loop with `f0_library`'s D&R rules). **Implemented & live-validated:** `projectachilles-mcp` (read-only over the PA REST API with a `pa_` Bearer key — defense score, test results, weak techniques, agents). The PA API lives on the `agent` subdomain (e.g. `https://<org>.agent.projectachilles.io`). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis).
+**Implemented & live-validated:** `defender-mcp`, `entra-mcp`, `limacharlie-mcp` (the last uses the official `limacharlie` Python SDK and closes the offensive↔defensive loop with `f0_library`'s D&R rules). **Implemented & live-validated:** `projectachilles-mcp` (read-only over the PA REST API with a `pa_` Bearer key — defense score, test results, weak techniques, agents). The PA API lives on the `agent` subdomain (e.g. `https://<org>.agent.projectachilles.io`). **Implemented & live-validated:** `tenable-mcp` (read-only over the Tenable Vulnerability Management Workbenches API with `X-ApiKeys` access/secret keys — vulnerability summary, top vulnerabilities, assets, per-asset vulnerabilities, plugin detail, scans). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis).
 
 ---
 
