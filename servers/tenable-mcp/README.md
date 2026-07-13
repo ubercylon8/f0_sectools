@@ -18,7 +18,7 @@ A read-only Tenable role is sufficient. `.env.tenable` is gitignored.
 |---|---|
 | `get_vulnerability_summary` | Environment-wide vulnerability counts by severity |
 | `list_top_vulnerabilities` | Worst plugins/CVEs by severity + VPR (fix-first) |
-| `list_assets` | Asset inventory (filter by hostname / severity) |
+| `list_assets` | Asset inventory (filter by hostname) |
 | `get_asset_vulnerabilities` | Vulnerabilities on one host (hostname/ip/UUID) |
 | `get_vulnerability_info` | One plugin: CVSS/VPR, description, remediation |
 | `list_scans` | Scan inventory + last-run freshness |
