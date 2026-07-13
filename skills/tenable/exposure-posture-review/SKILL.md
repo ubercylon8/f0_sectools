@@ -27,7 +27,7 @@ Base tool names (runtime may prefix — see the Tenable server README):
 1. Call `get_vulnerability_summary` for the headline — total findings and the
    per-severity breakdown (critical/high/medium/low).
 2. Call `list_top_vulnerabilities` (severity_min=high) for the fix-first list,
-   ranked by severity then VPR.
+   ranked by severity then CVSS.
 3. Call `list_scans` to check scan freshness — a stale scan means the posture
    picture may be out of date; note it as a caveat.
 4. Summarize for the audience: exposure by severity, the top 2-3 vulnerabilities
