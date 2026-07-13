@@ -167,3 +167,13 @@ async def test_list_scans_maps_status():
     findings = await tools.list_scans(tio, limit=5)
     assert findings[0].title.startswith("Tenable scan")
     assert any(e.key == "status" for e in findings[0].evidence)
+
+
+@pytest.mark.asyncio
+async def test_server_registers_six_tools():
+    from f0_tenable_mcp import server
+    names = {t.name for t in await server.mcp.list_tools()}
+    assert names == {
+        "get_vulnerability_summary", "list_top_vulnerabilities", "list_assets",
+        "get_asset_vulnerabilities", "get_vulnerability_info", "list_scans",
+    }
