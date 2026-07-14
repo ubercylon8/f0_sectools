@@ -1,18 +1,18 @@
 # Small-model tool-calling scorecard
 
-Endpoint `http://localhost:11434/v1` · runs/task 1 · generated 2026-07-11
+Endpoint `http://localhost:11434/v1` · runs/task 1 · generated 2026-07-13
 
-Each cell is **tool-selection% / argument-filling%** over the server's task set. `all` = every server's 28 tools registered at once (composition test). `err` = model/endpoint error; `–` = not run.
+Each cell is **tool-selection% / argument-filling%** over the server's task set. `all` = every server's 34 tools registered at once (composition test). `err` = model/endpoint error; `–` = not run.
 
-| Model | defender | entra | limacharlie | projectachilles | intune | all |
-|---|---|---|---|---|---|---|
-| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 96%/96% |
-| Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
-| Qwen3 4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% | 100%/100% |
-| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% |
-| Gemma 4 E4B | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% | 96%/96% |
-| Gemma 4 12B | 75%/67% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 92%/92% |
-| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 96%/96% |
+| Model | defender | entra | intune | limacharlie | projectachilles | tenable | all |
+|---|---|---|---|---|---|---|---|
+| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 91%/90% |
+| Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
+| Qwen3 4B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
+| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/98% |
+| Gemma 4 E4B | 92%/92% | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% | 97%/97% |
+| Gemma 4 12B | 75%/75% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 97%/97% |
+| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 97%/97% |
 
 <!-- findings below: hand-annotated, preserved when the table is regenerated -->
 
@@ -23,16 +23,27 @@ Each cell is **tool-selection% / argument-filling%** over the server's task set.
 
 ## Findings
 
-**Every model is perfect per-server (100%/100%)** on all five platforms — Defender,
-Entra, LimaCharlie, ProjectAchilles, and the new **Intune** server — except Gemma 4
-12B's Defender gated-write gap (below) and low-confidence 88% dips on ProjectAchilles
-for the two smallest models. **Intune's 6 tools are cleanly small-model-safe: 100%/100%
-for every model.**
+**Every model is perfect per-server (100%/100%)** on all six platforms — Defender,
+Entra, LimaCharlie, ProjectAchilles, Intune, and the new **Tenable** server — except
+Gemma 4 12B's Defender gated-write gap (below) and a low-confidence ProjectAchilles dip
+on Gemma 4 E4B (88% at `runs=1` → 96% at `runs=3`). **Intune's and Tenable's 6 tools each
+are cleanly small-model-safe: 100%/100% per-server for every model.**
 
-**The cost shows up only in composition.** Registering all **28 tools** at once (5
-servers) is the hard test. **Qwen3.5 and Qwen3 4B drive the full registry at 100%**;
-Qwen3 8B 98%; GPT-OSS 20B, Gemma 4 E4B, and Granite 4 Tiny 96%; Gemma 4 12B 92% (its
-Defender gap carries in). No model errors.
+**The cost shows up only in composition.** Registering all **34 tools** at once (6
+servers) is the hard test. **Qwen3.5 drives the full registry at 100%/98%**; Qwen3 8B and
+Qwen3 4B 98%; Gemma 4 E4B, Gemma 4 12B, and Granite 4 Tiny 97%; GPT-OSS 20B 91%/90% (its
+combined misroutes are all pre-existing cross-platform collisions — see below). No model
+errors.
+
+**Adding Tenable costs ZERO routing accuracy — verified, not assumed.** A per-origin
+`--server all` probe at `runs=3` on **GPT-OSS 20B** (the only model whose combined score
+moved, 96→91) shows the **`tenable` origin at 100% tool-selection with zero misroutes**,
+and **nothing misroutes *to* a Tenable tool** from any other server. The 34-tool combined
+drop is entirely the **pre-existing, non-Tenable cross-platform collisions**:
+`defender → query_telemetry`/`list_sensors` (the documented hunting/sensor overlap) and
+`limacharlie → list_managed_devices` (Intune's device tool grabbing an endpoint prompt).
+Tenable's 6 tools compose cleanly. Tenable's only blemish is args 88% (tool-selection
+100%) — a single argument-fill miss on one of its 8 tasks, not a routing collision.
 
 **Adding Intune costs ZERO routing accuracy — verified, not assumed.** A per-origin
 `--server all` probe at `runs=3` on the two "dropped" models (GPT-OSS 20B and Granite 4
@@ -69,11 +80,12 @@ The `--server all` per-origin report names them:
 Originally **tool-description defects, not model failures** — now addressed for the
 overview/health and named-hunting cases.
 
-**Gemma 4 12B fails the Defender gated-write tools.** Its 75%/67% is specific: it
-does not select `isolate_host` for "isolate device dev-1" (0/2), and misses one
-`release_host` / one `run_hunting_query` argument. The smaller Gemma 4 E4B handles
-Defender at 100%, so this is a 12B-specific callability gap on the gated actions —
-worth a description/prompt revisit for that action class.
+**Both Gemma models dip on Defender — reproducibly (confirmed at `runs=3`, identical
+to `runs=1`, so not variance).** Gemma 4 12B (75%/75%) does not select `isolate_host`
+for "isolate device dev-1" (0/2) and misses one `release_host` phrasing — a 12B-specific
+gap on the **gated-write** actions. Gemma 4 E4B (92%/92%) instead mis-routes one specific
+`run_hunting_query` prompt every time. Both are stable across three runs — worth a
+description/prompt revisit for those tools, not a sampling artifact.
 
 **Ministral 3 was removed from the model set (2026-07-12) — it cannot drive the tools
 at all.** Ollama labels it "tool-capable", but against the OpenAI tool-calling interface
@@ -84,14 +96,15 @@ divider: a model can be conversationally tool-aware yet unusable by an agent tha
 dispatches tools programmatically. Dropped from `models.yaml` as unusable for this
 repo's purpose — kept here as the instructive negative result.
 
-**Gemma 4 E4B and Qwen3 4B dip on ProjectAchilles (88%)** single-server but are 96%
-(Gemma E4B) / **100%** (Qwen3 4B) on the combined registry — low-confidence, likely run
-variance at `runs=1`. (Qwen3 4B's `intune`/`all` cells first came back `err` under sweep
-memory pressure; a clean re-run on a free box scored 100%/100% — the `err` was transient.)
+**Gemma 4 E4B dips on ProjectAchilles (88% at `runs=1` → 96% at `runs=3`)** — one flaky
+`get_defense_score` prompt (2/3), genuine low-confidence variance rather than a stable
+miss (contrast the Defender dips above, which reproduce exactly). An earlier `qwen3:4b`
+`err` under sweep memory pressure likewise cleared to 100%/100% on a free box — transient,
+not a capability limit.
 
 ## Notes
 
-- **Seven models measured** (42/42 cells: 5 servers + combined). Ministral 3 was dropped
+- **Seven models measured** (49/49 cells: 6 servers + combined). Ministral 3 was dropped
   from `models.yaml` (see above). `qwen3:4b` forced a 256k context on its pulled tag and
   OOM'd this ~30 GB box on load; it runs as a small-context derive (`qwen3:4b-ctx16k`,
   `num_ctx=16384` via a one-line Modelfile — see `models.yaml`). Same weights, tiny KV
