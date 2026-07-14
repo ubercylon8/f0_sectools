@@ -88,6 +88,16 @@ async def get_vulnerability_info(plugin_id: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+async def list_vulnerability_assets(plugin_id: str, limit: int = 25) -> list[dict[str, Any]]:
+    """List the hosts affected by a specific Tenable vulnerability (plugin_id).
+
+    Use after list_top_vulnerabilities to see WHICH assets carry a finding.
+    """
+    async with _client() as tio:
+        return _render(await tools.list_vulnerability_assets(tio, plugin_id, limit))
+
+
+@mcp.tool()
 async def list_scans(limit: int = 25) -> list[dict[str, Any]]:
     """Tenable scan inventory — each scan's status and last-run time (coverage freshness)."""
     async with _client() as tio:

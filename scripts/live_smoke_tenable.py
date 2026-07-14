@@ -61,6 +61,21 @@ async def main(persona: str | None = None) -> None:
             except Exception as e:  # noqa: BLE001 — smoke test: report and continue
                 print(f"\n=== {label}: ERROR ===\n{type(e).__name__}: {e}")
 
+        try:
+            # Derive a plugin_id from the top vulnerabilities, then list its hosts.
+            top = await tools.list_top_vulnerabilities(tio, limit=1)
+            plugin_id = next(
+                (r.id for f in top for r in (f.references or []) if r.type == "tenable_plugin"),
+                None,
+            )
+            if plugin_id:
+                _show(
+                    "list_vulnerability_assets",
+                    await tools.list_vulnerability_assets(tio, plugin_id, limit=5),
+                )
+        except Exception as e:  # noqa: BLE001 — smoke test: report and continue
+            print(f"\n=== list_vulnerability_assets: ERROR ===\n{type(e).__name__}: {e}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Live smoke test for the Tenable MCP server.")

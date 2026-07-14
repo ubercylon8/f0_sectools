@@ -216,11 +216,58 @@ async def test_list_scans_maps_status():
     assert ev["last_run"] != "1783900000"
 
 
+_OUTPUTS = {"outputs": [{"states": [{"results": [
+    {"assets": [
+        {"id": "uuid-1", "hostname": "web-01", "ipv4": ["10.0.0.1"],
+         "last_seen": "2026-01-01T00:00:00Z"},
+        {"id": "uuid-2", "hostname": "web-02", "ipv4": ["10.0.0.2"]},
+    ]},
+    {"assets": [{"id": "uuid-1", "hostname": "web-01"}]},  # duplicate of uuid-1
+]}]}]}
+
+
 @pytest.mark.asyncio
-async def test_server_registers_six_tools():
+async def test_list_vulnerability_assets_maps_hosts_and_dedupes():
+    tio = FakeClient(responses={"/workbenches/vulnerabilities/172179/outputs": _OUTPUTS})
+    findings = await tools.list_vulnerability_assets(tio, "172179", limit=25)
+    hosts = [f for f in findings if f.entity and f.entity.kind.value == "host"]
+    assert len(hosts) == 2  # uuid-1 deduped
+    assert "web-01" in hosts[0].title
+    assert "affected by plugin 172179" in hosts[0].title
+
+
+@pytest.mark.asyncio
+async def test_list_vulnerability_assets_no_assets_is_graceful():
+    tio = FakeClient(responses={"/workbenches/vulnerabilities/999/outputs": {"outputs": []}})
+    findings = await tools.list_vulnerability_assets(tio, "999")
+    assert "no affected assets" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_list_vulnerability_assets_truncates_with_note():
+    many = {"outputs": [{"states": [{"results": [{"assets": [
+        {"id": f"u{i}", "hostname": f"h{i}"} for i in range(30)]}]}]}]}
+    tio = FakeClient(responses={"/workbenches/vulnerabilities/1/outputs": many})
+    findings = await tools.list_vulnerability_assets(tio, "1", limit=10)
+    hosts = [f for f in findings if f.entity and f.entity.kind.value == "host"]
+    assert len(hosts) == 10
+    assert any("Showing 10 of 30" in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_list_vulnerability_assets_permission_error_is_graceful():
+    tio = FakeClient(raise_on={
+        "/workbenches/vulnerabilities/1/outputs": TenableError(403, "forbidden")})
+    findings = await tools.list_vulnerability_assets(tio, "1")
+    assert findings[0].finding_type.value == "posture"
+
+
+@pytest.mark.asyncio
+async def test_server_registers_seven_tools():
     from f0_tenable_mcp import server
     names = {t.name for t in await server.mcp.list_tools()}
     assert names == {
         "get_vulnerability_summary", "list_top_vulnerabilities", "list_assets",
-        "get_asset_vulnerabilities", "get_vulnerability_info", "list_scans",
+        "get_asset_vulnerabilities", "get_vulnerability_info", "list_vulnerability_assets",
+        "list_scans",
     }
