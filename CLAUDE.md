@@ -18,7 +18,7 @@ This single constraint drives almost every design rule below. Small local models
 
 - **MCP servers** (`servers/`) — one thin Model Context Protocol server per platform, exposing read tools (and gated write actions). Runtime-agnostic: they target the OpenAI-compatible API surface, so they work behind vLLM, llama.cpp, or any compliant front-end.
 - **Skills** (`skills/`) — higher-level playbooks that orchestrate the servers (e.g. "triage a Defender incident", "build a posture summary for the CISO"). They follow the **[agentskills.io](https://agentskills.io) open standard** (`SKILL.md`) — originally Anthropic's Agent Skills format, now adopted by Hermes, Claude Code, Goose, and others. **One portable set, no runtime-specific forks.**
-- **Personas** — four role lenses (CISO, threat hunter, detection engineer, security engineer) that shape output. Delivered as Hermes `agent.personalities` profiles and mirrored as switchable modes in the portable system prompt.
+- **Personas** — four role lenses (CISO, threat hunter, detection engineer, security engineer) that shape output. Delivered as Hermes `agent.personalities` (switched with `/personality`, **not** Profiles) and mirrored as switchable modes in the portable system prompt.
 - **Runtimes** — primary target is **Hermes Agent** (skills-aware, native MCP, OpenAI-compatible backend; see `integrations/hermes/`). The same skills run under Claude Code and other agentskills.io clients. For non-skill chat UIs (LM Studio, Open WebUI) a portable system prompt in `prompts/` carries the same guidance. See [Skills, Personas & Runtimes](#skills-personas--runtimes).
 
 ---
