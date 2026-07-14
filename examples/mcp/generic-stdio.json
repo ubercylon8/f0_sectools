@@ -1,0 +1,11 @@
+{
+  "name": "f0-tenable",
+  "transport": "stdio",
+  "command": "uv",
+  "args": [
+    "run",
+    "--directory", "/ABSOLUTE/PATH/TO/sec-tools",
+    "f0-tenable-mcp"
+  ],
+  "note": "Credentials come from .env.tenable in the repo root, not from this file."
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "f0-tenable": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory", "/ABSOLUTE/PATH/TO/sec-tools",
+        "f0-tenable-mcp"
+      ]
+    }
+  }
+}
