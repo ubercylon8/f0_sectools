@@ -1,0 +1,45 @@
+{
+  "settings": {
+    "toolPrefix": "mcp",
+    "requestTimeoutMs": 30000,
+    "maxRetries": 5
+  },
+  "mcpServers": {
+    "f0-defender": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-defender-mcp"],
+      "transport": "stdio",
+      "lifecycle": "lazy"
+    },
+    "f0-entra": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-entra-mcp"],
+      "transport": "stdio",
+      "lifecycle": "lazy"
+    },
+    "f0-limacharlie": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-limacharlie-mcp"],
+      "transport": "stdio",
+      "lifecycle": "lazy"
+    },
+    "f0-projectachilles": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-projectachilles-mcp"],
+      "transport": "stdio",
+      "lifecycle": "lazy"
+    },
+    "f0-intune": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-intune-mcp"],
+      "transport": "stdio",
+      "lifecycle": "lazy"
+    },
+    "f0-tenable": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-tenable-mcp"],
+      "transport": "stdio",
+      "lifecycle": "lazy"
+    }
+  }
+}
