@@ -10,6 +10,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+from f0_sectools_core.paging import clamp_limit, more_available_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -20,7 +21,6 @@ from f0_sectools_core.schema.findings import (
     Reference,
     Severity,
 )
-from f0_sectools_core.paging import clamp_limit, more_available_finding
 
 from .errors import map_tenable_error
 
