@@ -114,6 +114,41 @@ async def test_get_secure_score_maps():
 
 
 @pytest.mark.asyncio
+async def test_get_secure_score_does_not_paginate_history():
+    # /security/secureScores is a daily-snapshot time series; we only need the
+    # latest record. Regression: get_secure_score must NOT follow @odata.nextLink
+    # through months of history — that pagination timed out against a live tenant.
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        page2 = router.get(
+            GRAPH + "/security/secureScores", params={"$skiptoken": "next"}
+        ).mock(
+            return_value=httpx.Response(
+                200, json={"value": [{"currentScore": 1.0, "maxScore": 100.0}]}
+            )
+        )
+        router.get(GRAPH + "/security/secureScores", params={"$top": "1"}).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "value": [
+                        {
+                            "currentScore": 42.0,
+                            "maxScore": 100.0,
+                            "createdDateTime": "2026-06-28T00:00:00Z",
+                        }
+                    ],
+                    "@odata.nextLink": GRAPH + "/security/secureScores?$skiptoken=next",
+                },
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await get_secure_score(gc)
+    assert "42" in findings[0].title  # uses the latest (head) score
+    assert not page2.called  # did NOT paginate into history
+
+
+@pytest.mark.asyncio
 async def test_list_alerts_maps_with_mitre():
     with respx.mock as router:
         _token(router)
