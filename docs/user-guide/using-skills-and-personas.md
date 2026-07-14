@@ -42,6 +42,9 @@ The shared read-only / never-fabricate principles always apply.
 
 - **Hermes:** switch with `/personality ciso` (defined in
   [`integrations/hermes/config.example.yaml`](../../integrations/hermes/config.example.yaml)).
+- **pi:** invoke `/ciso` (prompt templates in
+  [`integrations/pi/prompts/`](../../integrations/pi/prompts/)); the same four
+  lenses.
 - **LM Studio / Open WebUI / Claude Code:** the same modes are in the portable
   prompt — say "as a CISO…" / "switch to threat hunter".
 

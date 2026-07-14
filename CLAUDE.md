@@ -176,6 +176,7 @@ CISO, threat hunter, detection engineer, security engineer — each a behavioura
 
 - **Hermes Agent** (primary) — skills-aware, native MCP, OpenAI-compatible backend. `integrations/hermes/` holds `SOUL.md` (base identity) and `config.example.yaml` (wires `mcp_servers`, points `skills.external_dirs` at this repo's `skills/` in place, defines the four personalities). See its README.
 - **Claude Code / other agentskills.io clients** — the same `skills/` load unmodified.
+- **pi** ([pi.dev](https://pi.dev/docs/latest)) — minimal agentskills.io terminal harness; the same `skills/` load unmodified. No native MCP — bridge our servers with the `pi-mcp-extension`. `integrations/pi/` holds `mcp.json`, `AGENTS.md` (base identity), and the four persona prompt templates. See `docs/user-guide/runtimes/pi.md`.
 - **Non-skill chat UIs (LM Studio, Open WebUI)** — no skill system; paste `prompts/f0-sectools-system-prompt.md` (persona-switchable) as the system prompt. See `docs/running-with-local-models.md`.
 
 **Rule of thumb:** skill *content* and persona *definitions* are authored once; `integrations/` and `prompts/` only carry runtime wiring, never copies of skill logic.

@@ -26,6 +26,8 @@ support matrix below.
      chat).
    - **[Open WebUI](runtimes/open-webui.md)** — web UI (needs the `mcpo` bridge).
    - **[Claude Code](runtimes/claude-code.md)** — terminal agent (skills + MCP).
+   - **[pi](runtimes/pi.md)** — minimal terminal harness (skills + personas; MCP
+     via the `pi-mcp-extension` bridge).
    - Generic vLLM/llama.cpp + any MCP client → see
      [running with local models](../running-with-local-models.md).
 3. **[Using skills & personas](using-skills-and-personas.md)** — what the
@@ -57,7 +59,8 @@ permissions; otherwise they return a graceful "permission/throttled" finding.
 
 | Runtime | Skills | Personas | MCP transport | Guide |
 |---------|--------|----------|---------------|-------|
-| Hermes Agent | ✅ native | ✅ profiles | stdio | [hermes.md](runtimes/hermes.md) |
+| Hermes Agent | ✅ native | ✅ `/personality` | stdio | [hermes.md](runtimes/hermes.md) |
+| pi | ✅ native | ✅ prompt templates | stdio via `pi-mcp-extension` | [pi.md](runtimes/pi.md) |
 | Claude Code | ✅ native | via prompt | stdio | [claude-code.md](runtimes/claude-code.md) |
 | LM Studio | ➖ system prompt | ➖ prompt modes | stdio | [lm-studio.md](runtimes/lm-studio.md) |
 | Open WebUI | ➖ system prompt | ➖ prompt modes | HTTP via `mcpo` | [open-webui.md](runtimes/open-webui.md) |
