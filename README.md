@@ -29,7 +29,7 @@ Six MCP servers, each **live-validated against a real tenant**, exposing read to
 - **Privacy by construction.** Per-platform `.env` credentials are never logged, never sent to the model, never leave the host. All output — including error paths — is redacted before it reaches the agent.
 - **One evidence base, four altitudes.** Every tool returns a normalized [findings schema](CLAUDE.md#the-findings-schema), rendered per audience: tactical triage (SOC analyst), config fixes (security engineer), hunting timelines (threat hunter), or risk rollups (CISO).
 
-See the **[User Guide](docs/user-guide/README.md)** for per-runtime setup (Hermes, LM Studio, Open WebUI, Claude Code), skills, personas, and example workflows.
+See the **[User Guide](docs/user-guide/README.md)** for per-runtime setup (Hermes, pi, LM Studio, Open WebUI, Claude Code), skills, personas, and example workflows.
 
 ## For local-AI builders — the differentiator
 
@@ -119,7 +119,7 @@ flowchart TB
       LM["GPT-OSS · Qwen3 · Gemma 4 · Granite<br/>served via vLLM / llama.cpp / Ollama"]
     end
     subgraph runtime["Agent runtime"]
-      RT["Hermes · Claude Code · LM Studio<br/>skills + personas"]
+      RT["Hermes · pi · Claude Code · LM Studio<br/>skills + personas"]
     end
     subgraph servers["Thin MCP servers (read-only + gated writes)"]
       D["defender"]
