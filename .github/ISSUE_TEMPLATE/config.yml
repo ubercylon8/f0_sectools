@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation & User Guide
+    url: https://github.com/ubercylon8/f0_sectools/blob/main/docs/user-guide/README.md
+    about: Setup, per-runtime guides, skills, personas, and workflows.
+  - name: Security vulnerability (private)
+    url: https://github.com/ubercylon8/f0_sectools/blob/main/SECURITY.md
+    about: Do not open a public issue — see the security policy to report privately.
