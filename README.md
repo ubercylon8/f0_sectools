@@ -35,7 +35,7 @@ See the **[User Guide](docs/user-guide/README.md)** for per-runtime setup (Herme
 
 Small local models are now genuinely good at tool calling, but their reliability degrades with complex schemas, too many tools, and oversized payloads. Every tool here is designed against that: **flat argument schemas, short closed enums, ≤ ~8 tools per server, bounded/paginated output.** And we **measure** it so it can't silently erode.
 
-On the tool-calling [**scorecard**](evals/SCORECARD.md), **every tested model scores 100%/100% (tool-selection / argument-filling) per server across all six platforms.** Registering all **34 tools at once** — the hard composition test — is driven at up to **100%** (Qwen3.5), with GPT-OSS 20B, Qwen3 4B/8B, Gemma 4, and Granite 4 Tiny all ≥ 91%.
+On the tool-calling [**scorecard**](evals/SCORECARD.md), **five of the seven tested models drive every server at 100%/100%** (tool-selection / argument-filling). The two exceptions are narrow: Gemma 4 12B declines Defender's gated `isolate_host`/`release_host` writes, and Gemma 4 E4B has a low-confidence ProjectAchilles dip. The hard test — all **34 tools registered at once** — is driven at up to **100%** (Qwen3.5), with every tested model ≥ 90%.
 
 - [`evals/SCORECARD.md`](evals/SCORECARD.md) — the full model × server matrix and findings.
 - [`docs/runtime-performance.md`](docs/runtime-performance.md) — choosing a runtime & model: Ollama vs vLLM vs llama.cpp benchmarks and deployment guidance.

@@ -870,9 +870,9 @@ Initial public release.
 - **Shared `core/`** — findings schema, redaction (applied to all output incl.
   error paths), per-platform `.env` auth, pagination, gated-write machinery +
   audit trail, and persona renderers.
-- **Six live-validated MCP servers** (34 read tools; Defender adds 2 gated
-  writes): `defender`, `entra`, `limacharlie`, `projectachilles`, `intune`,
-  `tenable`.
+- **Six live-validated MCP servers** — 34 registered tools (32 read + Defender's
+  2 gated writes): `defender`, `entra`, `limacharlie`, `projectachilles`,
+  `intune`, `tenable`.
 - **20 portable [agentskills.io](https://agentskills.io) skills** across the six
   platforms plus cross-platform correlation playbooks.
 - **Four role personas** (CISO, threat hunter, detection engineer, security
