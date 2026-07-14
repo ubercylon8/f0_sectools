@@ -21,7 +21,7 @@ def clamp_limit(limit: object, default: int = DEFAULT_LIMIT, maximum: int = MAX_
     the context window and degrades tool accuracy (Critical Rule 5).
     """
     try:
-        n = int(limit)  # type: ignore[arg-type]
+        n: int = int(limit)  # type: ignore[call-overload]
     except (TypeError, ValueError):
         return default
     if n < 1:

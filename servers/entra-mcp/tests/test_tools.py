@@ -88,7 +88,9 @@ async def test_list_risk_detections_maps():
 async def test_list_risky_users_single_page_not_paginated():
     with respx.mock(assert_all_called=False) as router:
         _token(router)
-        page2 = router.get(GRAPH + "/identityProtection/riskyUsers", params={"$skiptoken": "x"}).mock(
+        page2 = router.get(
+            GRAPH + "/identityProtection/riskyUsers", params={"$skiptoken": "x"}
+        ).mock(
             return_value=httpx.Response(200, json={"value": [{"id": "999", "riskLevel": "high"}]})
         )
         router.get(GRAPH + "/identityProtection/riskyUsers", params={"$top": "25"}).mock(
