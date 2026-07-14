@@ -109,12 +109,22 @@ It carries the same read-only / never-fabricate principles as the Hermes
 Load our skills unmodified by adding the directory to `~/.pi/agent/settings.json`:
 
 ```json
-{ "skills": ["/ABSOLUTE/PATH/TO/sec-tools/skills"] }
+{
+  "skills": [
+    "/ABSOLUTE/PATH/TO/sec-tools/skills",
+    "-/ABSOLUTE/PATH/TO/sec-tools/skills/README.md"
+  ]
+}
 ```
 
 They're the same agentskills.io `SKILL.md` packages Hermes uses. pi loads names
 and descriptions at startup and reads the full skill on demand; invoke one
 explicitly with `/skill:name`, or pass `--no-skills` to disable discovery.
+
+> pi also scans root-level `.md` files in the skills dir as skill candidates, so
+> it flags `skills/README.md` at startup (`description is required`). It's harmless
+> — the 20 real skills still load — and the `-…/skills/README.md` force-exclude
+> above silences it.
 
 ## 6. Personas (prompt templates)
 
