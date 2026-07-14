@@ -45,7 +45,7 @@ support matrix below.
 
 | Platform | Server | Status | Tools |
 |----------|--------|--------|-------|
-| Microsoft Defender XDR | `f0-defender-mcp` | ✅ live-validated | secure score, incidents, alerts, hunting (KQL) |
+| Microsoft Defender XDR | `f0-defender-mcp` | ✅ live-validated | secure score, incidents, alerts, hunting (KQL), guided hunt |
 | Microsoft Entra ID | `f0-entra-mcp` | ✅ live-validated | risky users*, risk detections*, conditional access, privileged roles |
 | LimaCharlie | `f0-limacharlie-mcp` | ✅ live-validated | org overview, sensors, D&R rules, detections, LCQL telemetry |
 | ProjectAchilles | `f0-projectachilles-mcp` | ✅ live-validated | defense score, score trend, weak techniques, test results, risk acceptances, agents, fleet health |

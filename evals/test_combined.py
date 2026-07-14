@@ -20,8 +20,8 @@ from evals.run import (
 async def test_combined_registry_unions_all_34_tools():
     tools = await combined_tool_schemas()
     names = [t["function"]["name"] for t in tools]
-    assert len(names) == 35, f"expected 35 tools, got {len(names)}"
-    assert len(set(names)) == 35, "tool names must be unique across servers"
+    assert len(names) == 36, f"expected 36 tools, got {len(names)}"
+    assert len(set(names)) == 36, "tool names must be unique across servers"
     # spot-check one tool from each server is present
     for expected in (
         "isolate_host",
@@ -61,8 +61,8 @@ async def test_combined_registry_raises_on_duplicate_name(monkeypatch):
 def test_combined_tasks_tagged_with_origin_and_include_probes():
     import yaml
     tasks = combined_tasks()
-    # 12 defender + 8 entra + 8 limacharlie + 8 projectachilles + 8 intune + 10 tenable
-    # = 54, plus probes.
+    # 15 defender + 8 entra + 8 limacharlie + 8 projectachilles + 8 intune + 10 tenable
+    # = 57, plus probes.
     # Distinguish by checking against native task prompts.
     native_prompts = set()
     for server in ["defender", "entra", "limacharlie", "projectachilles", "intune", "tenable"]:
@@ -70,7 +70,7 @@ def test_combined_tasks_tagged_with_origin_and_include_probes():
             native = yaml.safe_load(fh)
         native_prompts.update(t["prompt"] for t in (native or []))
     per_server = [t for t in tasks if t["prompt"] in native_prompts]
-    assert len(per_server) == 54
+    assert len(per_server) == 57
     probes = [t for t in tasks if t["prompt"] not in native_prompts]
     assert len(probes) >= 6, "expected the cross-platform probe set"
     assert all("origin" in t and "prompt" in t and "expect_tool" in t for t in tasks)

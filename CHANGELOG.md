@@ -10,6 +10,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Tenable `list_vulnerability_assets`** — list the hosts affected by a given
   plugin/vulnerability (plugin→hosts), closing the "which hosts have vuln X" gap.
+- **Defender `hunt`** — guided advanced-hunting tool (category + indicator →
+  server-built KQL) so small models stop guessing field names; `run_hunting_query`
+  remains for custom KQL.
 
 ### Fixed
 

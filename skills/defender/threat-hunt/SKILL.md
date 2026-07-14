@@ -24,9 +24,11 @@ Base tool name (runtime may prefix — see the Defender server README):
 ## Procedure
 
 1. State the **hypothesis** in one sentence (what behaviour, on what, why).
-2. Pick a starting query. See `references/kql-starters.md` for safe templates by
-   table (process, logon, network, email). Always include a `| take N` bound.
-3. Call `run_hunting_query` with the KQL.
+2. Call the `hunt` tool with a `category` (network | process | logon | email) and
+   an `indicator` (a domain/IP for network, a process name for process; optional
+   for logon/email). It builds correct KQL for you — no field-name guessing.
+3. Only for a custom query the user provides: call `run_hunting_query` with KQL
+   (see `references/kql-starters.md` for vetted templates and field names).
 4. Read the returned rows (already capped). Note what supports or refutes the
    hypothesis.
 5. Refine once or twice — narrow the time window, add a filter, or pivot to a
