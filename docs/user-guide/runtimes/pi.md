@@ -35,9 +35,14 @@ Add a local OpenAI-compatible provider in `~/.pi/agent/models.json`:
 }
 ```
 
-- `baseUrl` — your vLLM (`:8000`) or llama.cpp (`:8080`) endpoint.
-- `apiKey` — a literal, `"$ENV_VAR"`, or `"!command"`. vLLM/llama.cpp accept any
-  token; a dummy or env var is fine.
+- `baseUrl` — your local endpoint: vLLM (`:8000`), llama.cpp / `llama-server`
+  (`:8080` by default — use whatever port your server listens on), or Ollama
+  (`http://localhost:11434/v1`).
+- `api` — `"openai-completions"` works for all of the above.
+- `apiKey` — a literal, `"$ENV_VAR"`, or `"!command"`. Local servers (Ollama,
+  llama.cpp, vLLM) accept any token; a dummy like `"sk-local"` or an env var is fine.
+- `id` — the model id your endpoint reports at `GET <baseUrl>/models` (e.g.
+  `Qwen3.5-9B` for a llama.cpp `--alias`, or the Ollama tag like `qwen3.5:latest`).
 
 Select the model with `/model` (the file reloads without a restart).
 
@@ -62,7 +67,7 @@ replace the placeholder path with your checkout:
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-defender-mcp"],
       "transport": "stdio",
-      "lifecycle": "lazy"
+      "lifecycle": "eager"
     }
   }
 }
@@ -70,12 +75,22 @@ replace the placeholder path with your checkout:
 
 (The shipped file wires all six servers.)
 
-- `lifecycle: "lazy"` spawns a server on first use, not all six at startup.
+- `lifecycle: "eager"` connects the server **at session start**, so its tools are
+  visible to the model immediately. With `"lazy"` (the extension's default) the
+  server stays disconnected — and its tools stay hidden — until you run
+  `/mcp:start <name>`, so the model can't call them. Use `eager` for servers you
+  want the model to drive. Eager does spawn all six at startup (a few seconds);
+  set rarely-used servers to `lazy` and `/mcp:start` them on demand if you prefer.
+- `command` — if pi can't find `uv` on the spawned process's `PATH`, use its
+  absolute path (from `which uv`, e.g. `/home/you/.local/bin/uv`).
 - **No credentials here.** Each server loads its own `.env.<platform>` from the
   repo root — secrets never enter `mcp.json`.
-- Bridged tools appear as `mcp_f0-<server>_<tool>` (e.g.
-  `mcp_f0-defender_list_incidents`) — the same scheme Hermes uses, so our skills
-  work unchanged.
+- Bridged tools appear as `mcp_f0_<server>_<tool>` — `pi-mcp-extension` sanitizes
+  the `-` in the server name to `_`, so e.g. `mcp_f0_defender_list_incidents`
+  (underscores, unlike Hermes' `mcp_f0-defender_…`). Skills still work unchanged
+  because they reference tools by **base name** (`list_incidents`), which the
+  model maps via the descriptions.
+- Check server status anytime with `/mcp` (or `/mcp <name>` for its stderr log).
 
 ## 4. Base identity (the SOUL.md equivalent)
 
@@ -119,12 +134,12 @@ lenses as Hermes' `/personality`.
 ```text
 /ciso
 give me a security posture summary
-# → defender-posture-summary skill → mcp_f0-defender_get_secure_score +
-#   mcp_f0-defender_list_incidents, framed for an executive.
+# → defender-posture-summary skill → mcp_f0_defender_get_secure_score +
+#   mcp_f0_defender_list_incidents, framed for an executive.
 
 /threat-hunter
 hunt for PowerShell downloads today
-# → defender-threat-hunt skill → mcp_f0-defender_run_hunting_query (KQL, bounded).
+# → defender-threat-hunt skill → mcp_f0_defender_run_hunting_query (KQL, bounded).
 ```
 
 ## Notes
