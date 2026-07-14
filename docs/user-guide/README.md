@@ -50,7 +50,7 @@ support matrix below.
 | LimaCharlie | `f0-limacharlie-mcp` | ✅ live-validated | org overview, sensors, D&R rules, detections, LCQL telemetry |
 | ProjectAchilles | `f0-projectachilles-mcp` | ✅ live-validated | defense score, score trend, weak techniques, test results, risk acceptances, agents, fleet health |
 | Microsoft Intune | `f0-intune-mcp` | ✅ live-validated | managed devices, compliance summary, stale devices, compliance policies, config profiles |
-| Tenable Vulnerability Management | `f0-tenable-mcp` | ✅ live-validated | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans |
+| Tenable Vulnerability Management | `f0-tenable-mcp` | ✅ live-validated | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans, plugin affected-hosts |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph
 permissions; otherwise they return a graceful "permission/throttled" finding.
