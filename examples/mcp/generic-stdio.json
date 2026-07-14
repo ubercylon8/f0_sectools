@@ -4,8 +4,8 @@
   "command": "uv",
   "args": [
     "run",
-    "--directory", "/abs/path/to/f0_sectools",
-    "python", "-m", "f0_tenable_mcp.server"
+    "--directory", "/ABSOLUTE/PATH/TO/sec-tools",
+    "f0-tenable-mcp"
   ],
   "note": "Credentials come from .env.tenable in the repo root, not from this file."
 }
