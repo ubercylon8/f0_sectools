@@ -11,6 +11,7 @@ from typing import Any
 from f0_sectools_core.auth.graph import GraphClient, GraphError
 from f0_sectools_core.gating.actions import GatedAction, GateDenied
 from f0_sectools_core.graph_errors import map_graph_error
+from f0_sectools_core.paging import clamp_limit, more_available_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -101,13 +102,16 @@ async def get_secure_score(gc: GraphClient) -> list[Finding]:
 async def list_incidents(
     gc: GraphClient, severity_min: str = "medium", limit: int = 25
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
-        raw = await gc.get_all("/security/incidents", params={"$top": limit})
+        page = await gc.get("/security/incidents", params={"$top": limit})
     except GraphError as e:
         finding = map_graph_error(e, "defender", "SecurityIncident.Read.All", "Defender incidents")
         if finding:
             return [finding]
         raise
+    raw = page.get("value", [])
+    has_more = bool(page.get("@odata.nextLink"))
     findings: list[Finding] = []
     for inc in raw:
         alerts = inc.get("alerts") or []
@@ -134,19 +138,25 @@ async def list_incidents(
                 observed_at=inc.get("createdDateTime"),
             )
         )
+    findings = findings[:limit]
+    if has_more:
+        findings.append(more_available_finding("defender", shown=len(findings)))
     return findings
 
 
 async def list_alerts(
     gc: GraphClient, severity_min: str = "high", limit: int = 25
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
-        raw = await gc.get_all("/security/alerts_v2", params={"$top": limit})
+        page = await gc.get("/security/alerts_v2", params={"$top": limit})
     except GraphError as e:
         finding = map_graph_error(e, "defender", "SecurityAlert.Read.All", "Defender alerts")
         if finding:
             return [finding]
         raise
+    raw = page.get("value", [])
+    has_more = bool(page.get("@odata.nextLink"))
     findings: list[Finding] = []
     for alert in raw:
         sev = _sev(alert.get("severity", "medium"))
@@ -169,6 +179,9 @@ async def list_alerts(
                 observed_at=alert.get("createdDateTime"),
             )
         )
+    findings = findings[:limit]
+    if has_more:
+        findings.append(more_available_finding("defender", shown=len(findings)))
     return findings
 
 
