@@ -14,7 +14,7 @@ Six MCP servers, each **live-validated against a real tenant**, exposing read to
 
 | Server | Status | Tools | What it reads |
 |---|---|---|---|
-| `f0-defender-mcp` | ✅ live-validated | 6 (4 read + 2 gated) | secure score, incidents, alerts, hunting (KQL); gated `isolate_host` / `release_host` |
+| `f0-defender-mcp` | ✅ live-validated | 7 (5 read + 2 gated) | secure score, incidents, alerts, hunting (KQL), guided hunt; gated `isolate_host` / `release_host` |
 | `f0-entra-mcp` | ✅ live-validated | 4 | risky users, risk detections, conditional access, privileged roles |
 | `f0-limacharlie-mcp` | ✅ live-validated | 6 | org overview, sensors, sensor detail, D&R rules, detections, LCQL telemetry |
 | `f0-projectachilles-mcp` | ✅ live-validated | 6 | defense score, weak techniques, test executions, risk acceptances, agents, fleet health |
