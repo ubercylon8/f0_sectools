@@ -161,7 +161,7 @@ reports where coverage looks thin.
 
 > **Prompt:** "Triage this Defender incident and give me the full picture."
 
-The `triage-incident-cross-platform` skill pivots across all four servers:
+The `triage-incident-cross-platform` skill pivots across multiple servers:
 `list_incidents` (Defender) → for the involved user, `list_risky_users` /
 `list_risk_detections` (Entra) → for the host, `get_sensor` + `query_telemetry`
 (LimaCharlie) → for the technique, `get_weak_techniques` (ProjectAchilles). It

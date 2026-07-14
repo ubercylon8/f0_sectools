@@ -197,7 +197,7 @@ A small local model **must never be able to isolate a host or disable an account
 
 ## Platform Integrations
 
-Targets (build incrementally — start with Wazuh as the reference implementation):
+Targets (build incrementally — the six built servers below are the reference implementations):
 
 | Platform | Category | Auth | Read | Gated write (examples) |
 |---|---|---|---|---|

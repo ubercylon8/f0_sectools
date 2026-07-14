@@ -33,7 +33,7 @@ authorized to access and operate.
 If you discover a security vulnerability in f0_sectools, please report it
 responsibly. Do **not** open a public issue for a sensitive vulnerability.
 
-Instead, contact the maintainers privately with:
+Instead, email **security@fortika.io** privately with:
 
 - a description of the issue and its impact,
 - steps to reproduce, and

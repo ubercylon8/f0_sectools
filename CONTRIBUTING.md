@@ -34,7 +34,7 @@ These mirror the Critical Rules in [CLAUDE.md](CLAUDE.md):
 ## Development workflow
 
 - **Language:** Python 3.11+. Tooling: `uv`, `pytest`, `ruff`.
-- **Commits:** Conventional Commits (e.g. `feat(wazuh): add alert query tool`).
+- **Commits:** Conventional Commits (e.g. `feat(tenable): add alert query tool`).
 - **Tests must pass** (`pytest`) and code must lint (`ruff check`) before a PR.
 - Stage specific files; never `git add -A` (avoid committing `.env*` or local
   data).
@@ -42,7 +42,7 @@ These mirror the Critical Rules in [CLAUDE.md](CLAUDE.md):
 ## Testing bar
 
 - **Contract tests** are mandatory for every tool (mocked APIs, deterministic).
-- The **small-model tool-calling eval** is built alongside the first server and
+- The **small-model tool-calling eval** is built alongside every server and
   expected for new tools. If a tool passes contract tests but a small model
   cannot reliably call it, the tool's design is wrong — simplify the schema.
 

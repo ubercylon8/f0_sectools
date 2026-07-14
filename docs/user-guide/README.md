@@ -12,7 +12,8 @@ role personas.
 
 Read-only AI tooling over your own security platforms, running on **your**
 infrastructure with a **local open-weights model** (GPT-OSS, Gemma 4, Qwen3).
-Nothing leaves the host. Today: Microsoft **Defender** and **Entra ID**.
+Nothing leaves the host. Six platforms are live-validated today — see the
+support matrix below.
 
 ## Start here
 
