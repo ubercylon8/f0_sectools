@@ -263,6 +263,20 @@ async def test_list_vulnerability_assets_permission_error_is_graceful():
 
 
 @pytest.mark.asyncio
+async def test_list_vulnerability_assets_malformed_shape_never_raises():
+    # Live /outputs shape is validated later (recipe step 9); a wrong-typed payload
+    # must degrade to a graceful "no assets" finding, never raise (Critical Rule 4).
+    malformed = {"outputs": [
+        "not-a-dict",
+        {"states": [{"results": {"unexpected": "dict-not-list"}}]},
+        {"states": [{"results": [{"assets": ["also-not-a-dict"]}]}]},
+    ]}
+    tio = FakeClient(responses={"/workbenches/vulnerabilities/1/outputs": malformed})
+    findings = await tools.list_vulnerability_assets(tio, "1")
+    assert "no affected assets" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
 async def test_server_registers_seven_tools():
     from f0_tenable_mcp import server
     names = {t.name for t in await server.mcp.list_tools()}

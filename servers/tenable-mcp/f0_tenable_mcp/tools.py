@@ -364,15 +364,25 @@ async def list_scans(tio: Any, limit: int = 25) -> list[Finding]:
 def _plugin_output_assets(d: Any) -> list[dict[str, Any]]:
     """Affected assets from a Workbenches plugin /outputs payload, deduped by id.
 
-    Shape (LIVE-VALIDATED, recipe step 9): outputs[] -> states[] -> results[] ->
-    assets[] with id/hostname/fqdn/ipv4. Defensive against missing levels.
+    Shape (LIVE-VALIDATION-PENDING, recipe step 9): outputs[] -> states[] ->
+    results[] -> assets[] with id/hostname/fqdn/ipv4. Defensive against missing
+    levels AND wrong-typed ones — an unexpected live shape must degrade to "no
+    assets", never raise (Critical Rule 4).
     """
     seen: dict[str, dict[str, Any]] = {}
     outputs = d.get("outputs") if isinstance(d, dict) else None
     for o in outputs or []:
+        if not isinstance(o, dict):
+            continue
         for st in o.get("states") or []:
+            if not isinstance(st, dict):
+                continue
             for res in st.get("results") or []:
+                if not isinstance(res, dict):
+                    continue
                 for a in res.get("assets") or []:
+                    if not isinstance(a, dict):
+                        continue
                     aid = str(a.get("id") or a.get("uuid") or a.get("hostname") or "")
                     if aid and aid not in seen:
                         seen[aid] = a
