@@ -126,19 +126,23 @@ slash command. Point pi at ours in `settings.json`:
 ```
 
 This registers `/ciso`, `/threat-hunter`, `/detection-engineer`, and
-`/security-engineer`. Each overlays the base `AGENTS.md` identity — the same
-lenses as Hermes' `/personality`.
+`/security-engineer` — the same four lenses as Hermes, over the base `AGENTS.md`
+identity. **Invoke a lens with your request as its argument**, e.g.
+`/ciso give me a posture summary`.
+
+Note the difference from Hermes: a pi prompt template is sent as a **turn**, not a
+persistent overlay like Hermes' `/personality`. So `/ciso` on its own just adopts
+the lens and asks what you need (it won't act until you give it a request), and
+you re-invoke the lens on later turns to keep it.
 
 ## 7. Use it
 
 ```text
-/ciso
-give me a security posture summary
+/ciso give me a security posture summary
 # → defender-posture-summary skill → mcp_f0_defender_get_secure_score +
 #   mcp_f0_defender_list_incidents, framed for an executive.
 
-/threat-hunter
-hunt for PowerShell downloads today
+/threat-hunter hunt for PowerShell downloads today
 # → defender-threat-hunt skill → mcp_f0_defender_run_hunting_query (KQL, bounded).
 ```
 
