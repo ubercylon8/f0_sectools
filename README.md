@@ -40,7 +40,53 @@ On the tool-calling [**scorecard**](evals/SCORECARD.md), **five of the seven tes
 - [`evals/SCORECARD.md`](evals/SCORECARD.md) — the full model × server matrix and findings.
 - [`docs/runtime-performance.md`](docs/runtime-performance.md) — choosing a runtime & model: Ollama vs vLLM vs llama.cpp benchmarks and deployment guidance.
 
-<!-- DEMO -->
+### See it work (no live platform, no GPU)
+
+A model asks "what are our worst vulnerabilities?" → the agent selects
+`list_top_vulnerabilities(severity_min="high")` → the server returns a redacted,
+normalized finding. Reproduce with `uv run python scripts/demo_mock_findings.py`:
+
+```json
+[
+  {
+    "schema_version": "1.0",
+    "source": "tenable",
+    "finding_type": "misconfig",
+    "severity": "critical",
+    "title": "Tenable: Apache Log4j Remote Code Execution (Log4Shell) (plugin 155999)",
+    "entity": {
+      "kind": "rule",
+      "id": "155999",
+      "name": "Apache Log4j Remote Code Execution (Log4Shell)"
+    },
+    "evidence": [
+      {
+        "key": "affected_hosts",
+        "value": "12"
+      },
+      {
+        "key": "cvss",
+        "value": "10.0"
+      }
+    ],
+    "recommended_action": {
+      "summary": "Review affected hosts and remediate; see get_vulnerability_info for the fix.",
+      "gated_action": null,
+      "confidence": "medium"
+    },
+    "references": [
+      {
+        "type": "tenable_plugin",
+        "id": "155999",
+        "url": null
+      }
+    ],
+    "observed_at": null
+  }
+]
+```
+
+Full walkthrough: [docs/demo.md](docs/demo.md).
 
 ## Quickstart
 
@@ -67,7 +113,37 @@ Full setup — prerequisites, every platform's required permissions, and a first
 
 A shared `core/` library holds every cross-cutting and safety-critical concern — findings schema, redaction, auth, pagination, gating, persona renderers. Each server is a **thin adapter** that knows only its platform's API and tool definitions and imports the rest from `core/`. This keeps the safety guarantees enforceable in one auditable place.
 
-<!-- ARCH-DIAGRAM -->
+```mermaid
+flowchart TB
+    subgraph model["Local model (private, on your infra)"]
+      LM["GPT-OSS · Qwen3 · Gemma 4 · Granite<br/>served via vLLM / llama.cpp / Ollama"]
+    end
+    subgraph runtime["Agent runtime"]
+      RT["Hermes · Claude Code · LM Studio<br/>skills + personas"]
+    end
+    subgraph servers["Thin MCP servers (read-only + gated writes)"]
+      D["defender"]
+      E["entra"]
+      L["limacharlie"]
+      P["projectachilles"]
+      I["intune"]
+      T["tenable"]
+    end
+    subgraph core["core/ — shared, safety-critical (imported by every server)"]
+      C["findings schema · redaction · auth<br/>pagination · gating + audit · renderers"]
+    end
+    subgraph platforms["Your security platforms"]
+      API["Defender · Entra · LimaCharlie<br/>ProjectAchilles · Intune · Tenable APIs"]
+    end
+
+    LM <--> RT
+    RT <-->|MCP stdio| servers
+    D & E & L & P & I & T --> C
+    servers -->|redacted findings| RT
+    servers <-->|credentials never leave host| API
+```
+
+> Full architecture and the shared-core rule: [docs/architecture.md](docs/architecture.md).
 
 See [CLAUDE.md](CLAUDE.md) for the full architecture and house rules.
 
