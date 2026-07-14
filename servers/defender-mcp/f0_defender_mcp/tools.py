@@ -47,7 +47,9 @@ _MAX_HUNT_ROWS = 50
 
 _HUNT_CATEGORIES = ("network", "process", "logon", "email")
 _INDICATOR_REQUIRED = frozenset({"network", "process"})
-_INDICATOR_RE = re.compile(r"^[A-Za-z0-9._:@/\\-]{1,120}$")
+# No backslash: it is the KQL escape char inside "..." string literals — a path
+# like C:\Temp\x or a trailing \ would break out of the quoted indicator.
+_INDICATOR_RE = re.compile(r"^[A-Za-z0-9._:@/-]{1,120}$")
 _MAX_HUNT_WINDOW_H = 720
 
 
@@ -198,6 +200,13 @@ async def _execute_hunt(gc: GraphClient, kql: str) -> list[Finding]:
         finding = map_graph_error(e, "defender", "ThreatHunting.Read.All", "advanced hunting")
         if finding:
             return [finding]
+        if e.status == 400:
+            # A bad query (syntax / unknown field) is a fixable failure, not a crash
+            # (Critical Rule 4: every failure a finding). e.message is already redacted.
+            return _hunt_guidance(
+                "Advanced hunting query failed (400 — invalid KQL or field name).",
+                f"Refine the query and retry. {e.message}",
+            )
         raise
     rows = resp.get("results") or []
     sample = rows[:_MAX_HUNT_ROWS]

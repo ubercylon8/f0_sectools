@@ -449,6 +449,33 @@ async def test_hunt_unknown_category_no_call():
 
 
 @pytest.mark.asyncio
+async def test_hunt_backslash_indicator_rejected_no_call():
+    # Backslash is the KQL escape char inside "..."; reject rather than build a
+    # malformed query.
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery")
+        async with GraphClient(CFG) as gc:
+            findings = await hunt(gc, "process", r"C:\Temp\evil.exe")
+    assert not route.called
+    assert "unsupported characters" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_hunt_query_400_is_graceful_not_raised():
+    # A bad query (e.g. wrong field name) must degrade to a finding, never raise.
+    with respx.mock as router:
+        _token(router)
+        router.post(GRAPH + "/security/runHuntingQuery").mock(
+            return_value=httpx.Response(400, json={"error": {"message": "Fix semantic errors"}})
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await hunt(gc, "network", "evil.com")
+    assert findings[0].finding_type.value == "posture"
+    assert "failed" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
 async def test_hunt_clamps_time_window():
     with respx.mock as router:
         _token(router)

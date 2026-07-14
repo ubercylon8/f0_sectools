@@ -18,8 +18,10 @@ estate". Uses advanced hunting (KQL) over the **last 30 days** of event data.
 
 ## Tools
 
-Base tool name (runtime may prefix — see the Defender server README):
-`run_hunting_query`. Read-only; it executes a read query and returns rows.
+Base tool names (runtime may prefix — see the Defender server README):
+`hunt` (guided — pass a `category` + `indicator` and the server builds the KQL)
+and `run_hunting_query` (a custom KQL query you provide). Read-only; both return
+rows.
 
 ## Procedure
 
