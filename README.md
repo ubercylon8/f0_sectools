@@ -40,7 +40,53 @@ On the tool-calling [**scorecard**](evals/SCORECARD.md), **five of the seven tes
 - [`evals/SCORECARD.md`](evals/SCORECARD.md) — the full model × server matrix and findings.
 - [`docs/runtime-performance.md`](docs/runtime-performance.md) — choosing a runtime & model: Ollama vs vLLM vs llama.cpp benchmarks and deployment guidance.
 
-<!-- DEMO -->
+### See it work (no live platform, no GPU)
+
+A model asks "what are our worst vulnerabilities?" → the agent selects
+`list_top_vulnerabilities(severity_min="high")` → the server returns a redacted,
+normalized finding. Reproduce with `uv run python scripts/demo_mock_findings.py`:
+
+```json
+[
+  {
+    "schema_version": "1.0",
+    "source": "tenable",
+    "finding_type": "misconfig",
+    "severity": "critical",
+    "title": "Tenable: Apache Log4j Remote Code Execution (Log4Shell) (plugin 155999)",
+    "entity": {
+      "kind": "rule",
+      "id": "155999",
+      "name": "Apache Log4j Remote Code Execution (Log4Shell)"
+    },
+    "evidence": [
+      {
+        "key": "affected_hosts",
+        "value": "12"
+      },
+      {
+        "key": "cvss",
+        "value": "10.0"
+      }
+    ],
+    "recommended_action": {
+      "summary": "Review affected hosts and remediate; see get_vulnerability_info for the fix.",
+      "gated_action": null,
+      "confidence": "medium"
+    },
+    "references": [
+      {
+        "type": "tenable_plugin",
+        "id": "155999",
+        "url": null
+      }
+    ],
+    "observed_at": null
+  }
+]
+```
+
+Full walkthrough: [docs/demo.md](docs/demo.md).
 
 ## Quickstart
 
