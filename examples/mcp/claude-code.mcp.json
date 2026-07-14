@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "f0-tenable": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory", "/abs/path/to/f0_sectools",
+        "python", "-m", "f0_tenable_mcp.server"
+      ]
+    }
+  }
+}
