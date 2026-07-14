@@ -90,13 +90,32 @@ async def run_hunting_query(kql: str) -> list[dict[str, Any]]:
 
     For LimaCharlie endpoint (EDR sensor) telemetry, use query_telemetry instead —
     this tool is Microsoft/Defender + KQL only. Construct a `kql` query string.
-    Common tables: DeviceProcessEvents (processes), SigninLogs or AADSignInEventsBeta
-    (sign-ins), DeviceNetworkEvents (network), EmailEvents (email). Always bound
-    results with `| take 50`.
+    For common hunts prefer the `hunt` tool (it builds the KQL for you); use this
+    only for a CUSTOM KQL query you provide. Key tables & fields: DeviceNetworkEvents
+    (Timestamp, RemoteUrl, RemoteIP, RemotePort), DeviceProcessEvents (Timestamp,
+    DeviceName, FileName, ProcessCommandLine, AccountName), DeviceLogonEvents
+    (Timestamp, ActionType, AccountName, DeviceName), EmailEvents (Timestamp,
+    SenderFromAddress, Subject, ThreatTypes). Always bound results with `| take 50`.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
         return _render(await tools.run_hunting_query(gc, kql))
+
+
+@mcp.tool()
+async def hunt(
+    category: str, indicator: str = "", time_window_hours: int = 24
+) -> list[dict[str, Any]]:
+    """Guided Microsoft Defender hunt — the server builds correct KQL, so you don't have to.
+
+    category: network | process | logon | email.
+    indicator: what to look for — a domain/IP (network), a process name or
+    command-line fragment (process); optional for logon/email. Prefer this over
+    run_hunting_query unless the user gives you custom KQL.
+    """
+    cfg = PlatformConfig.from_env("DEFENDER")
+    async with GraphClient(cfg) as gc:
+        return _render(await tools.hunt(gc, category, indicator, time_window_hours))
 
 
 @mcp.tool()

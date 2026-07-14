@@ -1,8 +1,11 @@
+import json
+
 import httpx
 import pytest
 import respx
 from f0_defender_mcp.tools import (
     get_secure_score,
+    hunt,
     isolate_host,
     list_alerts,
     list_incidents,
@@ -352,3 +355,107 @@ async def test_release_host_valid_token_executes(tmp_path):
             findings = await release_host(sec, gate, "dev-1", "cleared", confirmation_token=tok)
         assert post.called
         assert "machineaction-10" in [e.value for e in findings[0].evidence]
+
+
+@pytest.mark.asyncio
+async def test_hunt_network_builds_correct_kql():
+    with respx.mock as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery").mock(
+            return_value=httpx.Response(200, json={"results": [{"DeviceName": "web-01"}]})
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await hunt(gc, "network", "evil.com", 24)
+    body = json.loads(route.calls.last.request.content)
+    assert "DeviceNetworkEvents" in body["Query"]
+    assert 'RemoteUrl contains "evil.com"' in body["Query"]
+    assert "ago(24h)" in body["Query"]
+    assert findings[0].finding_type.value == "hunt_result"
+
+
+@pytest.mark.asyncio
+async def test_hunt_process_builds_correct_kql():
+    with respx.mock as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery").mock(
+            return_value=httpx.Response(200, json={"results": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await hunt(gc, "process", "powershell.exe")
+    body = json.loads(route.calls.last.request.content)
+    assert "DeviceProcessEvents" in body["Query"]
+    assert 'FileName has "powershell.exe"' in body["Query"]
+
+
+@pytest.mark.asyncio
+async def test_hunt_logon_without_indicator_omits_account_filter():
+    with respx.mock as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery").mock(
+            return_value=httpx.Response(200, json={"results": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await hunt(gc, "logon")
+    body = json.loads(route.calls.last.request.content)
+    assert "DeviceLogonEvents" in body["Query"]
+    assert "AccountName has" not in body["Query"]
+
+
+@pytest.mark.asyncio
+async def test_hunt_email_with_indicator_adds_filter():
+    with respx.mock as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery").mock(
+            return_value=httpx.Response(200, json={"results": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await hunt(gc, "email", "bad@sender.com")
+    body = json.loads(route.calls.last.request.content)
+    assert "EmailEvents" in body["Query"]
+    assert 'SenderFromAddress has "bad@sender.com"' in body["Query"]
+
+
+@pytest.mark.asyncio
+async def test_hunt_network_requires_indicator_no_call():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery")
+        async with GraphClient(CFG) as gc:
+            findings = await hunt(gc, "network", "")
+    assert not route.called
+    assert "needs an indicator" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_hunt_invalid_indicator_rejected_no_call():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery")
+        async with GraphClient(CFG) as gc:
+            findings = await hunt(gc, "network", 'evil".io')
+    assert not route.called
+    assert "unsupported characters" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_hunt_unknown_category_no_call():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery")
+        async with GraphClient(CFG) as gc:
+            findings = await hunt(gc, "dns", "evil.com")
+    assert not route.called
+    assert "unknown hunt category" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_hunt_clamps_time_window():
+    with respx.mock as router:
+        _token(router)
+        route = router.post(GRAPH + "/security/runHuntingQuery").mock(
+            return_value=httpx.Response(200, json={"results": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await hunt(gc, "network", "evil.com", 99999)
+    body = json.loads(route.calls.last.request.content)
+    assert "ago(720h)" in body["Query"]
