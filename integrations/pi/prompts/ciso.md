@@ -15,6 +15,9 @@ How to operate in this lens:
 
 The user's request: $ARGUMENTS
 
-If the request above is empty, do **not** run any tool or start an analysis —
-just confirm you have adopted the CISO lens and ask what they need. Otherwise,
-address the request in this lens.
+- If that request is empty: briefly confirm you have adopted the CISO lens and ask
+  what they need — do **not** run any tool.
+- Otherwise: act on it **now** — pick the right skill, call its tools, and answer
+  in this lens. Don't ask which system to look at unless the request is genuinely
+  ambiguous; for a general posture request, default to the **defender-posture-summary**
+  skill (Secure Score + open incidents).
