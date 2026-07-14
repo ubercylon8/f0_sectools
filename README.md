@@ -67,7 +67,37 @@ Full setup — prerequisites, every platform's required permissions, and a first
 
 A shared `core/` library holds every cross-cutting and safety-critical concern — findings schema, redaction, auth, pagination, gating, persona renderers. Each server is a **thin adapter** that knows only its platform's API and tool definitions and imports the rest from `core/`. This keeps the safety guarantees enforceable in one auditable place.
 
-<!-- ARCH-DIAGRAM -->
+```mermaid
+flowchart TB
+    subgraph model["Local model (private, on your infra)"]
+      LM["GPT-OSS · Qwen3 · Gemma 4 · Granite<br/>served via vLLM / llama.cpp / Ollama"]
+    end
+    subgraph runtime["Agent runtime"]
+      RT["Hermes · Claude Code · LM Studio<br/>skills + personas"]
+    end
+    subgraph servers["Thin MCP servers (read-only + gated writes)"]
+      D["defender"]
+      E["entra"]
+      L["limacharlie"]
+      P["projectachilles"]
+      I["intune"]
+      T["tenable"]
+    end
+    subgraph core["core/ — shared, safety-critical (imported by every server)"]
+      C["findings schema · redaction · auth<br/>pagination · gating + audit · renderers"]
+    end
+    subgraph platforms["Your security platforms"]
+      API["Defender · Entra · LimaCharlie<br/>ProjectAchilles · Intune · Tenable APIs"]
+    end
+
+    LM <--> RT
+    RT <-->|MCP stdio| servers
+    D & E & L & P & I & T --> C
+    servers -->|redacted findings| RT
+    servers <-->|credentials never leave host| API
+```
+
+> Full architecture and the shared-core rule: [docs/architecture.md](docs/architecture.md).
 
 See [CLAUDE.md](CLAUDE.md) for the full architecture and house rules.
 
