@@ -35,9 +35,14 @@ Add a local OpenAI-compatible provider in `~/.pi/agent/models.json`:
 }
 ```
 
-- `baseUrl` — your vLLM (`:8000`) or llama.cpp (`:8080`) endpoint.
-- `apiKey` — a literal, `"$ENV_VAR"`, or `"!command"`. vLLM/llama.cpp accept any
-  token; a dummy or env var is fine.
+- `baseUrl` — your local endpoint: vLLM (`:8000`), llama.cpp / `llama-server`
+  (`:8080` by default — use whatever port your server listens on), or Ollama
+  (`http://localhost:11434/v1`).
+- `api` — `"openai-completions"` works for all of the above.
+- `apiKey` — a literal, `"$ENV_VAR"`, or `"!command"`. Local servers (Ollama,
+  llama.cpp, vLLM) accept any token; a dummy like `"sk-local"` or an env var is fine.
+- `id` — the model id your endpoint reports at `GET <baseUrl>/models` (e.g.
+  `Qwen3.5-9B` for a llama.cpp `--alias`, or the Ollama tag like `qwen3.5:latest`).
 
 Select the model with `/model` (the file reloads without a restart).
 
@@ -62,7 +67,7 @@ replace the placeholder path with your checkout:
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-defender-mcp"],
       "transport": "stdio",
-      "lifecycle": "lazy"
+      "lifecycle": "eager"
     }
   }
 }
@@ -70,12 +75,22 @@ replace the placeholder path with your checkout:
 
 (The shipped file wires all six servers.)
 
-- `lifecycle: "lazy"` spawns a server on first use, not all six at startup.
+- `lifecycle: "eager"` connects the server **at session start**, so its tools are
+  visible to the model immediately. With `"lazy"` (the extension's default) the
+  server stays disconnected — and its tools stay hidden — until you run
+  `/mcp:start <name>`, so the model can't call them. Use `eager` for servers you
+  want the model to drive. Eager does spawn all six at startup (a few seconds);
+  set rarely-used servers to `lazy` and `/mcp:start` them on demand if you prefer.
+- `command` — if pi can't find `uv` on the spawned process's `PATH`, use its
+  absolute path (from `which uv`, e.g. `/home/you/.local/bin/uv`).
 - **No credentials here.** Each server loads its own `.env.<platform>` from the
   repo root — secrets never enter `mcp.json`.
-- Bridged tools appear as `mcp_f0-<server>_<tool>` (e.g.
-  `mcp_f0-defender_list_incidents`) — the same scheme Hermes uses, so our skills
-  work unchanged.
+- Bridged tools appear as `mcp_f0_<server>_<tool>` — `pi-mcp-extension` sanitizes
+  the `-` in the server name to `_`, so e.g. `mcp_f0_defender_list_incidents`
+  (underscores, unlike Hermes' `mcp_f0-defender_…`). Skills still work unchanged
+  because they reference tools by **base name** (`list_incidents`), which the
+  model maps via the descriptions.
+- Check server status anytime with `/mcp` (or `/mcp <name>` for its stderr log).
 
 ## 4. Base identity (the SOUL.md equivalent)
 
@@ -94,12 +109,22 @@ It carries the same read-only / never-fabricate principles as the Hermes
 Load our skills unmodified by adding the directory to `~/.pi/agent/settings.json`:
 
 ```json
-{ "skills": ["/ABSOLUTE/PATH/TO/sec-tools/skills"] }
+{
+  "skills": [
+    "/ABSOLUTE/PATH/TO/sec-tools/skills",
+    "-/ABSOLUTE/PATH/TO/sec-tools/skills/README.md"
+  ]
+}
 ```
 
 They're the same agentskills.io `SKILL.md` packages Hermes uses. pi loads names
 and descriptions at startup and reads the full skill on demand; invoke one
 explicitly with `/skill:name`, or pass `--no-skills` to disable discovery.
+
+> pi also scans root-level `.md` files in the skills dir as skill candidates, so
+> it flags `skills/README.md` at startup (`description is required`). It's harmless
+> — the 20 real skills still load — and the `-…/skills/README.md` force-exclude
+> above silences it.
 
 ## 6. Personas (prompt templates)
 
@@ -111,20 +136,24 @@ slash command. Point pi at ours in `settings.json`:
 ```
 
 This registers `/ciso`, `/threat-hunter`, `/detection-engineer`, and
-`/security-engineer`. Each overlays the base `AGENTS.md` identity — the same
-lenses as Hermes' `/personality`.
+`/security-engineer` — the same four lenses as Hermes, over the base `AGENTS.md`
+identity. **Invoke a lens with your request as its argument**, e.g.
+`/ciso give me a posture summary`.
+
+Note the difference from Hermes: a pi prompt template is sent as a **turn**, not a
+persistent overlay like Hermes' `/personality`. So `/ciso` on its own just adopts
+the lens and asks what you need (it won't act until you give it a request), and
+you re-invoke the lens on later turns to keep it.
 
 ## 7. Use it
 
 ```text
-/ciso
-give me a security posture summary
-# → defender-posture-summary skill → mcp_f0-defender_get_secure_score +
-#   mcp_f0-defender_list_incidents, framed for an executive.
+/ciso give me a security posture summary
+# → defender-posture-summary skill → mcp_f0_defender_get_secure_score +
+#   mcp_f0_defender_list_incidents, framed for an executive.
 
-/threat-hunter
-hunt for PowerShell downloads today
-# → defender-threat-hunt skill → mcp_f0-defender_run_hunting_query (KQL, bounded).
+/threat-hunter hunt for PowerShell downloads today
+# → defender-threat-hunt skill → mcp_f0_defender_run_hunting_query (KQL, bounded).
 ```
 
 ## Notes

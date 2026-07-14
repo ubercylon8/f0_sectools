@@ -55,7 +55,10 @@ def _meets(sev: Severity, minimum: str) -> bool:
 
 async def get_secure_score(gc: GraphClient) -> list[Finding]:
     try:
-        scores = await gc.get_all("/security/secureScores", params={"$top": 1})
+        # secureScores is a daily-snapshot time series returned newest-first; we
+        # only need the latest. Fetch a single page ($top=1) — never get_all,
+        # which would follow @odata.nextLink through ~13 months of history.
+        page = await gc.get("/security/secureScores", params={"$top": 1})
     except GraphError as e:
         finding = map_graph_error(
             e, "defender", "SecurityEvents.Read.All", "Microsoft Secure Score"
@@ -63,6 +66,7 @@ async def get_secure_score(gc: GraphClient) -> list[Finding]:
         if finding:
             return [finding]
         raise
+    scores = page.get("value", [])
     if not scores:
         return []
     s = scores[0]
