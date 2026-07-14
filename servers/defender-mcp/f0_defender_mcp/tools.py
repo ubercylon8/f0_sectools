@@ -6,6 +6,7 @@ produces actionable guidance instead of failing.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from f0_sectools_core.auth.graph import GraphClient, GraphError
@@ -43,6 +44,13 @@ _RANK = {
 
 # Cap rows/items returned to keep payloads small-model-safe.
 _MAX_HUNT_ROWS = 50
+
+_HUNT_CATEGORIES = ("network", "process", "logon", "email")
+_INDICATOR_REQUIRED = frozenset({"network", "process"})
+# No backslash: it is the KQL escape char inside "..." string literals — a path
+# like C:\Temp\x or a trailing \ would break out of the quoted indicator.
+_INDICATOR_RE = re.compile(r"^[A-Za-z0-9._:@/-]{1,120}$")
+_MAX_HUNT_WINDOW_H = 720
 
 
 def _sev(value: str) -> Severity:
@@ -185,13 +193,20 @@ async def list_alerts(
     return findings
 
 
-async def run_hunting_query(gc: GraphClient, kql: str) -> list[Finding]:
+async def _execute_hunt(gc: GraphClient, kql: str) -> list[Finding]:
     try:
         resp = await gc.post("/security/runHuntingQuery", {"Query": kql})
     except GraphError as e:
         finding = map_graph_error(e, "defender", "ThreatHunting.Read.All", "advanced hunting")
         if finding:
             return [finding]
+        if e.status == 400:
+            # A bad query (syntax / unknown field) is a fixable failure, not a crash
+            # (Critical Rule 4: every failure a finding). e.message is already redacted.
+            return _hunt_guidance(
+                "Advanced hunting query failed (400 — invalid KQL or field name).",
+                f"Refine the query and retry. {e.message}",
+            )
         raise
     rows = resp.get("results") or []
     sample = rows[:_MAX_HUNT_ROWS]
@@ -209,6 +224,90 @@ async def run_hunting_query(gc: GraphClient, kql: str) -> list[Finding]:
             ),
         )
     ]
+
+
+async def run_hunting_query(gc: GraphClient, kql: str) -> list[Finding]:
+    return await _execute_hunt(gc, kql)
+
+
+def _hunt_guidance(title: str, summary: str) -> list[Finding]:
+    return [
+        Finding(
+            source="defender",
+            finding_type=FindingType.posture,
+            severity=Severity.info,
+            title=title,
+            recommended_action=RecommendedAction(summary=summary),
+        )
+    ]
+
+
+def _build_hunt_kql(category: str, ind: str, hours: int) -> str:
+    n = _MAX_HUNT_ROWS
+    if category == "network":
+        return (
+            "DeviceNetworkEvents\n"
+            f"| where Timestamp > ago({hours}h)\n"
+            f'| where RemoteUrl contains "{ind}" or RemoteIP == "{ind}"\n'
+            "| project Timestamp, DeviceName, RemoteUrl, RemoteIP, RemotePort, "
+            "InitiatingProcessFileName, ActionType\n"
+            f"| take {n}"
+        )
+    if category == "process":
+        return (
+            "DeviceProcessEvents\n"
+            f"| where Timestamp > ago({hours}h)\n"
+            f'| where FileName has "{ind}" or ProcessCommandLine contains "{ind}"\n'
+            "| project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine\n"
+            f"| take {n}"
+        )
+    if category == "logon":
+        acct = f'| where AccountName has "{ind}"\n' if ind else ""
+        return (
+            "DeviceLogonEvents\n"
+            f"| where Timestamp > ago({hours}h)\n"
+            '| where ActionType == "LogonFailed"\n'
+            f"{acct}"
+            "| summarize Failures = count() by AccountName, DeviceName, bin(Timestamp, 1h)\n"
+            "| where Failures > 10\n"
+            f"| take {n}"
+        )
+    filt = (
+        f'| where SenderFromAddress has "{ind}" or Subject contains "{ind}"\n' if ind else ""
+    )
+    return (
+        "EmailEvents\n"
+        f"| where Timestamp > ago({hours}h)\n"
+        '| where ThreatTypes has "Phish" or ThreatTypes has "Malware"\n'
+        f"{filt}"
+        "| project Timestamp, SenderFromAddress, RecipientEmailAddress, Subject, ThreatTypes\n"
+        f"| take {n}"
+    )
+
+
+async def hunt(
+    gc: GraphClient, category: str, indicator: str = "", time_window_hours: int = 24
+) -> list[Finding]:
+    cat = category.strip().lower()
+    if cat not in _HUNT_CATEGORIES:
+        return _hunt_guidance(
+            f"Unknown hunt category '{category}'.",
+            "Use one of: network, process, logon, email.",
+        )
+    ind = indicator.strip()
+    if cat in _INDICATOR_REQUIRED and not ind:
+        return _hunt_guidance(
+            f"The {cat} hunt needs an indicator.",
+            "network: a domain or IP; process: a name or command-line fragment.",
+        )
+    if ind and not _INDICATOR_RE.match(ind):
+        return _hunt_guidance(
+            "Indicator contains unsupported characters.",
+            "Use a plain domain, IP, process name, path, or account.",
+        )
+    hours = clamp_limit(time_window_hours, default=24, maximum=_MAX_HUNT_WINDOW_H)
+    kql = _build_hunt_kql(cat, ind, hours)
+    return await _execute_hunt(gc, kql)
 
 
 def _intent_finding(action_name: str, verb: str, device_id: str, comment: str,

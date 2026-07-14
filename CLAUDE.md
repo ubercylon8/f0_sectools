@@ -206,7 +206,7 @@ Targets (build incrementally — the six built servers below are the reference i
 | Elastic / OpenSearch | SIEM (OSS) | API key | detections, queries | — |
 | Splunk | SIEM | token | searches, notables | — |
 | Microsoft Sentinel | SIEM | Entra app | incidents, analytics | close incident |
-| Microsoft Defender | EDR | Entra app | incidents, devices | isolate host |
+| Microsoft Defender | EDR | Entra app | incidents, devices, guided hunt | isolate host |
 | CrowdStrike | EDR | OAuth2 | detections, hosts | contain host |
 | SentinelOne | EDR | API token | threats, agents | quarantine, isolate |
 | Sophos | EDR | API cred | alerts, endpoints | isolate |

@@ -29,11 +29,23 @@
 - prompt: "Pull the most recent Defender alerts."
   expect_tool: list_alerts
 
-- prompt: "Hunt for processes that downloaded files using PowerShell in the last day."
-  expect_tool: run_hunting_query
-  expect_args_contains: { kql: "DeviceProcessEvents" }
+- prompt: "Hunt for PowerShell process launches in the last day."
+  expect_tool: hunt
+  expect_args: { category: process }
 
-- prompt: "Run an advanced hunting query for suspicious sign-ins."
+- prompt: "Check for network connections to evil.com."
+  expect_tool: hunt
+  expect_args: { category: network }
+
+- prompt: "Any suspicious failed sign-ins?"
+  expect_tool: hunt
+  expect_args: { category: logon }
+
+- prompt: "Look for phishing emails this week."
+  expect_tool: hunt
+  expect_args: { category: email }
+
+- prompt: "Run this hunting query: DeviceInfo | take 5"
   expect_tool: run_hunting_query
 
 - prompt: "Isolate device dev-1 from the network — I suspect it's compromised."
