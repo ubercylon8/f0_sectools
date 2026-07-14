@@ -85,6 +85,60 @@ async def test_list_risk_detections_maps():
 
 
 @pytest.mark.asyncio
+async def test_list_risky_users_single_page_not_paginated():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        page2 = router.get(
+            GRAPH + "/identityProtection/riskyUsers", params={"$skiptoken": "x"}
+        ).mock(
+            return_value=httpx.Response(200, json={"value": [{"id": "999", "riskLevel": "high"}]})
+        )
+        router.get(GRAPH + "/identityProtection/riskyUsers", params={"$top": "25"}).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "value": [
+                        {"id": "u1", "userPrincipalName": "a@x", "riskLevel": "high",
+                         "riskState": "atRisk"}
+                    ],
+                    "@odata.nextLink": GRAPH + "/identityProtection/riskyUsers?$skiptoken=x",
+                },
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_risky_users(gc, limit=25)
+    assert not page2.called
+    assert any("more results available" in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_list_risk_detections_single_page_not_paginated():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        page2 = router.get(
+            GRAPH + "/identityProtection/riskDetections", params={"$skiptoken": "x"}
+        ).mock(
+            return_value=httpx.Response(200, json={"value": [{"id": "999", "riskLevel": "high"}]})
+        )
+        router.get(GRAPH + "/identityProtection/riskDetections", params={"$top": "25"}).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "value": [
+                        {"id": "d1", "userPrincipalName": "a@x", "riskEventType": "anon",
+                         "riskLevel": "high"}
+                    ],
+                    "@odata.nextLink": GRAPH + "/identityProtection/riskDetections?$skiptoken=x",
+                },
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_risk_detections(gc, limit=25)
+    assert not page2.called
+    assert any("more results available" in f.title for f in findings)
+
+
+@pytest.mark.asyncio
 async def test_list_conditional_access_policies_flags_disabled():
     with respx.mock as router:
         _token(router)

@@ -4,6 +4,20 @@ All notable changes to f0_sectools are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Tenable `list_vulnerability_assets`** — list the hosts affected by a given
+  plugin/vulnerability (plugin→hosts), closing the "which hosts have vuln X" gap.
+
+### Fixed
+
+- **Bounded output** — `list_incidents`/`list_alerts` (Defender) and
+  `list_risky_users`/`list_risk_detections` (Entra) no longer paginate the entire
+  tenant; they return a single bounded page with a "more available" note, and
+  `limit` is clamped to ≤100 across list tools (Critical Rule 5).
+
 ## [0.1.0] — 2026-07-14
 
 Initial public release.

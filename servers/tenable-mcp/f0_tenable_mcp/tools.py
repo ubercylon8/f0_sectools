@@ -10,6 +10,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+from f0_sectools_core.paging import clamp_limit, more_available_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -155,6 +156,7 @@ async def get_vulnerability_summary(tio: Any) -> list[Finding]:
 async def list_top_vulnerabilities(
     tio: Any, severity_min: str = "high", limit: int = 10
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         d = await tio.get("/workbenches/vulnerabilities")
     except Exception as e:
@@ -196,6 +198,7 @@ async def list_top_vulnerabilities(
 
 
 async def list_assets(tio: Any, hostname: str = "", limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         params = None if hostname else ({"limit": limit} if limit else None)
         d = await tio.get("/workbenches/assets", params=params)
@@ -249,6 +252,7 @@ async def _resolve_asset_uuid(tio: Any, asset: str) -> str | None:
 async def get_asset_vulnerabilities(
     tio: Any, asset: str, severity_min: str = "high", limit: int = 25
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         uuid = await _resolve_asset_uuid(tio, asset)
         if uuid is None:
@@ -329,6 +333,7 @@ async def get_vulnerability_info(tio: Any, plugin_id: str) -> list[Finding]:
 
 
 async def list_scans(tio: Any, limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         d = await tio.get("/scans")
     except Exception as e:
@@ -353,4 +358,86 @@ async def list_scans(tio: Any, limit: int = 25) -> list[Finding]:
                 evidence=evidence,
             )
         )
+    return out
+
+
+def _plugin_output_assets(d: Any) -> list[dict[str, Any]]:
+    """Affected assets from a Workbenches plugin /outputs payload, deduped by id.
+
+    Shape (LIVE-VALIDATION-PENDING, recipe step 9): outputs[] -> states[] ->
+    results[] -> assets[] with id/hostname/fqdn/ipv4. Defensive against missing
+    levels AND wrong-typed ones — an unexpected live shape must degrade to "no
+    assets", never raise (Critical Rule 4).
+    """
+    seen: dict[str, dict[str, Any]] = {}
+    outputs = d.get("outputs") if isinstance(d, dict) else None
+    for o in outputs or []:
+        if not isinstance(o, dict):
+            continue
+        for st in o.get("states") or []:
+            if not isinstance(st, dict):
+                continue
+            for res in st.get("results") or []:
+                if not isinstance(res, dict):
+                    continue
+                for a in res.get("assets") or []:
+                    if not isinstance(a, dict):
+                        continue
+                    aid = str(a.get("id") or a.get("uuid") or a.get("hostname") or "")
+                    if aid and aid not in seen:
+                        seen[aid] = a
+    return list(seen.values())
+
+
+async def list_vulnerability_assets(
+    tio: Any, plugin_id: str, limit: int = 25
+) -> list[Finding]:
+    limit = clamp_limit(limit)
+    try:
+        d = await tio.get(f"/workbenches/vulnerabilities/{plugin_id}/outputs")
+    except Exception as e:
+        finding = map_tenable_error(e, "Tenable plugin affected hosts")
+        if finding:
+            return [finding]
+        raise
+    assets = _plugin_output_assets(d)
+    if not assets:
+        return [
+            Finding(
+                source="tenable",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Tenable: no affected assets found for plugin {plugin_id}",
+                entity=Entity(kind=EntityKind.rule, id=str(plugin_id)),
+                recommended_action=RecommendedAction(
+                    summary="Confirm the plugin_id (see list_top_vulnerabilities); the "
+                    "finding may also be aged out (>450 days).",
+                ),
+            )
+        ]
+    out: list[Finding] = []
+    for a in assets[:limit]:
+        fqdns = a.get("fqdn") or []
+        ipv4s = a.get("ipv4") or []
+        name = a.get("hostname") or (fqdns[0] if fqdns else None) \
+            or (ipv4s[0] if ipv4s else a.get("id", "asset"))
+        evidence = []
+        if ipv4s:
+            evidence.append(Evidence(key="ipv4", value=str(ipv4s[0])))
+        if a.get("last_seen"):
+            evidence.append(Evidence(key="last_seen", value=str(a["last_seen"])))
+        out.append(
+            Finding(
+                source="tenable",
+                finding_type=FindingType.misconfig,
+                severity=Severity.info,
+                title=f"Tenable: {name} affected by plugin {plugin_id}",
+                entity=Entity(kind=EntityKind.host, id=str(a.get("id", name)), name=str(name)),
+                evidence=evidence,
+                references=[Reference(type="tenable_plugin", id=str(plugin_id))],
+                observed_at=a.get("last_seen"),
+            )
+        )
+    if len(assets) > limit:
+        out.append(more_available_finding("tenable", shown=limit, total=len(assets)))
     return out

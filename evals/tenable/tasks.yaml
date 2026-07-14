@@ -28,3 +28,10 @@
 
 - prompt: "Are our Tenable scans running and up to date?"
   expect_tool: list_scans
+
+- prompt: "Which hosts are affected by plugin 172179?"
+  expect_tool: list_vulnerability_assets
+  expect_args: { plugin_id: "172179" }
+
+- prompt: "List the assets that have the Log4j vulnerability, plugin 182252."
+  expect_tool: list_vulnerability_assets

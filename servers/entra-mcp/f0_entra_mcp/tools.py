@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from f0_sectools_core.auth.graph import GraphClient, GraphError
 from f0_sectools_core.graph_errors import map_graph_error
+from f0_sectools_core.paging import clamp_limit, more_available_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -41,13 +42,16 @@ def _risk(value: str) -> Severity:
 
 
 async def list_risky_users(gc: GraphClient, limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
-        raw = await gc.get_all("/identityProtection/riskyUsers", params={"$top": limit})
+        page = await gc.get("/identityProtection/riskyUsers", params={"$top": limit})
     except GraphError as e:
         finding = map_graph_error(e, "entra", "IdentityRiskyUser.Read.All", "Entra risky users")
         if finding:
             return [finding]
         raise
+    raw = page.get("value", [])
+    has_more = bool(page.get("@odata.nextLink"))
     out: list[Finding] = []
     for u in raw:
         upn = u.get("userPrincipalName") or u.get("id", "unknown")
@@ -67,17 +71,23 @@ async def list_risky_users(gc: GraphClient, limit: int = 25) -> list[Finding]:
                 observed_at=u.get("riskLastUpdatedDateTime"),
             )
         )
+    out = out[:limit]
+    if has_more:
+        out.append(more_available_finding("entra", shown=len(out)))
     return out
 
 
 async def list_risk_detections(gc: GraphClient, limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
-        raw = await gc.get_all("/identityProtection/riskDetections", params={"$top": limit})
+        page = await gc.get("/identityProtection/riskDetections", params={"$top": limit})
     except GraphError as e:
         finding = map_graph_error(e, "entra", "IdentityRiskEvent.Read.All", "Entra risk detections")
         if finding:
             return [finding]
         raise
+    raw = page.get("value", [])
+    has_more = bool(page.get("@odata.nextLink"))
     out: list[Finding] = []
     for d in raw:
         upn = d.get("userPrincipalName") or d.get("id", "unknown")
@@ -103,6 +113,9 @@ async def list_risk_detections(gc: GraphClient, limit: int = 25) -> list[Finding
                 observed_at=d.get("detectedDateTime"),
             )
         )
+    out = out[:limit]
+    if has_more:
+        out.append(more_available_finding("entra", shown=len(out)))
     return out
 
 

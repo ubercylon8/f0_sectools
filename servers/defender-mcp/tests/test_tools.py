@@ -285,6 +285,56 @@ async def test_isolate_host_503_degrades(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_list_incidents_single_page_not_paginated():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        page2 = router.get(GRAPH + "/security/incidents", params={"$skiptoken": "x"}).mock(
+            return_value=httpx.Response(200, json={"value": [{"id": "999", "severity": "high"}]})
+        )
+        router.get(GRAPH + "/security/incidents", params={"$top": "25"}).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "value": [
+                        {"id": "1", "displayName": "A", "severity": "high",
+                         "status": "active", "alerts": []}
+                    ],
+                    "@odata.nextLink": GRAPH + "/security/incidents?$skiptoken=x",
+                },
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_incidents(gc, limit=25)
+    assert not page2.called  # did NOT paginate the whole tenant
+    assert any("more results available" in f.title for f in findings)  # truncation note
+
+
+@pytest.mark.asyncio
+async def test_list_alerts_single_page_not_paginated():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        page2 = router.get(GRAPH + "/security/alerts_v2", params={"$skiptoken": "x"}).mock(
+            return_value=httpx.Response(200, json={"value": [{"id": "999", "severity": "high"}]})
+        )
+        router.get(GRAPH + "/security/alerts_v2", params={"$top": "25"}).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "value": [
+                        {"id": "a1", "title": "T", "severity": "high",
+                         "status": "new", "mitreTechniques": []}
+                    ],
+                    "@odata.nextLink": GRAPH + "/security/alerts_v2?$skiptoken=x",
+                },
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_alerts(gc, limit=25)
+    assert not page2.called
+    assert any("more results available" in f.title for f in findings)
+
+
+@pytest.mark.asyncio
 async def test_release_host_valid_token_executes(tmp_path):
     with respx.mock as router:
         _token(router)
