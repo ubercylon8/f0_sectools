@@ -2,34 +2,82 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![CI](https://github.com/ubercylon8/f0_sectools/actions/workflows/ci.yml/badge.svg)](https://github.com/ubercylon8/f0_sectools/actions/workflows/ci.yml)
 
-> **Project naming:** **`f0_sectools`** is this software. **F0RT1KA** is the parent organization / brand. It is part of the [ProjectAchilles](https://projectachilles.io/) ecosystem, and the defensive / operational counterpart to [`f0_library`](https://github.com/) (offensive EDR detection testing).
+**f0_sectools** connects AI agents to your security platforms — SIEM/XDR, EDR, identity, vulnerability management — so a **SOC analyst, security engineer, threat hunter, or CISO** can understand posture, assess risk, and decide the next action. It is built to run with **small, open-weight models on your own infrastructure** — no telemetry, no security data leaving the host, no frontier cloud API.
 
-## What it is
+> **Naming:** `f0_sectools` is the software; **F0RT1KA** is the parent brand. It is part of the [ProjectAchilles](https://projectachilles.io/) ecosystem and the defensive counterpart to `f0_library` (offensive EDR detection testing).
 
-**f0_sectools** is an open-source library of **tools, skills, and MCP servers** that let AI agents connect to security platforms — SIEM/XDR, EDR, identity, and threat intelligence — to **understand security posture, assess risk, and help decide on the right course of action**.
+## What works today
 
-It serves **SOC analysts, security engineers, threat hunters, and CISOs**, giving each the same underlying evidence rendered for their altitude — tactical triage, configuration fixes, hunting timelines, or executive risk rollups.
+Six MCP servers, each **live-validated against a real tenant**, exposing read tools (and, for Defender, gated write actions):
 
-## Why it's different: privacy-first, small local models
+| Server | Status | Tools | What it reads |
+|---|---|---|---|
+| `f0-defender-mcp` | ✅ live-validated | 6 (4 read + 2 gated) | secure score, incidents, alerts, hunting (KQL); gated `isolate_host` / `release_host` |
+| `f0-entra-mcp` | ✅ live-validated | 4 | risky users, risk detections, conditional access, privileged roles |
+| `f0-limacharlie-mcp` | ✅ live-validated | 6 | org overview, sensors, sensor detail, D&R rules, detections, LCQL telemetry |
+| `f0-projectachilles-mcp` | ✅ live-validated | 6 | defense score, weak techniques, test executions, risk acceptances, agents, fleet health |
+| `f0-intune-mcp` | ✅ live-validated | 6 | managed devices, compliance, stale devices, policies, config profiles |
+| `f0-tenable-mcp` | ✅ live-validated | 6 | vuln summary, top vulns, assets, per-asset vulns, plugin info, scans |
 
-f0_sectools is built to run with **small, open-weight models** — GPT-OSS (20b/120b), Gemma 4, Qwen3 — served **on your own infrastructure** via **vLLM** or **llama.cpp**. No telemetry. No sensitive security data leaving the host. No dependency on a frontier cloud API.
+**34 registered tools.** Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 20 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
 
-That constraint shapes everything: tools are deliberately designed so a *small, private* model can drive them **reliably**, and an evaluation harness **measures** that callability so it does not silently erode.
+## For security teams
 
-## Core principles
+- **Read-only by default.** Every platform query is read-only. Any state-changing action (isolate a host, disable a user, close an incident) is **gated** behind an explicit config flag **and** a fresh single-use human confirmation token, and is audited. A local model can never trigger one alone. Defender's `isolate_host` / `release_host` are the working example.
+- **Privacy by construction.** Per-platform `.env` credentials are never logged, never sent to the model, never leave the host. All output — including error paths — is redacted before it reaches the agent.
+- **One evidence base, four altitudes.** Every tool returns a normalized [findings schema](CLAUDE.md#the-findings-schema), rendered per audience: tactical triage (SOC analyst), config fixes (security engineer), hunting timelines (threat hunter), or risk rollups (CISO).
 
-- **Read-only by default.** Querying and analysis are always safe. Any action that changes state on a live platform (isolate host, disable user, quarantine) is **gated** behind an explicit config flag **and** a per-action human confirmation token — a local model can never trigger it alone.
-- **Privacy by construction.** Per-platform `.env` credentials are never logged, never sent to the model, and never leave the host. All output is redacted before it reaches the agent.
-- **Structured findings.** Every tool returns a normalized findings schema, then renders it per persona — predictable for agents to parse and chain.
-- **Small-model-safe by design.** Flat argument schemas, short enums, few tools per server, bounded output.
+See the **[User Guide](docs/user-guide/README.md)** for per-runtime setup (Hermes, LM Studio, Open WebUI, Claude Code), skills, personas, and example workflows.
 
-## Supported platforms (target roadmap)
+## For local-AI builders — the differentiator
 
-SIEM/XDR: **Wazuh** (reference implementation), **Elastic/OpenSearch**, **Splunk**, **Microsoft Sentinel**
-EDR: **Microsoft Defender**, **CrowdStrike**, **SentinelOne**, **Sophos**
-Identity: **Microsoft Entra ID / Azure**
-Threat intel & IR: **MISP**, **TheHive / Cortex**, **OpenCTI**
+Small local models are now genuinely good at tool calling, but their reliability degrades with complex schemas, too many tools, and oversized payloads. Every tool here is designed against that: **flat argument schemas, short closed enums, ≤ ~8 tools per server, bounded/paginated output.** And we **measure** it so it can't silently erode.
+
+On the tool-calling [**scorecard**](evals/SCORECARD.md), **every tested model scores 100%/100% (tool-selection / argument-filling) per server across all six platforms.** Registering all **34 tools at once** — the hard composition test — is driven at up to **100%** (Qwen3.5), with GPT-OSS 20B, Qwen3 4B/8B, Gemma 4, and Granite 4 Tiny all ≥ 91%.
+
+- [`evals/SCORECARD.md`](evals/SCORECARD.md) — the full model × server matrix and findings.
+- [`docs/runtime-performance.md`](docs/runtime-performance.md) — choosing a runtime & model: Ollama vs vLLM vs llama.cpp benchmarks and deployment guidance.
+
+<!-- DEMO -->
+
+## Quickstart
+
+```bash
+# 1. Clone and install the workspace (core + every server, editable)
+git clone https://github.com/ubercylon8/f0_sectools.git
+cd f0_sectools
+uv sync --all-packages
+
+# 2. Configure one platform (credentials stay on your host, gitignored)
+cp servers/tenable-mcp/.env.tenable.example .env.tenable   # then fill in values
+
+# 3. Run the contract tests (offline, no platform needed)
+uv run pytest
+
+# 4. Point a local model at a server's tools and measure callability
+uv run python -m evals.run --server tenable \
+    --base-url http://localhost:11434/v1 --model qwen3 --runs 3
+```
+
+Full setup — prerequisites, every platform's required permissions, and a first live verification — is in [Getting Started](docs/user-guide/getting-started.md).
+
+## Architecture
+
+A shared `core/` library holds every cross-cutting and safety-critical concern — findings schema, redaction, auth, pagination, gating, persona renderers. Each server is a **thin adapter** that knows only its platform's API and tool definitions and imports the rest from `core/`. This keeps the safety guarantees enforceable in one auditable place.
+
+<!-- ARCH-DIAGRAM -->
+
+See [CLAUDE.md](CLAUDE.md) for the full architecture and house rules.
+
+## Roadmap (planned platforms)
+
+Not yet built — contributions welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)):
+
+- **SIEM/XDR:** Wazuh, Elastic/OpenSearch, Splunk, Microsoft Sentinel
+- **EDR:** CrowdStrike, SentinelOne, Sophos
+- **Threat intel & IR:** MISP, TheHive/Cortex, OpenCTI
 
 ## Repository layout
 
@@ -37,28 +85,20 @@ Threat intel & IR: **MISP**, **TheHive / Cortex**, **OpenCTI**
 core/          Shared package: findings schema, redaction, auth, paging,
                small-model helpers, gated-action machinery, persona renderers.
 servers/       One thin MCP server per platform (imports core).
-skills/        Portable agentskills.io playbooks (work in Hermes, Claude Code, …).
+skills/        Portable agentskills.io playbooks (Hermes, Claude Code, …).
 integrations/  Runtime-specific wiring (e.g. Hermes config + personas).
 prompts/       Portable system prompts for non-skill UIs (LM Studio, Open WebUI).
-evals/         Small-model tool-calling evaluation harness + task sets.
-docs/          Documentation, including the user guide.
+evals/         Small-model tool-calling evaluation harness + scorecard.
+docs/          User guide, runtime performance, architecture.
 CLAUDE.md      Build guide / house rules for agents working in this repo.
 ```
 
-## Using f0_sectools
+## Contributing & security
 
-See the **[User Guide](docs/user-guide/README.md)** — getting started, per-runtime
-setup (Hermes, LM Studio, Open WebUI, Claude Code), skills & personas, example
-workflows, and troubleshooting.
-
-## Status
-
-**Working today:** the `core/` foundation; the **Microsoft Defender**, **Microsoft
-Entra ID**, **LimaCharlie**, **ProjectAchilles**, and **Microsoft Intune** MCP
-servers (all live-validated); the **Tenable** MCP server (live-validated, 6
-read-only tools); the eval harness; twenty skills; the four role
-personas; and the Hermes integration. Next: more platforms.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — ground rules and the "add a platform server" recipe.
+- [SECURITY.md](SECURITY.md) — authorized-use guidance and how to report a vulnerability.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community standards.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Security and authorized-use guidance is in [SECURITY.md](SECURITY.md).
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
