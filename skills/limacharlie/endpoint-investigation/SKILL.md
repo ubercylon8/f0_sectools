@@ -26,12 +26,14 @@ Base tool names (runtime may prefix — see the LimaCharlie server README):
 1. Call `get_sensor` with the hostname. Note **online status**, **platform**,
    and the sensor id. If nothing is found, call `list_sensors` to locate the
    right hostname.
-2. Query that host's recent activity with `query_telemetry` — scope the LCQL to
-   the host (e.g. a `hostname` selector) and a small window. See the
-   `references/lcql-starters.md` in the threat-hunt skill for safe templates
-   (processes, network, DNS). Always bound the query.
-3. Review the returned rows for anything notable (unusual processes, suspicious
-   network destinations).
+2. Query that host's recent activity with `query_telemetry` — pass the
+   **`hostname` argument** to scope to that one sensor and pick a `hunt` preset
+   (`new_processes`, `powershell_activity`, `dns_requests`, `network_connections`)
+   with a small `hours_back` window. Do NOT hand-write raw LCQL for host scoping —
+   the `hostname` arg builds a safe selector for you. (Advanced/custom only: a raw
+   `lcql` override exists; see `references/lcql-starters.md` in the threat-hunt skill.)
+3. Review the returned findings: the leading finding gives the total event count;
+   each following finding is one event (process/command line, domain, etc.).
 4. Summarize: sensor status, what the telemetry shows, and a recommended next
    step.
 

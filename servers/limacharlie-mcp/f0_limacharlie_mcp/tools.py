@@ -6,6 +6,7 @@ the live smoke test confirms the real field names.
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -94,7 +95,7 @@ def get_sensor(lc: Any, hostname: str) -> list[Finding]:
         if finding:
             return [finding]
         raise
-    # find_sensors_by_hostname returns a dict keyed by sid (or a list); normalize.
+    # find_sensor returns full sensor dicts (list); tolerate a dict-of-dicts too.
     sensors = list(result.values()) if isinstance(result, dict) else list(result or [])
     if not sensors:
         return [
@@ -176,15 +177,31 @@ def list_detections(
 
 
 # Guided LCQL hunt presets — a small model picks one instead of writing LCQL.
+# `{sel}` is the sensor selector: `*` (all sensors) or `hostname == "<host>"`.
 _HUNT_PRESETS = {
-    "new_processes": "{t} | * | NEW_PROCESS | * | event/FILE_PATH event/COMMAND_LINE",
+    "new_processes": "{t} | {sel} | NEW_PROCESS | * | event/FILE_PATH event/COMMAND_LINE",
     "powershell_activity": (
-        '{t} | * | NEW_PROCESS | event/FILE_PATH contains "powershell" '
+        '{t} | {sel} | NEW_PROCESS | event/FILE_PATH contains "powershell" '
         "| event/FILE_PATH event/COMMAND_LINE"
     ),
-    "dns_requests": "{t} | * | DNS_REQUEST | * | event/DOMAIN_NAME",
-    "network_connections": "{t} | * | NETWORK_CONNECTIONS | * | event/NETWORK_ACTIVITY",
+    "dns_requests": "{t} | {sel} | DNS_REQUEST | * | event/DOMAIN_NAME",
+    "network_connections": "{t} | {sel} | NETWORK_CONNECTIONS | * | event/NETWORK_ACTIVITY",
 }
+
+# LCQL string literals are double-quoted; only allow hostnames that can't break out.
+_HOSTNAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _telemetry_events(rows: Any) -> list[dict[str, Any]]:
+    """lc.query returns result ENVELOPES ({..., "rows": [event, ...]}), not flat
+    events — and one envelope can be hundreds of KB. Flatten to the actual events."""
+    events: list[dict[str, Any]] = []
+    for env in rows or []:
+        if isinstance(env, dict) and isinstance(env.get("rows"), list):
+            events.extend(e for e in env["rows"] if isinstance(e, dict))
+        elif isinstance(env, dict):
+            events.append(env)
+    return events
 
 
 def query_telemetry(
@@ -192,13 +209,31 @@ def query_telemetry(
     hunt: str = "new_processes",
     hours_back: int = 24,
     limit: int = _MAX_ITEMS,
+    hostname: str | None = None,
     lcql: str | None = None,
 ) -> list[Finding]:
     end = int(time.time())
     start = end - hours_back * 3600
+    # Scope is only meaningful on the guided preset path; a raw lcql override ignores
+    # `hostname`, so don't mislabel the summary/entity by it. An empty hostname ("",
+    # which a small model may emit for the optional arg) means unscoped, not invalid.
+    scope_host = hostname if (hostname and lcql is None) else None
     if not lcql:
+        if hostname and not _HOSTNAME_RE.match(hostname):
+            return [
+                Finding(
+                    source="limacharlie",
+                    finding_type=FindingType.posture,
+                    severity=Severity.info,
+                    title=f"Invalid hostname '{hostname}' — telemetry query not run",
+                    recommended_action=RecommendedAction(
+                        summary="hostname may contain only letters, digits, '.', '-', '_'.",
+                    ),
+                )
+            ]
+        sel = f'hostname == "{hostname}"' if hostname else "*"
         template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
-        lcql = template.format(t=f"-{hours_back}h")
+        lcql = template.format(t=f"-{hours_back}h", sel=sel)
     try:
         rows = lc.query(lcql, start, end, limit=limit)
     except Exception as e:
@@ -206,21 +241,49 @@ def query_telemetry(
         if finding:
             return [finding]
         raise
-    sample = rows[:limit]
-    evidence = [Evidence(key=f"row_{i}", value=str(r)) for i, r in enumerate(sample)]
-    return [
+    events = _telemetry_events(rows)
+    total = len(events)
+    scope = f" on {scope_host}" if scope_host else ""
+    out: list[Finding] = [
         Finding(
             source="limacharlie",
             finding_type=FindingType.hunt_result,
             severity=Severity.info,
-            title=f"LCQL query returned {len(rows)} row(s)"
-            + (f" (showing first {limit})" if len(rows) > limit else ""),
-            evidence=evidence,
+            title=f"{total} telemetry event(s){scope}"
+            + (f" (showing first {limit})" if total > limit else ""),
+            entity=(
+                Entity(kind=EntityKind.host, id=str(scope_host), name=str(scope_host))
+                if scope_host
+                else None
+            ),
+            evidence=[
+                Evidence(key="events_total", value=str(total)),
+                Evidence(key="lcql", value=lcql),
+            ],
             recommended_action=RecommendedAction(
-                summary="Review the rows; refine the LCQL to investigate further."
+                summary="Review the events; refine the hunt/hostname to investigate further."
             ),
         )
     ]
+    for ev in events[:limit]:
+        data = ev.get("data") if isinstance(ev.get("data"), dict) else ev
+        data = data or {}
+        ev_evidence = [
+            Evidence(key=str(k).split("/")[-1].lower(), value=str(v)[:300])
+            for k, v in list(data.items())[:6]
+            if not isinstance(v, dict | list)
+        ]
+        title = next((str(v) for v in data.values() if isinstance(v, str) and v), "telemetry event")
+        out.append(
+            Finding(
+                source="limacharlie",
+                finding_type=FindingType.hunt_result,
+                severity=Severity.info,
+                title=str(title)[:200],
+                evidence=ev_evidence,
+            )
+        )
+    return out
 
 
 def get_org_overview(lc: Any) -> list[Finding]:

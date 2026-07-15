@@ -28,3 +28,7 @@
 - prompt: "Hunt for new processes on our endpoints."
   expect_tool: query_telemetry
   expect_args: { hunt: new_processes }
+
+- prompt: "Show me the top processes on host web-01."
+  expect_tool: query_telemetry
+  expect_args_contains: { hostname: "web-01" }

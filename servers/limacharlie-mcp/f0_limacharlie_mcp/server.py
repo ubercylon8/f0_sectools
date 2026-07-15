@@ -48,7 +48,7 @@ async def list_sensors(online_only: bool = False, limit: int = 50) -> list[dict[
 
 @mcp.tool()
 async def get_sensor(hostname: str) -> list[dict[str, Any]]:
-    """Get LimaCharlie sensor detail by hostname."""
+    """Get LimaCharlie sensor detail by hostname (prefix match): platform, online status, sid."""
     return _render(await asyncio.to_thread(tools.get_sensor, _client(), hostname))
 
 
@@ -75,6 +75,7 @@ async def query_telemetry(
     ] = "new_processes",
     hours_back: int = 24,
     limit: int = 50,
+    hostname: str | None = None,
     lcql: str | None = None,
 ) -> list[dict[str, Any]]:
     """Hunt LimaCharlie endpoint (EDR sensor) telemetry with a guided preset — no LCQL needed.
@@ -82,12 +83,13 @@ async def query_telemetry(
     For Microsoft Defender / KQL hunts, use run_hunting_query instead — this tool
     is LimaCharlie sensor telemetry only. Pick a `hunt` preset: new_processes,
     powershell_activity, dns_requests, or network_connections. hours_back bounds the
-    window. Advanced: pass a raw `lcql` query to override the preset (shape: time |
-    sensor-selector | event-types | filter | projection).
+    window. Set `hostname` to scope to ONE sensor (e.g. "top processes on host X").
+    Returns a count plus one finding per event. Advanced: pass a raw `lcql` query to
+    override the preset (shape: time | sensor-selector | event-types | filter | projection).
     """
     return _render(
         await asyncio.to_thread(
-            tools.query_telemetry, _client(), hunt, hours_back, limit, lcql
+            tools.query_telemetry, _client(), hunt, hours_back, limit, hostname, lcql
         )
     )
 
