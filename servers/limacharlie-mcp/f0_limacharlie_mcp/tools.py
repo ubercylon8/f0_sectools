@@ -273,14 +273,15 @@ def query_telemetry(
         base = domain[2:] if (domain and domain.startswith("*.")) else (domain or "")
         if base.strip("*."):
             # Domains live in DNS_REQUEST, not NETWORK_CONNECTIONS (which has IPs) —
-            # route domain questions to DNS. The LCQL query filter's documented string
-            # operators are `==` / `contains`; we use `contains` for the subdomain case
-            # (`==` alone would miss winatp-gw-eus.microsoft.com). `contains` is a
-            # SUBSTRING match, so the summary flags that lookalikes (microsoft.com.evil)
-            # can also match — an analyst must confirm the returned domains are real.
+            # route domain questions to DNS. Anchor on the domain BOUNDARY (exact apex
+            # `is "x"` OR a proper subdomain `ends with ".x"`) rather than a bare
+            # `contains`, so a lookalike like `microsoft.com.evil.net` is NOT reported
+            # as matching. (`is`/`ends with`/`or` are valid LCQL query-filter operators,
+            # confirmed live.)
             lcql = (
                 f'{td} | {sel} | DNS_REQUEST '
-                f'| event/DOMAIN_NAME contains "{base}" | event/DOMAIN_NAME'
+                f'| event/DOMAIN_NAME is "{base}" or event/DOMAIN_NAME ends with ".{base}" '
+                f'| event/DOMAIN_NAME'
             )
             scope_domain = base  # label matches what we actually queried
         else:
@@ -308,8 +309,8 @@ def query_telemetry(
     if scope_domain:
         summary_evidence.append(Evidence(
             key="domain_match",
-            value=f'substring contains "{scope_domain}" — also matches lookalikes '
-                  f"(e.g. {scope_domain}.evil.net); confirm the returned domains are real",
+            value=f"boundary-anchored: exact {scope_domain} or a subdomain of it "
+                  f"(lookalikes like {scope_domain}.evil.net are excluded)",
         ))
     out: list[Finding] = [
         Finding(
