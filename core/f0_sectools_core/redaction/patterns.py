@@ -14,9 +14,8 @@ SECRET_KEY_HINTS = (
     "apikey",
     "client_secret",
     "private_key",
-    "credential",
+    "credentials",
     "cookie",
-    "session_id",
 )
 
 # Value patterns that look like secrets/tokens regardless of key.

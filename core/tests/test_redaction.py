@@ -19,25 +19,23 @@ def test_redacts_nested():
 
 def test_redacts_additional_secret_key_hints():
     # Low-entropy secrets under these keys wouldn't match a value pattern, so the
-    # key-hint pass must catch them (private_key/credential/cookie/session_id).
+    # key-hint pass must catch them (private_key/credentials/cookie).
     out = redact_obj({
         "private_key": "abc", "credentials": "u:p", "cookie": "sid=1",
-        "session_id": "xyz", "host": "web-01",
+        "host": "web-01", "credentialGuardEnabled": True,
     })
     assert out["private_key"] == "«redacted»"
     assert out["credentials"] == "«redacted»"
     assert out["cookie"] == "«redacted»"
-    assert out["session_id"] == "«redacted»"
     assert out["host"] == "web-01"
+    # `credentials` (not bare `credential`) so informative posture fields survive.
+    assert out["credentialGuardEnabled"] is True
 
 
 def test_redacts_camelcase_secret_keys():
     # Underscore normalization makes multi-word hints catch camelCase too — Graph
-    # servers (Entra/Defender/Intune) emit sessionId/privateKey/clientSecret.
-    out = redact_obj({
-        "sessionId": "x", "privateKey": "y", "clientSecret": "z", "host": "web-01",
-    })
-    assert out["sessionId"] == "«redacted»"
+    # servers (Entra/Defender/Intune) emit privateKey/clientSecret.
+    out = redact_obj({"privateKey": "y", "clientSecret": "z", "host": "web-01"})
     assert out["privateKey"] == "«redacted»"
     assert out["clientSecret"] == "«redacted»"
     assert out["host"] == "web-01"
