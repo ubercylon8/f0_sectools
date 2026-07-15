@@ -202,7 +202,10 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         # configuration/hardening checks — present vs NOT present — not attack
         # simulations, so the blocked/detected vocabulary does not apply (a config
         # check launches no attack; defender_detected is meaningless for it).
-        if str(x.get("category", "")).lower() == "cyber-hygiene":
+        # Normalize separators/case so a backend spelling tweak (cyber_hygiene,
+        # "Cyber Hygiene") can't silently fall back to the "NOT blocked" branch.
+        category = str(x.get("category", "")).strip().lower().replace("_", "-").replace(" ", "-")
+        if category == "cyber-hygiene":
             kind = "cyber-hygiene"
             if x.get("is_protected"):
                 sev, ftype, outcome = Severity.info, FindingType.posture, "present"

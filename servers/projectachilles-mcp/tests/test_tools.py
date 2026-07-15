@@ -163,6 +163,20 @@ async def test_list_test_executions_hygiene_ignores_defender_detected():
 
 
 @pytest.mark.asyncio
+async def test_list_test_executions_hygiene_tolerates_category_spelling():
+    # A backend separator/case tweak must NOT silently fall back to the security
+    # "NOT blocked" branch (a quiet regression of exactly what this fix prevents).
+    for cat in ("cyber_hygiene", "Cyber Hygiene", "CYBER-HYGIENE", " cyber-hygiene "):
+        pa = FakeClient(responses={"/analytics/executions": {"data": [
+            {"test_name": "SMB Encryption", "hostname": "lt-01",
+             "is_protected": False, "category": cat}]}})
+        findings = await tools.list_test_executions(pa)
+        ev = {e.key: e.value for e in findings[0].evidence}
+        assert ev["outcome"] == "not present", f"variant {cat!r} fell through to security"
+        assert ev["check_kind"] == "cyber-hygiene"
+
+
+@pytest.mark.asyncio
 async def test_list_risk_acceptances_maps():
     pa = FakeClient(responses={"/risk-acceptances": {"success": True, "data": [
         {"test_name": "Mimikatz", "scope": "global", "status": "active",
