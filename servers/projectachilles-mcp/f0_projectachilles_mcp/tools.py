@@ -122,7 +122,20 @@ async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Find
         if finding:
             return [finding]
         raise
-    rows = _tests(resp)
+    raw = _tests(resp)
+    # The browser /tests endpoint currently returns the full filtered set in one
+    # response (its `count` == len(tests)). Defend the count invariant in code
+    # rather than by a one-time manual check: if the endpoint ever pages (its
+    # `count` exceeds the rows it handed us), len(raw) is only a LOWER BOUND and
+    # any client-side filter below ran over a partial page — so flag it instead
+    # of emitting a confident wrong number.
+    server_count = resp.get("count") if isinstance(resp, dict) else None
+    paged = (
+        isinstance(server_count, int)
+        and not isinstance(server_count, bool)
+        and server_count > len(raw)
+    )
+    rows = raw
     needle = value.lower()
     if by == "actor":
         rows = [r for r in rows if needle in str(r.get("threatActor") or "").lower()]
@@ -131,17 +144,21 @@ async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Find
     elif by == "tag":
         rows = [r for r in rows if any(needle in str(x).lower() for x in (r.get("tags") or []))]
     total = len(rows)
+    count_label = f"≥{total}" if paged else str(total)
+    summary_evidence = [
+        Evidence(key="total_matches", value=str(total)),
+        Evidence(key="returned", value=str(min(total, limit))),
+    ]
+    if paged:
+        summary_evidence.append(Evidence(key="paging_truncated", value="true"))
     out: list[Finding] = [
         Finding(
             source="projectachilles",
             finding_type=FindingType.posture,
             severity=Severity.info,
-            title=f"{total} tests match {by}={value}",
+            title=f"{count_label} tests match {by}={value}",
             entity=Entity(kind=EntityKind.tenant, id="catalog"),
-            evidence=[
-                Evidence(key="total_matches", value=str(total)),
-                Evidence(key="returned", value=str(min(total, limit))),
-            ],
+            evidence=summary_evidence,
         )
     ]
     for t in rows[:limit]:

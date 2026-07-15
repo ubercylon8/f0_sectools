@@ -329,6 +329,32 @@ async def test_find_tests_401_degrades():
     assert "authentication" in findings[0].title.lower()
 
 
+@pytest.mark.asyncio
+async def test_find_tests_flags_server_side_paging_as_lower_bound():
+    # If /browser/tests ever pages (its `count` exceeds the rows it handed us),
+    # len(rows) is only a LOWER BOUND and any client-side filter ran over a
+    # partial page — so flag it instead of emitting a confident wrong count.
+    rows = [{"uuid": f"u{i}", "name": f"T{i}", "category": "c",
+             "techniques": ["T1110"]} for i in range(10)]
+    pa = FakeClient(responses={"/browser/tests": {"count": 500, "tests": rows}})
+    findings = await tools.find_tests(pa, by="technique", value="T1110", limit=5)
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["paging_truncated"] == "true"
+    assert ev0["total_matches"] == "10"  # the rows we actually have (a lower bound)
+    assert findings[0].title.startswith("≥10 tests match technique=T1110")
+
+
+@pytest.mark.asyncio
+async def test_find_tests_no_paging_flag_when_count_matches_rows():
+    # The normal case: the endpoint returns the full filtered set (count == len).
+    rows = [{"uuid": "u1", "name": "A", "category": "c", "techniques": ["T1110"]}]
+    pa = FakeClient(responses={"/browser/tests": {"count": 1, "tests": rows}})
+    findings = await tools.find_tests(pa, by="technique", value="T1110")
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert "paging_truncated" not in ev0
+    assert findings[0].title.startswith("1 tests match")
+
+
 _UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 
