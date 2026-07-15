@@ -116,11 +116,27 @@ async def test_get_weak_techniques_sorts_ascending():
 
 
 @pytest.mark.asyncio
+async def test_list_test_executions_uses_enriched_paginated_endpoint():
+    # The plain /analytics/executions endpoint strips category/defender_detected/
+    # severity/techniques, so the security-vs-hygiene branch is starved of data.
+    # The enriched fields live at /analytics/executions/paginated (pageSize, not limit).
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": []}})
+    await tools.list_test_executions(pa, limit=25)
+    path, params = pa.calls[0]
+    assert path == "/analytics/executions/paginated"
+    assert params.get("pageSize") == 25
+    assert "limit" not in params
+    # "Recent" must be explicit, not reliant on an endpoint default ordering.
+    assert params.get("sortField") == "routing.event_time"
+    assert params.get("sortOrder") == "desc"
+
+
+@pytest.mark.asyncio
 async def test_list_test_executions_maps_unprotected():
-    pa = FakeClient(responses={"/analytics/executions": {"data": [
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
         {"test_name": "Kerberoast", "hostname": "dc-01", "is_protected": False,
          "severity": "high", "techniques": ["T1558.003"]},
-    ], "totalCount": 1}})
+    ], "pagination": {"totalItems": 1}}})
     findings = await tools.list_test_executions(pa)
     assert findings[0].finding_type.value == "misconfig"
     assert findings[0].severity.value == "high"
@@ -130,10 +146,24 @@ async def test_list_test_executions_maps_unprotected():
 
 
 @pytest.mark.asyncio
-async def test_list_test_executions_hygiene_is_present_not_blocked():
-    # A cyber-hygiene control check is present/not-present, NOT blocked/not-blocked.
+async def test_list_test_executions_security_detected_not_blocked():
+    # The enriched endpoint carries defender_detected — a branch that was dead
+    # against the stripped /analytics/executions payload.
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
+        {"test_name": "Mimikatz", "hostname": "dc-01", "is_protected": False,
+         "defender_detected": True, "techniques": ["T1003"]},
+    ]}})
+    findings = await tools.list_test_executions(pa)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["outcome"] == "detected, not blocked" and ev["check_kind"] == "security"
+    assert any(r.id == "T1003" for r in findings[0].references)
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_hygiene_is_passed_not_blocked():
+    # A cyber-hygiene control check is passed/not-passed, NOT blocked/not-blocked.
     # (A missing password policy is a config gap, not a "detection miss".)
-    pa = FakeClient(responses={"/analytics/executions": {"data": [
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
         {"test_name": "Minimum Password Length", "hostname": "lt-01",
          "is_protected": False, "category": "cyber-hygiene", "severity": "high",
          "techniques": ["T1110"]},
@@ -142,24 +172,24 @@ async def test_list_test_executions_hygiene_is_present_not_blocked():
     ]}})
     findings = await tools.list_test_executions(pa)
     ev0 = {e.key: e.value for e in findings[0].evidence}
-    assert ev0["outcome"] == "not present" and ev0["check_kind"] == "cyber-hygiene"
-    assert "not present" in findings[0].title
+    assert ev0["outcome"] == "not passed" and ev0["check_kind"] == "cyber-hygiene"
+    assert "not passed" in findings[0].title
     assert findings[0].finding_type.value == "misconfig"
     ev1 = {e.key: e.value for e in findings[1].evidence}
-    assert ev1["outcome"] == "present"
+    assert ev1["outcome"] == "passed"
     assert findings[1].finding_type.value == "posture"
 
 
 @pytest.mark.asyncio
 async def test_list_test_executions_hygiene_ignores_defender_detected():
     # defender_detected is meaningless for a config check (no attack launched).
-    pa = FakeClient(responses={"/analytics/executions": {"data": [
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
         {"test_name": "Script Block Logging", "hostname": "lt-01",
          "is_protected": False, "defender_detected": True, "category": "cyber-hygiene"},
     ]}})
     findings = await tools.list_test_executions(pa)
     ev = {e.key: e.value for e in findings[0].evidence}
-    assert ev["outcome"] == "not present"  # NOT "detected, not blocked"
+    assert ev["outcome"] == "not passed"  # NOT "detected, not blocked"
 
 
 @pytest.mark.asyncio
@@ -167,12 +197,12 @@ async def test_list_test_executions_hygiene_tolerates_category_spelling():
     # A backend separator/case tweak must NOT silently fall back to the security
     # "NOT blocked" branch (a quiet regression of exactly what this fix prevents).
     for cat in ("cyber_hygiene", "Cyber Hygiene", "CYBER-HYGIENE", " cyber-hygiene "):
-        pa = FakeClient(responses={"/analytics/executions": {"data": [
+        pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
             {"test_name": "SMB Encryption", "hostname": "lt-01",
              "is_protected": False, "category": cat}]}})
         findings = await tools.list_test_executions(pa)
         ev = {e.key: e.value for e in findings[0].evidence}
-        assert ev["outcome"] == "not present", f"variant {cat!r} fell through to security"
+        assert ev["outcome"] == "not passed", f"variant {cat!r} fell through to security"
         assert ev["check_kind"] == "cyber-hygiene"
 
 
