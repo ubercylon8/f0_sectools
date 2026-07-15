@@ -225,6 +225,97 @@ def test_query_telemetry_redacts_secrets_in_nested_projection():
     assert "1.2.3.4" in ev["network_activity"]  # non-secret content preserved
 
 
+def test_query_telemetry_ignores_result_stream_metadata_objects():
+    # lc.query returns a STREAM of result objects: timeline/facets/timeseries
+    # (rows=None) alongside the events object (rows=[...]). Only real events count —
+    # the metadata objects must not become junk findings or inflate events_total.
+    stream = [
+        {"searchresultid": "1", "type": "timeline", "rows": None},
+        {"searchresultid": "2", "type": "facets", "facets": [], "rows": None},
+        {"type": "events", "rows": [
+            {"data": {"event/NETWORK_ACTIVITY": [{"DESTINATION": {"IP_ADDRESS": "20.1.1.1"}}]}},
+        ]},
+    ]
+    lc = FakeClient(query=stream)
+    findings = tools.query_telemetry(lc, hunt="network_connections")
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["events_total"] == "1"  # only the real event, not the 2 metadata objects
+    assert len(findings) == 1 + 1
+    ev1 = {e.key: e.value for e in findings[1].evidence}
+    assert "20.1.1.1" in ev1["network_activity"]
+    titles = " ".join(f.title for f in findings).lower()
+    assert "timeline" not in titles and "searchresult" not in titles
+
+
+def test_query_telemetry_domain_filter_routes_to_dns():
+    # "does host connect to microsoft.com" -> DNS_REQUEST filtered by domain, since
+    # NETWORK_CONNECTIONS carries IPs not domains. LCQL query filters support `contains`
+    # (`==`/`contains` are the documented operators); the summary flags that it's a
+    # SUBSTRING match so an analyst isn't misled by a lookalike (microsoft.com.evil.net).
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    findings = tools.query_telemetry(_Cap(), hostname="web-01", domain="microsoft.com")
+    q = captured["lcql"]
+    assert "DNS_REQUEST" in q
+    assert 'event/DOMAIN_NAME contains "microsoft.com"' in q
+    assert 'hostname == "web-01"' in q
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert "substring" in ev["domain_match"].lower()  # lookalike caveat surfaced
+
+
+def test_query_telemetry_domain_strips_leading_wildcard():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), domain="*.microsoft.com")
+    assert 'contains "microsoft.com"' in captured["lcql"]  # leading "*." stripped
+    assert 'contains "*.microsoft.com"' not in captured["lcql"]
+
+
+def test_query_telemetry_domain_rejects_injection():
+    lc = FakeClient(query=[{"rows": []}])
+    findings = tools.query_telemetry(lc, domain='x" | evil')
+    assert findings[0].finding_type.value == "posture"
+    assert "domain" in findings[0].title.lower()
+
+
+def test_query_telemetry_bare_wildcard_domain_falls_back_to_preset():
+    # domain="*." (or bare "*") strips to empty -> must NOT become contains "" (which
+    # matches every DNS record); fall back to the preset instead.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    for d in ("*.", "*"):
+        tools.query_telemetry(_Cap(), hunt="new_processes", domain=d)
+        assert "NEW_PROCESS" in captured["lcql"], f"domain={d!r} should fall back to preset"
+        assert 'contains ""' not in captured["lcql"]
+
+
+def test_query_telemetry_empty_domain_falls_back_to_preset():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="new_processes", domain="")
+    assert "NEW_PROCESS" in captured["lcql"]  # empty domain -> normal preset, not DNS
+
+
 def test_query_telemetry_never_blank_title():
     # An empty-string first projection must not yield a blank title.
     lc = FakeClient(query=[{"rows": [{"data": {"event/FILE_PATH": ""}}]}])

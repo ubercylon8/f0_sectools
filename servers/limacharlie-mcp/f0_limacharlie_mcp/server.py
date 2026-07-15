@@ -78,6 +78,7 @@ async def query_telemetry(
     hours_back: float = 24,
     limit: int = 50,
     hostname: str | None = None,
+    domain: str | None = None,
     lcql: str | None = None,
 ) -> list[dict[str, Any]]:
     """Hunt LimaCharlie endpoint (EDR sensor) telemetry with a guided preset — no LCQL needed.
@@ -86,13 +87,17 @@ async def query_telemetry(
     is LimaCharlie sensor telemetry only. Pick a `hunt` preset: new_processes,
     powershell_activity, dns_requests, or network_connections. hours_back bounds the
     window and may be fractional (0.25 = last 15 minutes). Set `hostname` to scope to
-    ONE sensor (e.g. "top processes on host X").
+    ONE sensor (e.g. "top processes on host X"). Set `domain` to check whether a host
+    resolved a domain (e.g. "does host X connect to microsoft.com") — it routes to DNS
+    lookups filtered by that domain (NETWORK_CONNECTIONS has IPs, not domains). The
+    domain filter is a SUBSTRING match, so the summary flags that lookalike domains
+    (microsoft.com.evil.net) can also match — confirm the returned domains are real.
     Returns a count plus one finding per event. Advanced: pass a raw `lcql` query to
     override the preset (shape: time | sensor-selector | event-types | filter | projection).
     """
     return _render(
         await asyncio.to_thread(
-            tools.query_telemetry, _client(), hunt, hours_back, limit, hostname, lcql
+            tools.query_telemetry, _client(), hunt, hours_back, limit, hostname, domain, lcql
         )
     )
 

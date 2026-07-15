@@ -190,8 +190,9 @@ _HUNT_PRESETS = {
     "network_connections": "{t} | {sel} | NETWORK_CONNECTIONS | * | event/NETWORK_ACTIVITY",
 }
 
-# LCQL string literals are double-quoted; only allow hostnames that can't break out.
+# LCQL string literals are double-quoted; only allow values that can't break out.
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_DOMAIN_RE = re.compile(r"^[A-Za-z0-9.*_-]+$")
 
 
 def _time_descriptor(hours_back: float) -> str:
@@ -212,14 +213,14 @@ def _flat_value(v: Any) -> str:
 
 
 def _telemetry_events(rows: Any) -> list[dict[str, Any]]:
-    """lc.query returns result ENVELOPES ({..., "rows": [event, ...]}), not flat
-    events — and one envelope can be hundreds of KB. Flatten to the actual events."""
+    """lc.query returns a STREAM of result objects ({..., "rows": [event, ...]}),
+    not flat events — and one can be hundreds of KB. Only the "events" object carries
+    a `rows` LIST; the others (type=timeline/facets/timeseries) have rows=None and are
+    search METADATA, not telemetry — extract only real event rows, drop the rest."""
     events: list[dict[str, Any]] = []
     for env in rows or []:
         if isinstance(env, dict) and isinstance(env.get("rows"), list):
             events.extend(e for e in env["rows"] if isinstance(e, dict))
-        elif isinstance(env, dict):
-            events.append(env)
     return events
 
 
@@ -229,14 +230,16 @@ def query_telemetry(
     hours_back: float = 24,
     limit: int = _MAX_ITEMS,
     hostname: str | None = None,
+    domain: str | None = None,
     lcql: str | None = None,
 ) -> list[Finding]:
     end = int(time.time())
     start = int(end - hours_back * 3600)
     # Scope is only meaningful on the guided preset path; a raw lcql override ignores
-    # `hostname`, so don't mislabel the summary/entity by it. An empty hostname ("",
-    # which a small model may emit for the optional arg) means unscoped, not invalid.
+    # `hostname`/`domain`, so don't mislabel the summary/entity by them. An empty
+    # value ("", which a small model may emit for an optional arg) means unset.
     scope_host = hostname if (hostname and lcql is None) else None
+    scope_domain: str | None = None  # set to the base domain actually queried, below
     if not lcql:
         if hostname and not _HOSTNAME_RE.match(hostname):
             return [
@@ -250,9 +253,39 @@ def query_telemetry(
                     ),
                 )
             ]
+        if domain and not _DOMAIN_RE.match(domain):
+            return [
+                Finding(
+                    source="limacharlie",
+                    finding_type=FindingType.posture,
+                    severity=Severity.info,
+                    title=f"Invalid domain '{domain}' — telemetry query not run",
+                    recommended_action=RecommendedAction(
+                        summary="domain may contain only letters, digits, '.', '*', '-', '_'.",
+                    ),
+                )
+            ]
         sel = f'hostname == "{hostname}"' if hostname else "*"
-        template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
-        lcql = template.format(t=_time_descriptor(hours_back), sel=sel)
+        td = _time_descriptor(hours_back)
+        # A leading "*." is a wildcard; strip it to the base domain. A base that is
+        # empty or all-wildcard (domain="", "*", "*.") is NOT a meaningful filter —
+        # it must fall through to the preset, never become `contains ""` (match-all).
+        base = domain[2:] if (domain and domain.startswith("*.")) else (domain or "")
+        if base.strip("*."):
+            # Domains live in DNS_REQUEST, not NETWORK_CONNECTIONS (which has IPs) —
+            # route domain questions to DNS. The LCQL query filter's documented string
+            # operators are `==` / `contains`; we use `contains` for the subdomain case
+            # (`==` alone would miss winatp-gw-eus.microsoft.com). `contains` is a
+            # SUBSTRING match, so the summary flags that lookalikes (microsoft.com.evil)
+            # can also match — an analyst must confirm the returned domains are real.
+            lcql = (
+                f'{td} | {sel} | DNS_REQUEST '
+                f'| event/DOMAIN_NAME contains "{base}" | event/DOMAIN_NAME'
+            )
+            scope_domain = base  # label matches what we actually queried
+        else:
+            template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
+            lcql = template.format(t=td, sel=sel)
     try:
         rows = lc.query(lcql, start, end, limit=limit)
     except Exception as e:
@@ -262,7 +295,22 @@ def query_telemetry(
         raise
     events = _telemetry_events(rows)
     total = len(events)
-    scope = f" on {scope_host}" if scope_host else ""
+    scope = "".join(
+        part for part in (
+            f" on {scope_host}" if scope_host else "",
+            f" matching {scope_domain}" if scope_domain else "",
+        )
+    )
+    summary_evidence = [
+        Evidence(key="events_total", value=str(total)),
+        Evidence(key="lcql", value=lcql),
+    ]
+    if scope_domain:
+        summary_evidence.append(Evidence(
+            key="domain_match",
+            value=f'substring contains "{scope_domain}" — also matches lookalikes '
+                  f"(e.g. {scope_domain}.evil.net); confirm the returned domains are real",
+        ))
     out: list[Finding] = [
         Finding(
             source="limacharlie",
@@ -275,10 +323,7 @@ def query_telemetry(
                 if scope_host
                 else None
             ),
-            evidence=[
-                Evidence(key="events_total", value=str(total)),
-                Evidence(key="lcql", value=lcql),
-            ],
+            evidence=summary_evidence,
             recommended_action=RecommendedAction(
                 summary="Review the events; refine the hunt/hostname to investigate further."
             ),
