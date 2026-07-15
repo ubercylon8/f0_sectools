@@ -60,9 +60,11 @@ async def list_dr_rules(namespace: str = "general", limit: int = 50) -> list[dic
 
 @mcp.tool()
 async def list_detections(
-    hours_back: int = 24, limit: int = 50, category: str | None = None
+    hours_back: float = 24, limit: int = 50, category: str | None = None
 ) -> list[dict[str, Any]]:
-    """List recent LimaCharlie detections (D&R hits) within the last hours_back hours."""
+    """List recent LimaCharlie detections (D&R hits) within the last hours_back hours.
+
+    hours_back may be fractional for short windows (e.g. 0.25 = last 15 minutes)."""
     return _render(
         await asyncio.to_thread(tools.list_detections, _client(), hours_back, limit, category)
     )
@@ -73,7 +75,7 @@ async def query_telemetry(
     hunt: Literal[
         "new_processes", "powershell_activity", "dns_requests", "network_connections"
     ] = "new_processes",
-    hours_back: int = 24,
+    hours_back: float = 24,
     limit: int = 50,
     hostname: str | None = None,
     lcql: str | None = None,
@@ -83,7 +85,8 @@ async def query_telemetry(
     For Microsoft Defender / KQL hunts, use run_hunting_query instead — this tool
     is LimaCharlie sensor telemetry only. Pick a `hunt` preset: new_processes,
     powershell_activity, dns_requests, or network_connections. hours_back bounds the
-    window. Set `hostname` to scope to ONE sensor (e.g. "top processes on host X").
+    window and may be fractional (0.25 = last 15 minutes). Set `hostname` to scope to
+    ONE sensor (e.g. "top processes on host X").
     Returns a count plus one finding per event. Advanced: pass a raw `lcql` query to
     override the preset (shape: time | sensor-selector | event-types | filter | projection).
     """

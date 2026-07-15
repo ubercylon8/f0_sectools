@@ -6,10 +6,12 @@ the live smoke test confirms the real field names.
 """
 from __future__ import annotations
 
+import json
 import re
 import time
 from typing import Any
 
+from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -138,10 +140,10 @@ _DET_SEV = {0: Severity.low, 1: Severity.low, 2: Severity.medium, 3: Severity.me
 
 
 def list_detections(
-    lc: Any, hours_back: int = 24, limit: int = _MAX_ITEMS, category: str | None = None
+    lc: Any, hours_back: float = 24, limit: int = _MAX_ITEMS, category: str | None = None
 ) -> list[Finding]:
     end = int(time.time())
-    start = end - hours_back * 3600
+    start = int(end - hours_back * 3600)
     try:
         raw = lc.list_detections(start, end, limit=limit, category=category)
     except Exception as e:
@@ -192,6 +194,23 @@ _HUNT_PRESETS = {
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
+def _time_descriptor(hours_back: float) -> str:
+    """LCQL relative-time token. Whole hours -> '-Nh'; sub-hour -> '-Nm' (minutes),
+    so a small model asking for '15 minutes' (hours_back=0.25) works."""
+    if hours_back >= 1 and float(hours_back).is_integer():
+        return f"-{int(hours_back)}h"
+    return f"-{max(1, round(hours_back * 60))}m"
+
+
+def _flat_value(v: Any) -> str:
+    """Serialize an (already-redacted) projection value for evidence. Nested
+    (list/dict) projections like event/NETWORK_ACTIVITY are compact-JSON'd, not
+    dropped (dropping them produced empty findings). Bounded by the caller."""
+    if isinstance(v, dict | list):
+        return json.dumps(v, default=str)
+    return str(v)
+
+
 def _telemetry_events(rows: Any) -> list[dict[str, Any]]:
     """lc.query returns result ENVELOPES ({..., "rows": [event, ...]}), not flat
     events — and one envelope can be hundreds of KB. Flatten to the actual events."""
@@ -207,13 +226,13 @@ def _telemetry_events(rows: Any) -> list[dict[str, Any]]:
 def query_telemetry(
     lc: Any,
     hunt: str = "new_processes",
-    hours_back: int = 24,
+    hours_back: float = 24,
     limit: int = _MAX_ITEMS,
     hostname: str | None = None,
     lcql: str | None = None,
 ) -> list[Finding]:
     end = int(time.time())
-    start = end - hours_back * 3600
+    start = int(end - hours_back * 3600)
     # Scope is only meaningful on the guided preset path; a raw lcql override ignores
     # `hostname`, so don't mislabel the summary/entity by it. An empty hostname ("",
     # which a small model may emit for the optional arg) means unscoped, not invalid.
@@ -233,7 +252,7 @@ def query_telemetry(
             ]
         sel = f'hostname == "{hostname}"' if hostname else "*"
         template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
-        lcql = template.format(t=f"-{hours_back}h", sel=sel)
+        lcql = template.format(t=_time_descriptor(hours_back), sel=sel)
     try:
         rows = lc.query(lcql, start, end, limit=limit)
     except Exception as e:
@@ -267,13 +286,20 @@ def query_telemetry(
     ]
     for ev in events[:limit]:
         data = ev.get("data") if isinstance(ev.get("data"), dict) else ev
-        data = data or {}
+        # Redact the whole event data ONCE, before anything is flattened to a string:
+        # key-hint redaction (e.g. an event/CLIENT_SECRET field) + value patterns +
+        # nested keys. Stringifying first defeats redact_obj's key-hint pass, and a
+        # secret-named field becomes the VALUE of Evidence.key (which the boundary,
+        # keying off 'key'/'value', can't redact). The server boundary redacts again.
+        data = redact_obj(data or {})
         ev_evidence = [
-            Evidence(key=str(k).split("/")[-1].lower(), value=str(v)[:300])
+            Evidence(key=str(k).split("/")[-1].lower(), value=_flat_value(v)[:300])
             for k, v in list(data.items())[:6]
-            if not isinstance(v, dict | list)
         ]
-        title = next((str(v) for v in data.values() if isinstance(v, str) and v), "telemetry event")
+        title = next((str(v) for v in data.values() if isinstance(v, str) and v), "")
+        if not title and data:
+            title = _flat_value(next(iter(data.values())))
+        title = title or "telemetry event"
         out.append(
             Finding(
                 source="limacharlie",

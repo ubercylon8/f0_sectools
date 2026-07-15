@@ -173,6 +173,77 @@ def test_query_telemetry_empty_hostname_runs_unscoped():
     assert findings[0].entity is None  # no host scope labelled
 
 
+def test_query_telemetry_supports_sub_hour_window():
+    # A small model naturally expresses "last 15 minutes" as hours_back=0.25.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            captured["start"] = start
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="dns_requests", hours_back=0.25)
+    assert captured["lcql"].startswith("-15m ")  # minutes, not a rejected fractional hour
+    assert isinstance(captured["start"], int)
+
+
+def test_query_telemetry_whole_hours_use_hour_descriptor():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="dns_requests", hours_back=24)
+    assert captured["lcql"].startswith("-24h ")
+
+
+def test_query_telemetry_renders_nested_event_data():
+    # NETWORK_CONNECTIONS projects event/NETWORK_ACTIVITY as a nested list — it must
+    # surface, not be dropped as a non-scalar (which produced empty findings).
+    net = [{"DESTINATION": {"IP_ADDRESS": "18.190.167.133", "PORT": 443},
+            "PROTOCOL": "tcp4", "IS_OUTGOING": 1}]
+    lc = FakeClient(query=[{"rows": [{"data": {"event/NETWORK_ACTIVITY": net}}]}])
+    findings = tools.query_telemetry(lc, hunt="network_connections")
+    ev = {e.key: e.value for e in findings[1].evidence}
+    assert "network_activity" in ev
+    assert "18.190.167.133" in ev["network_activity"]  # nested content surfaced
+    assert findings[1].title != "telemetry event"
+
+
+def test_query_telemetry_redacts_secrets_in_nested_projection():
+    # A nested projection value carrying a secret-named key must be key-hint redacted
+    # BEFORE it's flattened to a string — else stringification defeats redact_obj's
+    # key-hint pass and a low-entropy secret would leak (Critical Rule 3).
+    nested = [{"password": "hunter2", "DESTINATION": {"IP_ADDRESS": "1.2.3.4"}}]
+    lc = FakeClient(query=[{"rows": [{"data": {"event/NETWORK_ACTIVITY": nested}}]}])
+    findings = tools.query_telemetry(lc, hunt="network_connections")
+    ev = {e.key: e.value for e in findings[1].evidence}
+    assert "hunter2" not in ev["network_activity"]  # redacted
+    assert "1.2.3.4" in ev["network_activity"]  # non-secret content preserved
+
+
+def test_query_telemetry_never_blank_title():
+    # An empty-string first projection must not yield a blank title.
+    lc = FakeClient(query=[{"rows": [{"data": {"event/FILE_PATH": ""}}]}])
+    findings = tools.query_telemetry(lc, hunt="new_processes")
+    assert findings[1].title == "telemetry event"
+
+
+def test_query_telemetry_redacts_secret_named_scalar_projection():
+    # A scalar under a secret-NAMED projection field must also be redacted: the field
+    # name becomes the VALUE of Evidence.key, so the boundary redact_obj (which keys
+    # off dict keys 'key'/'value') can't key-hint-redact it. Redact at the data level.
+    lc = FakeClient(query=[{"rows": [{"data": {
+        "event/CLIENT_SECRET": "hunter2", "event/FILE_PATH": "C:\\ok.exe"}}]}])
+    findings = tools.query_telemetry(lc, hunt="new_processes")
+    ev = {e.key: e.value for e in findings[1].evidence}
+    assert "hunter2" not in ev["client_secret"]  # redacted
+    assert ev["file_path"] == "C:\\ok.exe"  # non-secret preserved
+
+
 def test_query_telemetry_lcql_override_does_not_mislabel_scope():
     # Raw lcql override ignores hostname for the query, so it must not label scope by it.
     lc = FakeClient(query=[{"rows": [{"data": {"event/DOMAIN_NAME": "x"}}]}])
