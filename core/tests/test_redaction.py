@@ -29,3 +29,15 @@ def test_redacts_additional_secret_key_hints():
     assert out["cookie"] == "«redacted»"
     assert out["session_id"] == "«redacted»"
     assert out["host"] == "web-01"
+
+
+def test_redacts_camelcase_secret_keys():
+    # Underscore normalization makes multi-word hints catch camelCase too — Graph
+    # servers (Entra/Defender/Intune) emit sessionId/privateKey/clientSecret.
+    out = redact_obj({
+        "sessionId": "x", "privateKey": "y", "clientSecret": "z", "host": "web-01",
+    })
+    assert out["sessionId"] == "«redacted»"
+    assert out["privateKey"] == "«redacted»"
+    assert out["clientSecret"] == "«redacted»"
+    assert out["host"] == "web-01"

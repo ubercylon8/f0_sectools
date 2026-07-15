@@ -18,8 +18,11 @@ def redact_text(text: str) -> str:
 
 
 def _key_is_secret(key: str) -> bool:
-    k = key.lower()
-    return any(hint in k for hint in SECRET_KEY_HINTS)
+    # Normalize underscores so multi-word hints match both snake_case and camelCase
+    # (e.g. `session_id` catches `SESSION_ID` and `sessionId`; Graph servers emit the
+    # latter, LimaCharlie the former).
+    k = key.lower().replace("_", "")
+    return any(hint.replace("_", "") in k for hint in SECRET_KEY_HINTS)
 
 
 def redact_obj(obj: Any) -> Any:
