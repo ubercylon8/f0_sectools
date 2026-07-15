@@ -134,7 +134,8 @@ async def test_get_compliance_summary_counts():
             findings = await get_compliance_summary(gc)
     assert findings[0].finding_type.value == "posture"
     ev = {e.key: e.value for e in findings[0].evidence}
-    assert ev["compliant"] == "40" and ev["noncompliant"] == "5"
+    assert ev["devices_compliant"] == "40" and ev["devices_noncompliant"] == "5"
+    assert ev["devices_total"]  # keys name the counted noun (devices), not bare
     assert findings[0].severity.value in ("low", "medium", "high")  # 5 noncompliant present
 
 

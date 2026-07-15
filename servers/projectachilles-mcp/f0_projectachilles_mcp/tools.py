@@ -301,9 +301,9 @@ async def get_fleet_health(pa: Any) -> list[Finding]:
             title=f"Agent fleet: {online}/{total} online",
             entity=Entity(kind=EntityKind.tenant, id="fleet"),
             evidence=[
-                Evidence(key="online", value=str(online)),
-                Evidence(key="offline", value=str(m.get("offline", 0))),
-                Evidence(key="total", value=str(total)),
+                Evidence(key="agents_online", value=str(online)),
+                Evidence(key="agents_offline", value=str(m.get("offline", 0))),
+                Evidence(key="agents_total", value=str(total)),
                 Evidence(key="pending_tasks", value=str(m.get("pending_tasks", 0))),
             ],
         )

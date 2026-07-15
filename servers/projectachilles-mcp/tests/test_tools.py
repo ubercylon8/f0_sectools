@@ -153,6 +153,9 @@ async def test_get_fleet_health_maps():
     findings = await tools.get_fleet_health(pa)
     assert findings[0].finding_type.value == "posture"
     assert "8/10" in findings[0].title
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["agents_total"] == "10" and ev["agents_online"] == "8"
+    assert not ({"total", "online", "offline"} & set(ev))  # noun-carrying keys
 
 
 @pytest.mark.asyncio
