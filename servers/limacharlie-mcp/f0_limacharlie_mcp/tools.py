@@ -11,6 +11,7 @@ import re
 import time
 from typing import Any
 
+from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -203,10 +204,12 @@ def _time_descriptor(hours_back: float) -> str:
 
 def _flat_value(v: Any) -> str:
     """Render a projection value for evidence. Nested (list/dict) projections like
-    event/NETWORK_ACTIVITY are compact-JSON'd, not dropped (dropping them produced
-    empty findings). Bounded by the caller's truncation."""
+    event/NETWORK_ACTIVITY are REDACTED then compact-JSON'd, not dropped (dropping
+    them produced empty findings). Redacting before serializing preserves redact_obj's
+    key-hint pass, which stringification would otherwise defeat. Bounded by the
+    caller's truncation; the server boundary runs redact_obj again on top."""
     if isinstance(v, dict | list):
-        return json.dumps(v, default=str)
+        return json.dumps(redact_obj(v), default=str)
     return str(v)
 
 

@@ -213,6 +213,18 @@ def test_query_telemetry_renders_nested_event_data():
     assert findings[1].title != "telemetry event"
 
 
+def test_query_telemetry_redacts_secrets_in_nested_projection():
+    # A nested projection value carrying a secret-named key must be key-hint redacted
+    # BEFORE it's flattened to a string — else stringification defeats redact_obj's
+    # key-hint pass and a low-entropy secret would leak (Critical Rule 3).
+    nested = [{"password": "hunter2", "DESTINATION": {"IP_ADDRESS": "1.2.3.4"}}]
+    lc = FakeClient(query=[{"rows": [{"data": {"event/NETWORK_ACTIVITY": nested}}]}])
+    findings = tools.query_telemetry(lc, hunt="network_connections")
+    ev = {e.key: e.value for e in findings[1].evidence}
+    assert "hunter2" not in ev["network_activity"]  # redacted
+    assert "1.2.3.4" in ev["network_activity"]  # non-secret content preserved
+
+
 def test_query_telemetry_lcql_override_does_not_mislabel_scope():
     # Raw lcql override ignores hostname for the query, so it must not label scope by it.
     lc = FakeClient(query=[{"rows": [{"data": {"event/DOMAIN_NAME": "x"}}]}])
