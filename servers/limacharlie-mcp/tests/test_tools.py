@@ -247,11 +247,11 @@ def test_query_telemetry_ignores_result_stream_metadata_objects():
     assert "timeline" not in titles and "searchresult" not in titles
 
 
-def test_query_telemetry_domain_filter_routes_to_dns():
+def test_query_telemetry_domain_filter_routes_to_dns_anchored():
     # "does host connect to microsoft.com" -> DNS_REQUEST filtered by domain, since
-    # NETWORK_CONNECTIONS carries IPs not domains. LCQL query filters support `contains`
-    # (`==`/`contains` are the documented operators); the summary flags that it's a
-    # SUBSTRING match so an analyst isn't misled by a lookalike (microsoft.com.evil.net).
+    # NETWORK_CONNECTIONS carries IPs not domains. Boundary-anchored (exact apex OR a
+    # proper subdomain), NOT a bare `contains`, so a lookalike (microsoft.com.evil.net)
+    # does NOT match. (`is`/`ends with`/`or` confirmed valid in the LCQL query filter.)
     captured = {}
 
     class _Cap(FakeClient):
@@ -259,13 +259,13 @@ def test_query_telemetry_domain_filter_routes_to_dns():
             captured["lcql"] = lcql
             return [{"rows": []}]
 
-    findings = tools.query_telemetry(_Cap(), hostname="web-01", domain="microsoft.com")
+    tools.query_telemetry(_Cap(), hostname="web-01", domain="microsoft.com")
     q = captured["lcql"]
     assert "DNS_REQUEST" in q
-    assert 'event/DOMAIN_NAME contains "microsoft.com"' in q
+    assert 'event/DOMAIN_NAME is "microsoft.com"' in q
+    assert 'event/DOMAIN_NAME ends with ".microsoft.com"' in q
+    assert 'contains "microsoft.com"' not in q  # anchored, not substring — no lookalike FPs
     assert 'hostname == "web-01"' in q
-    ev = {e.key: e.value for e in findings[0].evidence}
-    assert "substring" in ev["domain_match"].lower()  # lookalike caveat surfaced
 
 
 def test_query_telemetry_domain_strips_leading_wildcard():
@@ -277,8 +277,9 @@ def test_query_telemetry_domain_strips_leading_wildcard():
             return [{"rows": []}]
 
     tools.query_telemetry(_Cap(), domain="*.microsoft.com")
-    assert 'contains "microsoft.com"' in captured["lcql"]  # leading "*." stripped
-    assert 'contains "*.microsoft.com"' not in captured["lcql"]
+    q = captured["lcql"]
+    assert 'is "microsoft.com"' in q  # leading "*." stripped to the base domain
+    assert 'ends with ".microsoft.com"' in q
 
 
 def test_query_telemetry_domain_rejects_injection():
