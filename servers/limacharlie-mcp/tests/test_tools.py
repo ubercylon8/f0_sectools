@@ -83,11 +83,78 @@ def test_list_dr_rules_maps():
     assert any("win-creds-dump" in f.title for f in findings)
 
 
-def test_query_telemetry_preset_maps():
-    lc = FakeClient(query=[{"event": {"FILE_PATH": "x"}}, {"event": {"FILE_PATH": "y"}}])
+def test_get_sensor_renders_full_record():
+    # find_sensor now returns full sensor dicts (via list_sensors with_hostname_prefix),
+    # not the minimal {"sid": [[sid, hostname]]} shape of find_sensors_by_hostname.
+    lc = FakeClient(find_sensor=[
+        {"sid": "07531c60", "hostname": "sbl7203.supernet.gov.do",
+         "plat": 0x10000000, "is_online": True},
+    ])
+    findings = tools.get_sensor(lc, "sbl7203")
+    assert findings[0].entity.name == "sbl7203.supernet.gov.do"
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["online"] == "True" and ev["platform"] == "windows"
+    assert "online" in findings[0].title
+
+
+def test_get_sensor_not_found():
+    lc = FakeClient(find_sensor=[])
+    findings = tools.get_sensor(lc, "nope")
+    assert "No sensor found" in findings[0].title
+
+
+# Live shape: lc.query returns result ENVELOPES; the events are nested under `.rows`.
+_ENVELOPE = [{
+    "searchResultId": "1", "type": "events",
+    "rows": [
+        {"mtd": {"id": "a"}, "data": {"event/FILE_PATH": "C:\\a.exe",
+                                      "event/COMMAND_LINE": "a.exe -x"}},
+        {"mtd": {"id": "b"}, "data": {"event/FILE_PATH": "C:\\b.exe",
+                                      "event/COMMAND_LINE": "b.exe"}},
+    ],
+}]
+
+
+def test_query_telemetry_flattens_envelope_into_per_event_findings():
+    lc = FakeClient(query=_ENVELOPE)
     findings = tools.query_telemetry(lc, hunt="new_processes")
+    # a leading summary + one finding PER EVENT (not one 700KB str(envelope) blob)
     assert findings[0].finding_type.value == "hunt_result"
     assert "2" in findings[0].title
+    assert len(findings) == 1 + 2
+    ev = {e.key: e.value for e in findings[1].evidence}
+    assert ev["file_path"] == "C:\\a.exe"
+    assert "a.exe" in ev["command_line"]
+
+
+def test_query_telemetry_bounds_events_but_counts_all():
+    rows = [{"mtd": {}, "data": {"event/FILE_PATH": f"f{i}"}} for i in range(60)]
+    lc = FakeClient(query=[{"rows": rows}])
+    findings = tools.query_telemetry(lc, hunt="new_processes", limit=5)
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["events_total"] == "60"
+    assert len(findings) == 1 + 5  # summary + 5 events (bounded), count stays exact
+
+
+def test_query_telemetry_scopes_preset_to_hostname():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="new_processes", hostname="sbl7203.supernet.gov.do")
+    assert 'hostname == "sbl7203.supernet.gov.do"' in captured["lcql"]
+    assert "NEW_PROCESS" in captured["lcql"]
+    assert " * " in f" {captured['lcql']} " or "|" in captured["lcql"]  # still valid LCQL shape
+
+
+def test_query_telemetry_rejects_injection_in_hostname():
+    lc = FakeClient(query=[{"rows": []}])
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname='x" | delete')
+    assert findings[0].finding_type.value == "posture"
+    assert "hostname" in findings[0].title.lower()
 
 
 def test_query_telemetry_lcql_override():
@@ -96,7 +163,7 @@ def test_query_telemetry_lcql_override():
     class _Cap(FakeClient):
         def query(self, lcql, start, end, limit=50):
             captured["lcql"] = lcql
-            return [{"event": {"x": 1}}]
+            return [{"rows": [{"data": {"event/DOMAIN_NAME": "evil.com"}}]}]
 
     findings = tools.query_telemetry(_Cap(), lcql="-1h | * | DNS_REQUEST | * | event/DOMAIN_NAME")
     assert "DNS_REQUEST" in captured["lcql"]  # raw lcql passed through, not a preset

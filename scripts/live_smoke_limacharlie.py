@@ -12,6 +12,7 @@ up as a posture finding (graceful degradation), not a crash.
 from __future__ import annotations
 
 import json
+import os
 
 from dotenv import load_dotenv
 from f0_limacharlie_mcp import tools
@@ -20,6 +21,10 @@ from f0_sectools_core.auth.config import LimaCharlieConfig
 from f0_sectools_core.redaction.redact import redact_obj
 
 load_dotenv(".env.limacharlie")
+
+# Optional: set LIMACHARLIE_SMOKE_HOSTNAME to a real sensor to exercise host-scoping.
+# Empty -> the host-scoped call runs unscoped (all sensors), still valid.
+SMOKE_HOSTNAME = os.getenv("LIMACHARLIE_SMOKE_HOSTNAME", "")
 
 
 
@@ -41,6 +46,13 @@ def main() -> None:
         ("list_dr_rules", lambda: tools.list_dr_rules(lc, limit=5)),
         ("list_detections", lambda: tools.list_detections(lc, hours_back=168, limit=5)),
         ("query_telemetry", lambda: tools.query_telemetry(lc, hunt="new_processes", limit=3)),
+        # Host-scoped: exercises the `hostname` selector + envelope flattening.
+        (
+            "query_telemetry(host-scoped)",
+            lambda: tools.query_telemetry(
+                lc, hunt="new_processes", hostname=SMOKE_HOSTNAME, limit=3
+            ),
+        ),
     ]:
         try:
             _show(label, fn())

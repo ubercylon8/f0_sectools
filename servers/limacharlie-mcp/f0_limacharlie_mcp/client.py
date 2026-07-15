@@ -27,8 +27,11 @@ class LimaCharlieClient:
     def list_sensors(self, online_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
         return list(self._org.list_sensors(is_online_only=online_only, limit=limit))
 
-    def find_sensor(self, hostname: str) -> dict[str, Any]:
-        return self._org.find_sensors_by_hostname(hostname)
+    def find_sensor(self, hostname: str) -> list[dict[str, Any]]:
+        # find_sensors_by_hostname returns only {"sid": [[sid, hostname], ...]} — no
+        # platform/online detail. list_sensors(with_hostname_prefix=...) returns the
+        # FULL sensor dicts (same shape as list_sensors), which the tool can render.
+        return list(self._org.list_sensors(with_hostname_prefix=hostname))
 
     def list_dr_rules(self, namespace: str = "general") -> dict[str, Any]:
         return DRRules(self._org).list(namespace=namespace)
