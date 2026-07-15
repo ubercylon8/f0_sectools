@@ -225,6 +225,13 @@ def test_query_telemetry_redacts_secrets_in_nested_projection():
     assert "1.2.3.4" in ev["network_activity"]  # non-secret content preserved
 
 
+def test_query_telemetry_never_blank_title():
+    # An empty-string first projection must not yield a blank title.
+    lc = FakeClient(query=[{"rows": [{"data": {"event/FILE_PATH": ""}}]}])
+    findings = tools.query_telemetry(lc, hunt="new_processes")
+    assert findings[1].title == "telemetry event"
+
+
 def test_query_telemetry_redacts_secret_named_scalar_projection():
     # A scalar under a secret-NAMED projection field must also be redacted: the field
     # name becomes the VALUE of Evidence.key, so the boundary redact_obj (which keys

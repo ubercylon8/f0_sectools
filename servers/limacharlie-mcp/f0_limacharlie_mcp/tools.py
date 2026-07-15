@@ -296,10 +296,10 @@ def query_telemetry(
             Evidence(key=str(k).split("/")[-1].lower(), value=_flat_value(v)[:300])
             for k, v in list(data.items())[:6]
         ]
-        title = next(
-            (str(v) for v in data.values() if isinstance(v, str) and v),
-            (_flat_value(next(iter(data.values()))) if data else "telemetry event"),
-        )
+        title = next((str(v) for v in data.values() if isinstance(v, str) and v), "")
+        if not title and data:
+            title = _flat_value(next(iter(data.values())))
+        title = title or "telemetry event"
         out.append(
             Finding(
                 source="limacharlie",

@@ -15,3 +15,17 @@ def test_redacts_nested():
     out = redact_obj({"creds": {"password": "hunter2hunter2"}, "items": ["ok"]})
     assert out["creds"]["password"] == "«redacted»"
     assert out["items"] == ["ok"]
+
+
+def test_redacts_additional_secret_key_hints():
+    # Low-entropy secrets under these keys wouldn't match a value pattern, so the
+    # key-hint pass must catch them (private_key/credential/cookie/session_id).
+    out = redact_obj({
+        "private_key": "abc", "credentials": "u:p", "cookie": "sid=1",
+        "session_id": "xyz", "host": "web-01",
+    })
+    assert out["private_key"] == "«redacted»"
+    assert out["credentials"] == "«redacted»"
+    assert out["cookie"] == "«redacted»"
+    assert out["session_id"] == "«redacted»"
+    assert out["host"] == "web-01"
