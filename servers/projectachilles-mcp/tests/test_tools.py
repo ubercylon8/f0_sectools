@@ -71,9 +71,25 @@ async def test_get_defense_score_surfaces_risk_adjusted_fields():
     findings = await tools.get_defense_score(pa)
     assert "52" in findings[0].title
     ev = {e.key: e.value for e in findings[0].evidence}
-    assert ev["risk_accepted"] == "83"
+    assert ev["tests_risk_accepted"] == "83"
     assert ev["score_before_exclusions"] == "51.8%"
     assert ev["score_blocked_only"] == "52.0%"
+
+
+@pytest.mark.asyncio
+async def test_get_defense_score_evidence_keys_name_the_counted_noun():
+    # Bare keys ("total", "protected") let a small model confabulate the noun —
+    # it rendered `total` (=totalExecutions) as "Total HOSTS tested". Keys must
+    # say what is counted: test executions / results, not hosts.
+    pa = FakeClient(responses={"/analytics/defense-score": {
+        "score": 50, "protectedCount": 80, "detectedCount": 10,
+        "unprotectedCount": 82, "totalExecutions": 172, "riskAcceptedCount": 5}})
+    findings = await tools.get_defense_score(pa)
+    keys = {e.key for e in findings[0].evidence}
+    assert {"total_tests", "tests_protected", "tests_detected",
+            "tests_unprotected"} <= keys
+    # the bare, noun-less keys are gone
+    assert not ({"total", "protected", "detected", "unprotected"} & keys)
 
 
 @pytest.mark.asyncio

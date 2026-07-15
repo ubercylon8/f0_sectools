@@ -78,12 +78,15 @@ async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
             return [finding]
         raise
     score = float(d.get("score", 0) or 0)
+    # Keys name what is counted — test executions/results, NOT hosts. Bare keys
+    # ("total"/"protected") led a small model to render this as "Total hosts
+    # tested"; the counts are per test execution.
     evidence = [
-        Evidence(key="protected", value=str(d.get("protectedCount", 0))),
-        Evidence(key="detected", value=str(d.get("detectedCount", 0))),
-        Evidence(key="unprotected", value=str(d.get("unprotectedCount", 0))),
-        Evidence(key="total", value=str(d.get("totalExecutions", 0))),
-        Evidence(key="risk_accepted", value=str(d.get("riskAcceptedCount", 0))),
+        Evidence(key="tests_protected", value=str(d.get("protectedCount", 0))),
+        Evidence(key="tests_detected", value=str(d.get("detectedCount", 0))),
+        Evidence(key="tests_unprotected", value=str(d.get("unprotectedCount", 0))),
+        Evidence(key="total_tests", value=str(d.get("totalExecutions", 0))),
+        Evidence(key="tests_risk_accepted", value=str(d.get("riskAcceptedCount", 0))),
     ]
     raw = d.get("rawScore")
     if raw is not None:
