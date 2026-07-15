@@ -212,14 +212,14 @@ def _flat_value(v: Any) -> str:
 
 
 def _telemetry_events(rows: Any) -> list[dict[str, Any]]:
-    """lc.query returns result ENVELOPES ({..., "rows": [event, ...]}), not flat
-    events — and one envelope can be hundreds of KB. Flatten to the actual events."""
+    """lc.query returns a STREAM of result objects ({..., "rows": [event, ...]}),
+    not flat events — and one can be hundreds of KB. Only the "events" object carries
+    a `rows` LIST; the others (type=timeline/facets/timeseries) have rows=None and are
+    search METADATA, not telemetry — extract only real event rows, drop the rest."""
     events: list[dict[str, Any]] = []
     for env in rows or []:
         if isinstance(env, dict) and isinstance(env.get("rows"), list):
             events.extend(e for e in env["rows"] if isinstance(e, dict))
-        elif isinstance(env, dict):
-            events.append(env)
     return events
 
 

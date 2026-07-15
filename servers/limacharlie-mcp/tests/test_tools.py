@@ -225,6 +225,28 @@ def test_query_telemetry_redacts_secrets_in_nested_projection():
     assert "1.2.3.4" in ev["network_activity"]  # non-secret content preserved
 
 
+def test_query_telemetry_ignores_result_stream_metadata_objects():
+    # lc.query returns a STREAM of result objects: timeline/facets/timeseries
+    # (rows=None) alongside the events object (rows=[...]). Only real events count —
+    # the metadata objects must not become junk findings or inflate events_total.
+    stream = [
+        {"searchresultid": "1", "type": "timeline", "rows": None},
+        {"searchresultid": "2", "type": "facets", "facets": [], "rows": None},
+        {"type": "events", "rows": [
+            {"data": {"event/NETWORK_ACTIVITY": [{"DESTINATION": {"IP_ADDRESS": "20.1.1.1"}}]}},
+        ]},
+    ]
+    lc = FakeClient(query=stream)
+    findings = tools.query_telemetry(lc, hunt="network_connections")
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["events_total"] == "1"  # only the real event, not the 2 metadata objects
+    assert len(findings) == 1 + 1
+    ev1 = {e.key: e.value for e in findings[1].evidence}
+    assert "20.1.1.1" in ev1["network_activity"]
+    titles = " ".join(f.title for f in findings).lower()
+    assert "timeline" not in titles and "searchresult" not in titles
+
+
 def test_query_telemetry_never_blank_title():
     # An empty-string first projection must not yield a blank title.
     lc = FakeClient(query=[{"rows": [{"data": {"event/FILE_PATH": ""}}]}])
