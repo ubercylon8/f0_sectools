@@ -87,6 +87,24 @@ async def get_fleet_health() -> list[dict[str, Any]]:
         return _render(await tools.get_fleet_health(pa))
 
 
+@mcp.tool()
+async def find_tests(by: str, value: str, limit: int = 25) -> list[dict[str, Any]]:
+    """Search the ProjectAchilles TEST CATALOG — the library of tests that CAN be run,
+    not run history (use list_test_executions for history). by selects the dimension:
+    technique|actor|tactic|category|tag|keyword. Returns a match count plus the matching
+    tests (name, MITRE techniques, threat actor, OS, severity)."""
+    async with _client() as pa:
+        return _render(await tools.find_tests(pa, by, value, limit))
+
+
+@mcp.tool()
+async def get_test(test_id: str) -> list[dict[str, Any]]:
+    """Full detail for ONE catalog test — description, OS/target, complexity, tactics,
+    tags, MITRE techniques. test_id is a test uuid or an exact test name."""
+    async with _client() as pa:
+        return _render(await tools.get_test(pa, test_id))
+
+
 def main() -> None:
     mcp.run()
 
