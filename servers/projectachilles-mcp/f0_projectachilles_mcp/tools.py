@@ -198,11 +198,25 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
     for x in _rows(d)[:limit]:
         host = x.get("hostname", "")
         name = x.get("test_name", "test")
-        if x.get("is_protected"):
+        # PA runs two kinds of check (the `category` field). Cyber-hygiene rows are
+        # configuration/hardening checks — present vs NOT present — not attack
+        # simulations, so the blocked/detected vocabulary does not apply (a config
+        # check launches no attack; defender_detected is meaningless for it).
+        if str(x.get("category", "")).lower() == "cyber-hygiene":
+            kind = "cyber-hygiene"
+            if x.get("is_protected"):
+                sev, ftype, outcome = Severity.info, FindingType.posture, "present"
+            else:
+                sev = _SEV.get(str(x.get("severity", "high")).lower(), Severity.high)
+                ftype, outcome = FindingType.misconfig, "not present"
+        elif x.get("is_protected"):
+            kind = "security"
             sev, ftype, outcome = Severity.info, FindingType.posture, "blocked"
         elif x.get("defender_detected"):
+            kind = "security"
             sev, ftype, outcome = Severity.low, FindingType.misconfig, "detected, not blocked"
         else:
+            kind = "security"
             sev = _SEV.get(str(x.get("severity", "high")).lower(), Severity.high)
             ftype, outcome = FindingType.misconfig, "NOT blocked"
         ent = Entity(kind=EntityKind.host, id=str(host), name=str(host)) if host else None
@@ -213,7 +227,10 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
                 severity=sev,
                 title=f"{name}: {outcome} on {host}",
                 entity=ent,
-                evidence=[Evidence(key="outcome", value=outcome)],
+                evidence=[
+                    Evidence(key="outcome", value=outcome),
+                    Evidence(key="check_kind", value=kind),
+                ],
                 references=[Reference(type="mitre", id=t) for t in (x.get("techniques") or [])],
                 observed_at=x.get("timestamp"),
             )

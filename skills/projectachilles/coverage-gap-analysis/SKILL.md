@@ -26,8 +26,10 @@ Base tool names (runtime may prefix — see the ProjectAchilles server README):
 
 1. Call `get_weak_techniques` for the lowest-scoring MITRE techniques (the
    systemic gaps), each with a coverage % and severity.
-2. Call `list_test_executions` and focus on the results marked **NOT blocked**
-   (and "detected, not blocked") — these are concrete failures, per host.
+2. Call `list_test_executions`. It returns two kinds of check (see `check_kind`):
+   **attack simulations** — failures are **NOT blocked** / "detected, not blocked";
+   and **cyber-hygiene control checks** — failures are **not present** (a missing
+   config/hardening control). Focus on both, but describe each in its own terms.
 3. Correlate: which weak techniques show up as actual unblocked executions, and
    on which endpoints?
 4. Prioritize by severity and technique impact, then recommend specific control
@@ -42,8 +44,13 @@ Base tool names (runtime may prefix — see the ProjectAchilles server README):
 
 ## Pitfalls
 
-- A "blocked" result is good news — don't report it as a gap; focus on NOT
-  blocked / detected-not-blocked.
+- A "blocked" (or "present") result is good news — don't report it as a gap;
+  focus on NOT blocked / detected-not-blocked / not present.
+- **Security tests and cyber-hygiene checks are different.** A **not present**
+  result is a *missing configuration/hardening control* (e.g. a password policy),
+  NOT a "detection miss". Never explain a "not present" or "NOT blocked" result by
+  an agent being **offline** — that's a fabricated cause. Report the outcome the
+  tool returned and recommend the control/rule, not "bring the agent online".
 - Low-scoring techniques with very few executions may be noise; weigh by count.
 - Recommend fixes grounded in the findings; don't invent techniques or hosts.
 

@@ -125,6 +125,41 @@ async def test_list_test_executions_maps_unprotected():
     assert findings[0].finding_type.value == "misconfig"
     assert findings[0].severity.value == "high"
     assert "dc-01" in (findings[0].entity.name or "")
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["outcome"] == "NOT blocked" and ev["check_kind"] == "security"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_hygiene_is_present_not_blocked():
+    # A cyber-hygiene control check is present/not-present, NOT blocked/not-blocked.
+    # (A missing password policy is a config gap, not a "detection miss".)
+    pa = FakeClient(responses={"/analytics/executions": {"data": [
+        {"test_name": "Minimum Password Length", "hostname": "lt-01",
+         "is_protected": False, "category": "cyber-hygiene", "severity": "high",
+         "techniques": ["T1110"]},
+        {"test_name": "SMB Encryption", "hostname": "lt-01",
+         "is_protected": True, "category": "cyber-hygiene"},
+    ]}})
+    findings = await tools.list_test_executions(pa)
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["outcome"] == "not present" and ev0["check_kind"] == "cyber-hygiene"
+    assert "not present" in findings[0].title
+    assert findings[0].finding_type.value == "misconfig"
+    ev1 = {e.key: e.value for e in findings[1].evidence}
+    assert ev1["outcome"] == "present"
+    assert findings[1].finding_type.value == "posture"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_hygiene_ignores_defender_detected():
+    # defender_detected is meaningless for a config check (no attack launched).
+    pa = FakeClient(responses={"/analytics/executions": {"data": [
+        {"test_name": "Script Block Logging", "hostname": "lt-01",
+         "is_protected": False, "defender_detected": True, "category": "cyber-hygiene"},
+    ]}})
+    findings = await tools.list_test_executions(pa)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["outcome"] == "not present"  # NOT "detected, not blocked"
 
 
 @pytest.mark.asyncio
