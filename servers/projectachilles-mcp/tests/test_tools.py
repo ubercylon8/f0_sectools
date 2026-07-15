@@ -126,6 +126,9 @@ async def test_list_test_executions_uses_enriched_paginated_endpoint():
     assert path == "/analytics/executions/paginated"
     assert params.get("pageSize") == 25
     assert "limit" not in params
+    # "Recent" must be explicit, not reliant on an endpoint default ordering.
+    assert params.get("sortField") == "routing.event_time"
+    assert params.get("sortOrder") == "desc"
 
 
 @pytest.mark.asyncio

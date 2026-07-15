@@ -395,10 +395,18 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         # strips category/defender_detected/severity/techniques, which starves the
         # security-vs-hygiene branch below (cyber-hygiene then misreads as "NOT
         # blocked"). /executions/paginated returns EnrichedTestExecution rows under
-        # {"data": [...]}; it takes pageSize (max 100 server-side), not limit.
+        # {"data": [...]}; it takes pageSize (max 100 server-side, so limit>100 is
+        # silently capped at 100), not limit. Sort is passed EXPLICITLY (not left to
+        # the endpoint default) so "recent" is guaranteed most-recent-first.
         d = await pa.get(
             "/analytics/executions/paginated",
-            params={"from": frm, "to": to, "pageSize": limit},
+            params={
+                "from": frm,
+                "to": to,
+                "pageSize": limit,
+                "sortField": "routing.event_time",
+                "sortOrder": "desc",
+            },
         )
     except Exception as e:
         finding = map_pa_error(e, "ProjectAchilles test executions")
