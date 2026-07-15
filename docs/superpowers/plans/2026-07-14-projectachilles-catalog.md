@@ -150,7 +150,7 @@ Expected: FAIL — `AttributeError: module 'f0_projectachilles_mcp.tools' has no
 
 - [ ] **Step 3: Implement the helpers and `find_tests`**
 
-In `servers/projectachilles-mcp/f0_projectachilles_mcp/tools.py`, add `import re` under the existing stdlib imports (below `from datetime import ...`), and add this block after the existing `_rows` helper:
+In `servers/projectachilles-mcp/f0_projectachilles_mcp/tools.py`, add this block after the existing `_rows` helper (no new imports needed in this task — `re` is added in Task 2 where `_UUID_RE` uses it):
 
 ```python
 _FIND_BY = {"technique", "actor", "tactic", "category", "tag", "keyword"}
@@ -232,7 +232,9 @@ async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Find
         ev = _test_evidence(t)
         desc = str(t.get("description") or "").strip().replace("\n", " ")
         if desc:
-            ev.append(Evidence(key="description", value=desc[:197] + "..." if len(desc) > 200 else desc))
+            ev.append(
+                Evidence(key="description", value=desc[:197] + "..." if len(desc) > 200 else desc)
+            )
         out.append(
             Finding(
                 source="projectachilles",
@@ -315,7 +317,7 @@ async def test_get_test_by_uuid_404_is_graceful():
     pa = FakeClient(raise_on={"/browser/tests/": ProjectAchillesError(404, "not found")})
     findings = await tools.get_test(pa, _UUID)
     assert len(findings) == 1
-    assert "not found" in findings[0].title.lower()
+    assert "no test found" in findings[0].title.lower()
     assert findings[0].finding_type.value == "posture"
 
 
@@ -357,7 +359,7 @@ Expected: FAIL — `module 'f0_projectachilles_mcp.tools' has no attribute 'get_
 
 - [ ] **Step 3: Implement `get_test` and helpers**
 
-In `tools.py`, add to the imports `from .client import ProjectAchillesError` (next to `from .errors import map_pa_error`). Add `_UUID_RE` next to `_FIND_BY`:
+In `tools.py`, add `import re` under the existing stdlib imports (below `from datetime import ...`), and add `from .client import ProjectAchillesError` (next to `from .errors import map_pa_error`). Add `_UUID_RE` next to `_FIND_BY`:
 
 ```python
 _UUID_RE = re.compile(
@@ -619,7 +621,10 @@ In `scripts/live_smoke_projectachilles.py`, add these two entries to the `for la
 ```python
             # Catalog reads — the FIRST of these confirms /browser/tests auth
             # reachability with the pa_ key (the top live-validation risk).
-            ("find_tests(technique=T1110)", tools.find_tests(pa, by="technique", value="T1110", limit=5)),
+            (
+                "find_tests(technique=T1110)",
+                tools.find_tests(pa, by="technique", value="T1110", limit=5),
+            ),
             ("find_tests(actor=APT29)", tools.find_tests(pa, by="actor", value="APT29", limit=5)),
 ```
 
@@ -740,50 +745,80 @@ Claude-Session: https://claude.ai/code/session_01Va1ncSUtqQJyetofn2mJem"
 ### Task 7: Docs (tool counts + workflow)
 
 **Files:**
-- Modify: `CLAUDE.md` (PA tool count / skills list)
-- Modify: `README.md` (status + tool table 34 → 36)
-- Modify: `docs/user-guide/README.md` (one PA workflow line)
+- Modify: `README.md` (PA row 6→8; registered total 36→38; skills 20→21; scorecard pending-list)
+- Modify: `CLAUDE.md` (PA skills list + adjust the 20→21 skills count if present)
+- Modify: `docs/user-guide/workflows.md` (one PA catalog workflow section)
 
 **Interfaces:**
 - Consumes: nothing (documentation).
-- Produces: accurate tool counts and a discoverable catalog workflow.
+- Produces: accurate tool/skill counts and a discoverable catalog workflow.
 
-- [ ] **Step 1: Find the exact strings to update**
+> **Verified controller note (the numbers were checked against the live docs — use these exact values, do NOT re-derive from the spec's "34→36" which was wrong):** the current README says **36 registered tools** (line ~24) and the PA table row is **6** (line ~20). The two new catalog tools make registered = **38**. Separately, the scorecard sentence (line ~38) says "**34 tools registered at once**" — that 34 is the SCORECARD number and STAYS 34; `find_tests`/`get_test` are new and unevaluated, so they join the "pending their scorecard pass" parenthetical. Adding the skill takes the skills count **20 → 21**.
+
+- [ ] **Step 1: Confirm the exact current strings**
 
 Run:
 ```bash
-grep -rn "34" README.md | grep -i tool
-grep -rn "projectachilles" CLAUDE.md | grep -iE "skill|tool|defense-posture"
-grep -rn "explore-test-catalog\|find_tests\|catalog" docs/user-guide/README.md
+grep -n "registered tools\|portable\|agentskills.io skills" README.md
+grep -n "f0-projectachilles-mcp" README.md
+grep -n "34 tools registered at once" README.md
+grep -n "projectachilles/{defense-posture-review" CLAUDE.md
+grep -rn "ProjectAchilles" docs/user-guide/README.md | head
 ```
-Expected: locate the tool-count total (34) in the README tool table/status line, the PA skills list in `CLAUDE.md`, and confirm the user-guide has no catalog line yet.
+Expected: README line ~20 PA row shows `| 6 |`; line ~24 shows `**36 registered tools.**` and `20 portable ... skills`; line ~38 shows `34 tools registered at once`; CLAUDE.md line ~169 has the PA skills set; user-guide has PA workflows but no catalog line.
 
-- [ ] **Step 2: Update the README tool count**
+- [ ] **Step 2: Update the README PA row + capabilities (line ~20)**
 
-In `README.md`, change the total tool count from `34` to `36` wherever it appears in the status line and the tool table, and update the ProjectAchilles row from `6` to `8` read tools. (Use the exact surrounding text found in Step 1 — do not guess at counts for other servers.)
+Change the `f0-projectachilles-mcp` table row from `| 6 |` to `| 8 |`, and extend its capability list to include the catalog reads. Example (match the existing column formatting exactly):
+`| \`f0-projectachilles-mcp\` | ✅ live-validated | 8 | defense score, weak techniques, test executions, risk acceptances, agents, fleet health, test-catalog search, test detail |`
 
-- [ ] **Step 3: Update CLAUDE.md**
+- [ ] **Step 3: Update the README totals (line ~24)**
 
-In `CLAUDE.md`, add `explore-test-catalog` to the ProjectAchilles skills list (the `projectachilles/{defense-posture-review,coverage-gap-analysis,validation-fleet-review}` enumeration becomes `{defense-posture-review,coverage-gap-analysis,validation-fleet-review,explore-test-catalog}`), and note ProjectAchilles now exposes 8 read tools where the per-server counts are mentioned.
+Change `**36 registered tools.**` to `**38 registered tools.**`, and `20 portable [agentskills.io](https://agentskills.io) skills` to `21 portable [agentskills.io](https://agentskills.io) skills`. Change nothing else on that line.
 
-- [ ] **Step 4: Update the user guide**
+- [ ] **Step 4: Update the README scorecard parenthetical (line ~38) — keep 34**
 
-In `docs/user-guide/README.md`, add one ProjectAchilles workflow line for catalog lookup, e.g. under the ProjectAchilles workflows: `- **Explore the test catalog** — "how many tests for T1110?", "any tests for APT29?", "what does the Kerberoast test do?" (find_tests / get_test).`
+Do NOT change the number `34` in "all **34 tools registered at once**". Only extend the pending-tools parenthetical so the two new PA tools are listed as pending their scorecard pass. Change:
+`(the new Tenable \`list_vulnerability_assets\` and Defender \`hunt\` tools are pending their scorecard pass)`
+to:
+`(the new Tenable \`list_vulnerability_assets\`, Defender \`hunt\`, and ProjectAchilles \`find_tests\`/\`get_test\` tools are pending their scorecard pass)`
 
-- [ ] **Step 5: Verify counts are consistent**
+- [ ] **Step 5: Update CLAUDE.md (line ~169)**
+
+In the "Current skills" enumeration, change the ProjectAchilles set from `projectachilles/{defense-posture-review,coverage-gap-analysis,validation-fleet-review}` to `projectachilles/{defense-posture-review,coverage-gap-analysis,validation-fleet-review,explore-test-catalog}`. If CLAUDE.md states a total skills count of 20 anywhere, bump it to 21; if it names a PA read-tool count of 6, bump it to 8. Do not touch other servers' entries.
+
+- [ ] **Step 6: Update the user guide**
+
+The user-guide workflows live in `docs/user-guide/workflows.md` as `## Title (persona)` sections (a `> **Prompt:** "..."` line + a descriptive paragraph), NOT bullets. Insert a new section immediately AFTER the "ProjectAchilles validation fleet" section (i.e. after its paragraph ending "…the risks formally accepted.") and BEFORE "## Intune device compliance":
+
+```markdown
+## ProjectAchilles test catalog (detection engineer / threat hunter)
+
+> **Prompt:** "How many ProjectAchilles tests do we have for T1110, and what does the Kerberoast test cover?"
+
+The `explore-test-catalog` skill uses `find_tests` (by technique, actor, tactic,
+category, tag, or keyword) to enumerate the available tests — the library of what
+*can* be run, not run history — and `get_test` for one test's full detail
+(description, OS/target, techniques, tactics). Lead with the exact match count
+from the summary finding.
+```
+
+- [ ] **Step 7: Verify counts are consistent**
 
 Run:
 ```bash
-grep -rn "36" README.md | grep -i tool
+grep -n "38 registered tools\|21 portable" README.md
+grep -n "34 tools registered at once" README.md   # must STILL be present (unchanged)
+grep -n "explore-test-catalog" CLAUDE.md
 uv run pytest skills/test_skills_valid.py -q
 ```
-Expected: README shows 36 tools; skills still valid. (Markdown link check, if configured: `lychee README.md CLAUDE.md docs/user-guide/README.md` — advisory.)
+Expected: README shows `38 registered tools` and `21 portable`; the `34 tools registered at once` line is still present unchanged; CLAUDE.md lists `explore-test-catalog`; skills valid.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add README.md CLAUDE.md docs/user-guide/README.md
-git commit -m "docs: ProjectAchilles catalog tools (find_tests/get_test), 34->36 tools
+git add README.md CLAUDE.md docs/user-guide/workflows.md
+git commit -m "docs: ProjectAchilles catalog tools (find_tests/get_test), 36->38 registered
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Va1ncSUtqQJyetofn2mJem"
