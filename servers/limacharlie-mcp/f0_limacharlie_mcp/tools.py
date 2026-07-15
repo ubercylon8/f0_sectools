@@ -239,7 +239,7 @@ def query_telemetry(
     # `hostname`/`domain`, so don't mislabel the summary/entity by them. An empty
     # value ("", which a small model may emit for an optional arg) means unset.
     scope_host = hostname if (hostname and lcql is None) else None
-    scope_domain = domain if (domain and lcql is None) else None
+    scope_domain: str | None = None  # set to the base domain actually queried, below
     if not lcql:
         if hostname and not _HOSTNAME_RE.match(hostname):
             return [
@@ -269,13 +269,17 @@ def query_telemetry(
         td = _time_descriptor(hours_back)
         if domain:
             # Domains live in DNS_REQUEST, not NETWORK_CONNECTIONS (which has IPs) —
-            # route domain questions to DNS and filter with `contains`. Strip a leading
-            # "*." wildcard so `*.microsoft.com` matches via the substring contains.
-            needle = domain.lstrip("*.") or domain
+            # route domain questions to DNS. The LCQL query filter's documented string
+            # operators are `==` / `contains`; we use `contains` for the subdomain case
+            # (`==` alone would miss winatp-gw-eus.microsoft.com). `contains` is a
+            # SUBSTRING match, so the summary flags that lookalikes (microsoft.com.evil)
+            # can also match — an analyst must confirm the returned domains are real.
+            base = domain[2:] if domain.startswith("*.") else domain
             lcql = (
                 f'{td} | {sel} | DNS_REQUEST '
-                f'| event/DOMAIN_NAME contains "{needle}" | event/DOMAIN_NAME'
+                f'| event/DOMAIN_NAME contains "{base}" | event/DOMAIN_NAME'
             )
+            scope_domain = base  # label matches what we actually queried
         else:
             template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
             lcql = template.format(t=td, sel=sel)
@@ -294,6 +298,16 @@ def query_telemetry(
             f" matching {scope_domain}" if scope_domain else "",
         )
     )
+    summary_evidence = [
+        Evidence(key="events_total", value=str(total)),
+        Evidence(key="lcql", value=lcql),
+    ]
+    if scope_domain:
+        summary_evidence.append(Evidence(
+            key="domain_match",
+            value=f'substring contains "{scope_domain}" — also matches lookalikes '
+                  f"(e.g. {scope_domain}.evil.net); confirm the returned domains are real",
+        ))
     out: list[Finding] = [
         Finding(
             source="limacharlie",
@@ -306,10 +320,7 @@ def query_telemetry(
                 if scope_host
                 else None
             ),
-            evidence=[
-                Evidence(key="events_total", value=str(total)),
-                Evidence(key="lcql", value=lcql),
-            ],
+            evidence=summary_evidence,
             recommended_action=RecommendedAction(
                 summary="Review the events; refine the hunt/hostname to investigate further."
             ),

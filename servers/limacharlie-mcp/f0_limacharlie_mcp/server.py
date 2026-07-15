@@ -89,7 +89,9 @@ async def query_telemetry(
     window and may be fractional (0.25 = last 15 minutes). Set `hostname` to scope to
     ONE sensor (e.g. "top processes on host X"). Set `domain` to check whether a host
     resolved a domain (e.g. "does host X connect to microsoft.com") — it routes to DNS
-    lookups filtered by that domain (NETWORK_CONNECTIONS has IPs, not domains).
+    lookups filtered by that domain (NETWORK_CONNECTIONS has IPs, not domains). The
+    domain filter is a SUBSTRING match, so the summary flags that lookalike domains
+    (microsoft.com.evil.net) can also match — confirm the returned domains are real.
     Returns a count plus one finding per event. Advanced: pass a raw `lcql` query to
     override the preset (shape: time | sensor-selector | event-types | filter | projection).
     """

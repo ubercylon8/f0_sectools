@@ -247,9 +247,11 @@ def test_query_telemetry_ignores_result_stream_metadata_objects():
     assert "timeline" not in titles and "searchresult" not in titles
 
 
-def test_query_telemetry_domain_filter_routes_to_dns_contains():
+def test_query_telemetry_domain_filter_routes_to_dns():
     # "does host connect to microsoft.com" -> DNS_REQUEST filtered by domain, since
-    # NETWORK_CONNECTIONS carries IPs not domains.
+    # NETWORK_CONNECTIONS carries IPs not domains. LCQL query filters support `contains`
+    # (`==`/`contains` are the documented operators); the summary flags that it's a
+    # SUBSTRING match so an analyst isn't misled by a lookalike (microsoft.com.evil.net).
     captured = {}
 
     class _Cap(FakeClient):
@@ -257,11 +259,13 @@ def test_query_telemetry_domain_filter_routes_to_dns_contains():
             captured["lcql"] = lcql
             return [{"rows": []}]
 
-    tools.query_telemetry(_Cap(), hostname="web-01", domain="microsoft.com")
+    findings = tools.query_telemetry(_Cap(), hostname="web-01", domain="microsoft.com")
     q = captured["lcql"]
     assert "DNS_REQUEST" in q
     assert 'event/DOMAIN_NAME contains "microsoft.com"' in q
     assert 'hostname == "web-01"' in q
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert "substring" in ev["domain_match"].lower()  # lookalike caveat surfaced
 
 
 def test_query_telemetry_domain_strips_leading_wildcard():
@@ -273,7 +277,8 @@ def test_query_telemetry_domain_strips_leading_wildcard():
             return [{"rows": []}]
 
     tools.query_telemetry(_Cap(), domain="*.microsoft.com")
-    assert 'contains "microsoft.com"' in captured["lcql"]  # wildcard stripped for contains
+    assert 'contains "microsoft.com"' in captured["lcql"]  # leading "*." stripped
+    assert 'contains "*.microsoft.com"' not in captured["lcql"]
 
 
 def test_query_telemetry_domain_rejects_injection():
