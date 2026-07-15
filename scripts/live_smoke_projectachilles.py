@@ -44,6 +44,13 @@ async def main() -> None:
             ("list_risk_acceptances", tools.list_risk_acceptances(pa, limit=5)),
             ("list_agents", tools.list_agents(pa, limit=5)),
             ("get_fleet_health", tools.get_fleet_health(pa)),
+            # Catalog reads — the FIRST of these confirms /browser/tests auth
+            # reachability with the pa_ key (the top live-validation risk).
+            (
+                "find_tests(technique=T1110)",
+                tools.find_tests(pa, by="technique", value="T1110", limit=5),
+            ),
+            ("find_tests(actor=APT29)", tools.find_tests(pa, by="actor", value="APT29", limit=5)),
         ]:
             try:
                 _show(label, await coro)

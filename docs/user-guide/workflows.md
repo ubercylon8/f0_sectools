@@ -103,6 +103,16 @@ The `review-validation-fleet` skill uses `get_fleet_health`, `list_agents`, and
 offline/stale agents that leave endpoints unvalidated, and the risks formally
 accepted.
 
+## ProjectAchilles test catalog (detection engineer / threat hunter)
+
+> **Prompt:** "How many ProjectAchilles tests do we have for T1110, and what does the Kerberoast test cover?"
+
+The `explore-test-catalog` skill uses `find_tests` (by technique, actor, tactic,
+category, tag, or keyword) to enumerate the available tests — the library of what
+*can* be run, not run history — and `get_test` for one test's full detail
+(description, OS/target, techniques, tactics). Lead with the exact match count
+from the summary finding.
+
 ## Intune device compliance (CISO / security engineer) — default focus
 
 > **Prompt:** "How compliant are our Intune-managed devices?"
