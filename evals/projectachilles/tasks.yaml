@@ -26,3 +26,18 @@
 
 - prompt: "How healthy is our test-agent fleet?"
   expect_tool: get_fleet_health
+
+- prompt: "How many ProjectAchilles tests do we have for technique T1110?"
+  expect_tool: find_tests
+  expect_args: { by: technique, value: T1110 }
+
+- prompt: "Do we have any tests for threat actor APT29?"
+  expect_tool: find_tests
+  expect_args: { by: actor, value: APT29 }
+
+- prompt: "List our cyber-hygiene control checks in the catalog."
+  expect_tool: find_tests
+  expect_args: { by: category, value: cyber-hygiene }
+
+- prompt: "What does the Kerberoast test cover?"
+  expect_tool: get_test
