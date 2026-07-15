@@ -391,7 +391,15 @@ async def get_weak_techniques(pa: Any, days: int = 30, limit: int = 10) -> list[
 async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[Finding]:
     frm, to = _window(days)
     try:
-        d = await pa.get("/analytics/executions", params={"from": frm, "to": to, "limit": limit})
+        # Use the ENRICHED paginated endpoint. The plain /analytics/executions
+        # strips category/defender_detected/severity/techniques, which starves the
+        # security-vs-hygiene branch below (cyber-hygiene then misreads as "NOT
+        # blocked"). /executions/paginated returns EnrichedTestExecution rows under
+        # {"data": [...]}; it takes pageSize (max 100 server-side), not limit.
+        d = await pa.get(
+            "/analytics/executions/paginated",
+            params={"from": frm, "to": to, "pageSize": limit},
+        )
     except Exception as e:
         finding = map_pa_error(e, "ProjectAchilles test executions")
         if finding:
@@ -402,7 +410,7 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         host = x.get("hostname", "")
         name = x.get("test_name", "test")
         # PA runs two kinds of check (the `category` field). Cyber-hygiene rows are
-        # configuration/hardening checks — present vs NOT present — not attack
+        # configuration/hardening control checks — passed vs NOT passed — not attack
         # simulations, so the blocked/detected vocabulary does not apply (a config
         # check launches no attack; defender_detected is meaningless for it).
         # Normalize separators/case so a backend spelling tweak (cyber_hygiene,
@@ -411,10 +419,10 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         if category == "cyber-hygiene":
             kind = "cyber-hygiene"
             if x.get("is_protected"):
-                sev, ftype, outcome = Severity.info, FindingType.posture, "present"
+                sev, ftype, outcome = Severity.info, FindingType.posture, "passed"
             else:
                 sev = _SEV.get(str(x.get("severity", "high")).lower(), Severity.high)
-                ftype, outcome = FindingType.misconfig, "not present"
+                ftype, outcome = FindingType.misconfig, "not passed"
         elif x.get("is_protected"):
             kind = "security"
             sev, ftype, outcome = Severity.info, FindingType.posture, "blocked"
