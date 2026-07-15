@@ -19,6 +19,8 @@ the underlying results, and the test-agent fleet to a local model.
 | `list_risk_acceptances` | Risks deliberately accepted (not remediated) |
 | `list_agents` | Test-agent fleet: hostname, OS, status |
 | `get_fleet_health` | Fleet metrics: online/offline, uptime |
+| `find_tests` | Search the test catalog by `technique`/`actor`/`tactic`/`category`/`tag`/`keyword` (the library of runnable tests, not run history) |
+| `get_test` | Full detail for one catalog test by uuid or name — description, OS, techniques, tactics |
 
 Every tool returns `f0_sectools_core` findings and degrades gracefully (auth /
 permission / rate-limit issues become a posture finding, not a crash).
