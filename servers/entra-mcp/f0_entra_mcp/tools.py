@@ -105,7 +105,7 @@ async def list_risk_detections(gc: GraphClient, limit: int = 25) -> list[Finding
                 ),
                 evidence=[
                     Evidence(key="risk_state", value=str(d.get("riskState", ""))),
-                    Evidence(key="detected", value=str(d.get("detectedDateTime", ""))),
+                    Evidence(key="detected_at", value=str(d.get("detectedDateTime", ""))),
                 ],
                 recommended_action=RecommendedAction(
                     summary="Investigate the detection; correlate with sign-in logs."

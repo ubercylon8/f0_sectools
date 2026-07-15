@@ -182,13 +182,13 @@ async def get_compliance_summary(gc: Any) -> list[Finding]:
             ),
             entity=Entity(kind=EntityKind.host, id="tenant"),
             evidence=[
-                Evidence(key="total", value=str(total)),
-                Evidence(key="compliant", value=str(compliant)),
-                Evidence(key="noncompliant", value=str(noncompliant)),
-                Evidence(key="in_grace_period", value=str(grace)),
-                Evidence(key="unknown", value=str(unknown)),
-                Evidence(key="error", value=str(error)),
-                Evidence(key="conflict", value=str(conflict)),
+                Evidence(key="devices_total", value=str(total)),
+                Evidence(key="devices_compliant", value=str(compliant)),
+                Evidence(key="devices_noncompliant", value=str(noncompliant)),
+                Evidence(key="devices_in_grace_period", value=str(grace)),
+                Evidence(key="devices_unknown", value=str(unknown)),
+                Evidence(key="devices_error", value=str(error)),
+                Evidence(key="devices_conflict", value=str(conflict)),
             ],
             recommended_action=RecommendedAction(
                 summary=(

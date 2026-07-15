@@ -75,13 +75,16 @@ async def test_list_risk_detections_maps():
             return_value=httpx.Response(
                 200,
                 json={"value": [{"id": "d1", "riskEventType": "unfamiliarFeatures",
-                                 "riskLevel": "medium", "userPrincipalName": "bob@corp.com"}]},
+                                 "riskLevel": "medium", "userPrincipalName": "bob@corp.com",
+                                 "detectedDateTime": "2026-07-14T10:00:00Z"}]},
             )
         )
         async with GraphClient(CFG) as gc:
             findings = await list_risk_detections(gc)
     assert findings[0].finding_type.value == "risk"
     assert "unfamiliarFeatures" in findings[0].title
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["detected_at"] == "2026-07-14T10:00:00Z"  # keyed as a time, not bare "detected"
 
 
 @pytest.mark.asyncio

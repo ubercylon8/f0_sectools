@@ -71,9 +71,25 @@ async def test_get_defense_score_surfaces_risk_adjusted_fields():
     findings = await tools.get_defense_score(pa)
     assert "52" in findings[0].title
     ev = {e.key: e.value for e in findings[0].evidence}
-    assert ev["risk_accepted"] == "83"
+    assert ev["tests_risk_accepted"] == "83"
     assert ev["score_before_exclusions"] == "51.8%"
     assert ev["score_blocked_only"] == "52.0%"
+
+
+@pytest.mark.asyncio
+async def test_get_defense_score_evidence_keys_name_the_counted_noun():
+    # Bare keys ("total", "protected") let a small model confabulate the noun —
+    # it rendered `total` (=totalExecutions) as "Total HOSTS tested". Keys must
+    # say what is counted: test executions / results, not hosts.
+    pa = FakeClient(responses={"/analytics/defense-score": {
+        "score": 50, "protectedCount": 80, "detectedCount": 10,
+        "unprotectedCount": 82, "totalExecutions": 172, "riskAcceptedCount": 5}})
+    findings = await tools.get_defense_score(pa)
+    keys = {e.key for e in findings[0].evidence}
+    assert {"total_tests", "tests_protected", "tests_detected",
+            "tests_unprotected"} <= keys
+    # the bare, noun-less keys are gone
+    assert not ({"total", "protected", "detected", "unprotected"} & keys)
 
 
 @pytest.mark.asyncio
@@ -109,6 +125,55 @@ async def test_list_test_executions_maps_unprotected():
     assert findings[0].finding_type.value == "misconfig"
     assert findings[0].severity.value == "high"
     assert "dc-01" in (findings[0].entity.name or "")
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["outcome"] == "NOT blocked" and ev["check_kind"] == "security"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_hygiene_is_present_not_blocked():
+    # A cyber-hygiene control check is present/not-present, NOT blocked/not-blocked.
+    # (A missing password policy is a config gap, not a "detection miss".)
+    pa = FakeClient(responses={"/analytics/executions": {"data": [
+        {"test_name": "Minimum Password Length", "hostname": "lt-01",
+         "is_protected": False, "category": "cyber-hygiene", "severity": "high",
+         "techniques": ["T1110"]},
+        {"test_name": "SMB Encryption", "hostname": "lt-01",
+         "is_protected": True, "category": "cyber-hygiene"},
+    ]}})
+    findings = await tools.list_test_executions(pa)
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["outcome"] == "not present" and ev0["check_kind"] == "cyber-hygiene"
+    assert "not present" in findings[0].title
+    assert findings[0].finding_type.value == "misconfig"
+    ev1 = {e.key: e.value for e in findings[1].evidence}
+    assert ev1["outcome"] == "present"
+    assert findings[1].finding_type.value == "posture"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_hygiene_ignores_defender_detected():
+    # defender_detected is meaningless for a config check (no attack launched).
+    pa = FakeClient(responses={"/analytics/executions": {"data": [
+        {"test_name": "Script Block Logging", "hostname": "lt-01",
+         "is_protected": False, "defender_detected": True, "category": "cyber-hygiene"},
+    ]}})
+    findings = await tools.list_test_executions(pa)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["outcome"] == "not present"  # NOT "detected, not blocked"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_hygiene_tolerates_category_spelling():
+    # A backend separator/case tweak must NOT silently fall back to the security
+    # "NOT blocked" branch (a quiet regression of exactly what this fix prevents).
+    for cat in ("cyber_hygiene", "Cyber Hygiene", "CYBER-HYGIENE", " cyber-hygiene "):
+        pa = FakeClient(responses={"/analytics/executions": {"data": [
+            {"test_name": "SMB Encryption", "hostname": "lt-01",
+             "is_protected": False, "category": cat}]}})
+        findings = await tools.list_test_executions(pa)
+        ev = {e.key: e.value for e in findings[0].evidence}
+        assert ev["outcome"] == "not present", f"variant {cat!r} fell through to security"
+        assert ev["check_kind"] == "cyber-hygiene"
 
 
 @pytest.mark.asyncio
@@ -137,6 +202,9 @@ async def test_get_fleet_health_maps():
     findings = await tools.get_fleet_health(pa)
     assert findings[0].finding_type.value == "posture"
     assert "8/10" in findings[0].title
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["agents_total"] == "10" and ev["agents_online"] == "8"
+    assert not ({"total", "online", "offline"} & set(ev))  # noun-carrying keys
 
 
 @pytest.mark.asyncio

@@ -78,12 +78,15 @@ async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
             return [finding]
         raise
     score = float(d.get("score", 0) or 0)
+    # Keys name what is counted — test executions/results, NOT hosts. Bare keys
+    # ("total"/"protected") led a small model to render this as "Total hosts
+    # tested"; the counts are per test execution.
     evidence = [
-        Evidence(key="protected", value=str(d.get("protectedCount", 0))),
-        Evidence(key="detected", value=str(d.get("detectedCount", 0))),
-        Evidence(key="unprotected", value=str(d.get("unprotectedCount", 0))),
-        Evidence(key="total", value=str(d.get("totalExecutions", 0))),
-        Evidence(key="risk_accepted", value=str(d.get("riskAcceptedCount", 0))),
+        Evidence(key="tests_protected", value=str(d.get("protectedCount", 0))),
+        Evidence(key="tests_detected", value=str(d.get("detectedCount", 0))),
+        Evidence(key="tests_unprotected", value=str(d.get("unprotectedCount", 0))),
+        Evidence(key="total_tests", value=str(d.get("totalExecutions", 0))),
+        Evidence(key="tests_risk_accepted", value=str(d.get("riskAcceptedCount", 0))),
     ]
     raw = d.get("rawScore")
     if raw is not None:
@@ -195,11 +198,28 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
     for x in _rows(d)[:limit]:
         host = x.get("hostname", "")
         name = x.get("test_name", "test")
-        if x.get("is_protected"):
+        # PA runs two kinds of check (the `category` field). Cyber-hygiene rows are
+        # configuration/hardening checks — present vs NOT present — not attack
+        # simulations, so the blocked/detected vocabulary does not apply (a config
+        # check launches no attack; defender_detected is meaningless for it).
+        # Normalize separators/case so a backend spelling tweak (cyber_hygiene,
+        # "Cyber Hygiene") can't silently fall back to the "NOT blocked" branch.
+        category = str(x.get("category", "")).strip().lower().replace("_", "-").replace(" ", "-")
+        if category == "cyber-hygiene":
+            kind = "cyber-hygiene"
+            if x.get("is_protected"):
+                sev, ftype, outcome = Severity.info, FindingType.posture, "present"
+            else:
+                sev = _SEV.get(str(x.get("severity", "high")).lower(), Severity.high)
+                ftype, outcome = FindingType.misconfig, "not present"
+        elif x.get("is_protected"):
+            kind = "security"
             sev, ftype, outcome = Severity.info, FindingType.posture, "blocked"
         elif x.get("defender_detected"):
+            kind = "security"
             sev, ftype, outcome = Severity.low, FindingType.misconfig, "detected, not blocked"
         else:
+            kind = "security"
             sev = _SEV.get(str(x.get("severity", "high")).lower(), Severity.high)
             ftype, outcome = FindingType.misconfig, "NOT blocked"
         ent = Entity(kind=EntityKind.host, id=str(host), name=str(host)) if host else None
@@ -210,7 +230,10 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
                 severity=sev,
                 title=f"{name}: {outcome} on {host}",
                 entity=ent,
-                evidence=[Evidence(key="outcome", value=outcome)],
+                evidence=[
+                    Evidence(key="outcome", value=outcome),
+                    Evidence(key="check_kind", value=kind),
+                ],
                 references=[Reference(type="mitre", id=t) for t in (x.get("techniques") or [])],
                 observed_at=x.get("timestamp"),
             )
@@ -298,9 +321,9 @@ async def get_fleet_health(pa: Any) -> list[Finding]:
             title=f"Agent fleet: {online}/{total} online",
             entity=Entity(kind=EntityKind.tenant, id="fleet"),
             evidence=[
-                Evidence(key="online", value=str(online)),
-                Evidence(key="offline", value=str(m.get("offline", 0))),
-                Evidence(key="total", value=str(total)),
+                Evidence(key="agents_online", value=str(online)),
+                Evidence(key="agents_offline", value=str(m.get("offline", 0))),
+                Evidence(key="agents_total", value=str(total)),
                 Evidence(key="pending_tasks", value=str(m.get("pending_tasks", 0))),
             ],
         )
