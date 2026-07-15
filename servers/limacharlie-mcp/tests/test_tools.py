@@ -225,6 +225,18 @@ def test_query_telemetry_redacts_secrets_in_nested_projection():
     assert "1.2.3.4" in ev["network_activity"]  # non-secret content preserved
 
 
+def test_query_telemetry_redacts_secret_named_scalar_projection():
+    # A scalar under a secret-NAMED projection field must also be redacted: the field
+    # name becomes the VALUE of Evidence.key, so the boundary redact_obj (which keys
+    # off dict keys 'key'/'value') can't key-hint-redact it. Redact at the data level.
+    lc = FakeClient(query=[{"rows": [{"data": {
+        "event/CLIENT_SECRET": "hunter2", "event/FILE_PATH": "C:\\ok.exe"}}]}])
+    findings = tools.query_telemetry(lc, hunt="new_processes")
+    ev = {e.key: e.value for e in findings[1].evidence}
+    assert "hunter2" not in ev["client_secret"]  # redacted
+    assert ev["file_path"] == "C:\\ok.exe"  # non-secret preserved
+
+
 def test_query_telemetry_lcql_override_does_not_mislabel_scope():
     # Raw lcql override ignores hostname for the query, so it must not label scope by it.
     lc = FakeClient(query=[{"rows": [{"data": {"event/DOMAIN_NAME": "x"}}]}])

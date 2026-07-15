@@ -203,13 +203,11 @@ def _time_descriptor(hours_back: float) -> str:
 
 
 def _flat_value(v: Any) -> str:
-    """Render a projection value for evidence. Nested (list/dict) projections like
-    event/NETWORK_ACTIVITY are REDACTED then compact-JSON'd, not dropped (dropping
-    them produced empty findings). Redacting before serializing preserves redact_obj's
-    key-hint pass, which stringification would otherwise defeat. Bounded by the
-    caller's truncation; the server boundary runs redact_obj again on top."""
+    """Serialize an (already-redacted) projection value for evidence. Nested
+    (list/dict) projections like event/NETWORK_ACTIVITY are compact-JSON'd, not
+    dropped (dropping them produced empty findings). Bounded by the caller."""
     if isinstance(v, dict | list):
-        return json.dumps(redact_obj(v), default=str)
+        return json.dumps(v, default=str)
     return str(v)
 
 
@@ -288,7 +286,12 @@ def query_telemetry(
     ]
     for ev in events[:limit]:
         data = ev.get("data") if isinstance(ev.get("data"), dict) else ev
-        data = data or {}
+        # Redact the whole event data ONCE, before anything is flattened to a string:
+        # key-hint redaction (e.g. an event/CLIENT_SECRET field) + value patterns +
+        # nested keys. Stringifying first defeats redact_obj's key-hint pass, and a
+        # secret-named field becomes the VALUE of Evidence.key (which the boundary,
+        # keying off 'key'/'value', can't redact). The server boundary redacts again.
+        data = redact_obj(data or {})
         ev_evidence = [
             Evidence(key=str(k).split("/")[-1].lower(), value=_flat_value(v)[:300])
             for k, v in list(data.items())[:6]
