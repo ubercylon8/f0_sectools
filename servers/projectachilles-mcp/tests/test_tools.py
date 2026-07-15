@@ -232,3 +232,98 @@ async def test_get_weak_techniques_handles_bare_list():
     ]})
     findings = await tools.get_weak_techniques(pa)
     assert "T1059" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_find_tests_technique_uses_server_side_filter():
+    pa = FakeClient(responses={"/browser/tests": {"count": 1, "tests": [
+        {"uuid": "u1", "name": "Kerberoast", "category": "mitre-top10",
+         "severity": "high", "techniques": ["T1558.003"], "target": ["windows-endpoint"],
+         "threatActor": "APT29", "complexity": "medium", "description": "Roast SPNs."},
+    ]}})
+    findings = await tools.find_tests(pa, by="technique", value="T1558.003")
+    # server-side filter param is sent
+    path, params = pa.calls[0]
+    assert path == "/browser/tests" and params == {"technique": "T1558.003"}
+    # leading summary finding carries an exact count
+    assert findings[0].finding_type.value == "posture"
+    assert "1 tests match technique=T1558.003" in findings[0].title
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["total_matches"] == "1"
+    # per-test finding maps os from target[] and emits a MITRE reference
+    ev1 = {e.key: e.value for e in findings[1].evidence}
+    assert ev1["os"] == "windows-endpoint"
+    assert ev1["threat_actor"] == "APT29"
+    assert findings[1].entity.kind.value == "rule"
+    assert any(r.id == "T1558.003" for r in findings[1].references)
+
+
+@pytest.mark.asyncio
+async def test_find_tests_category_and_keyword_route_server_side():
+    pa = FakeClient(responses={"/browser/tests": {"tests": []}})
+    await tools.find_tests(pa, by="category", value="cyber-hygiene")
+    await tools.find_tests(pa, by="keyword", value="mimikatz")
+    assert pa.calls[0][1] == {"category": "cyber-hygiene"}
+    assert pa.calls[1][1] == {"search": "mimikatz"}
+
+
+@pytest.mark.asyncio
+async def test_find_tests_actor_filters_client_side():
+    # PA browser routes have no actor filter -> we fetch all and filter locally.
+    pa = FakeClient(responses={"/browser/tests": {"tests": [
+        {"uuid": "u1", "name": "A", "category": "intel-driven", "threatActor": "APT29"},
+        {"uuid": "u2", "name": "B", "category": "intel-driven", "threatActor": "FIN7"},
+    ]}})
+    findings = await tools.find_tests(pa, by="actor", value="apt29")
+    assert pa.calls[0][1] == {}  # no server-side param (FakeClient records `params or {}`)
+    assert "1 tests match actor=apt29" in findings[0].title
+    assert findings[1].entity.name == "A"
+
+
+@pytest.mark.asyncio
+async def test_find_tests_tag_and_tactic_filter_client_side():
+    pa = FakeClient(responses={"/browser/tests": {"tests": [
+        {"uuid": "u1", "name": "A", "category": "c", "tags": ["persistence"],
+         "tactics": ["TA0003"]},
+        {"uuid": "u2", "name": "B", "category": "c", "tags": ["exfil"], "tactics": ["TA0010"]},
+    ]}})
+    by_tag = await tools.find_tests(pa, by="tag", value="persistence")
+    assert by_tag[0].title.startswith("1 tests match tag=persistence")
+    by_tactic = await tools.find_tests(pa, by="tactic", value="TA0010")
+    assert by_tactic[1].entity.name == "B"
+
+
+@pytest.mark.asyncio
+async def test_find_tests_bounds_output_but_counts_all():
+    rows = [{"uuid": f"u{i}", "name": f"T{i}", "category": "c",
+             "techniques": ["T1110"]} for i in range(30)]
+    pa = FakeClient(responses={"/browser/tests": {"tests": rows}})
+    findings = await tools.find_tests(pa, by="technique", value="T1110", limit=5)
+    ev0 = {e.key: e.value for e in findings[0].evidence}
+    assert ev0["total_matches"] == "30" and ev0["returned"] == "5"  # truncation never lies
+    assert len(findings) == 1 + 5  # summary + 5 tests
+
+
+@pytest.mark.asyncio
+async def test_find_tests_empty_returns_only_summary():
+    pa = FakeClient(responses={"/browser/tests": {"tests": []}})
+    findings = await tools.find_tests(pa, by="technique", value="T9999")
+    assert len(findings) == 1
+    assert "0 tests match technique=T9999" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_find_tests_invalid_by_returns_finding_not_raise():
+    pa = FakeClient(responses={"/browser/tests": {"tests": []}})
+    findings = await tools.find_tests(pa, by="planet", value="mars")
+    assert len(findings) == 1
+    assert "planet" in findings[0].title
+    assert not pa.calls  # never hit the API
+
+
+@pytest.mark.asyncio
+async def test_find_tests_401_degrades():
+    pa = FakeClient(raise_on={"/browser/tests": ProjectAchillesError(401, "unauthorized")})
+    findings = await tools.find_tests(pa, by="technique", value="T1110")
+    assert findings[0].finding_type.value == "posture"
+    assert "authentication" in findings[0].title.lower()

@@ -65,6 +65,102 @@ def _rows(resp: Any) -> list[dict[str, Any]]:
 _SCORING_MODE = "any-stage"
 
 
+_FIND_BY = {"technique", "actor", "tactic", "category", "tag", "keyword"}
+
+# PA supports these filters server-side on GET /api/browser/tests; the rest
+# (actor/tactic/tag) are filtered client-side over the returned list.
+_SERVER_SIDE = {"technique": "technique", "category": "category", "keyword": "search"}
+
+
+def _tests(resp: Any) -> list[dict[str, Any]]:
+    """Browser /tests returns {success, count, tests: [...]}. Be defensive."""
+    if isinstance(resp, dict):
+        t = resp.get("tests")
+        if isinstance(t, list):
+            return t
+    if isinstance(resp, list):
+        return resp
+    return []
+
+
+def _test_evidence(t: dict[str, Any]) -> list[Evidence]:
+    return [
+        Evidence(key="techniques", value=", ".join(t.get("techniques") or []) or "none"),
+        Evidence(key="threat_actor", value=str(t.get("threatActor") or "none")),
+        Evidence(key="os", value=", ".join(t.get("target") or []) or "any"),
+        Evidence(key="severity", value=str(t.get("severity") or "unspecified")),
+        Evidence(key="complexity", value=str(t.get("complexity") or "unspecified")),
+        Evidence(key="uuid", value=str(t.get("uuid", ""))),
+    ]
+
+
+async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Finding]:
+    by = by.strip().lower()
+    if by not in _FIND_BY:
+        return [
+            Finding(
+                source="projectachilles",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Unknown search dimension '{by}'",
+                recommended_action=RecommendedAction(
+                    summary="Use by = technique | actor | tactic | category | tag | keyword.",
+                ),
+            )
+        ]
+    param = _SERVER_SIDE.get(by)
+    try:
+        resp = await pa.get("/browser/tests", params={param: value} if param else None)
+    except Exception as e:
+        finding = map_pa_error(e, "ProjectAchilles test catalog")
+        if finding:
+            return [finding]
+        raise
+    rows = _tests(resp)
+    needle = value.lower()
+    if by == "actor":
+        rows = [r for r in rows if needle in str(r.get("threatActor") or "").lower()]
+    elif by == "tactic":
+        rows = [r for r in rows if any(needle in str(x).lower() for x in (r.get("tactics") or []))]
+    elif by == "tag":
+        rows = [r for r in rows if any(needle in str(x).lower() for x in (r.get("tags") or []))]
+    total = len(rows)
+    out: list[Finding] = [
+        Finding(
+            source="projectachilles",
+            finding_type=FindingType.posture,
+            severity=Severity.info,
+            title=f"{total} tests match {by}={value}",
+            entity=Entity(kind=EntityKind.tenant, id="catalog"),
+            evidence=[
+                Evidence(key="total_matches", value=str(total)),
+                Evidence(key="returned", value=str(min(total, limit))),
+            ],
+        )
+    ]
+    for t in rows[:limit]:
+        name = str(t.get("name", "test"))
+        cat = str(t.get("category", "?"))
+        ev = _test_evidence(t)
+        desc = str(t.get("description") or "").strip().replace("\n", " ")
+        if desc:
+            ev.append(
+                Evidence(key="description", value=desc[:197] + "..." if len(desc) > 200 else desc)
+            )
+        out.append(
+            Finding(
+                source="projectachilles",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Test: {name} ({cat})",
+                entity=Entity(kind=EntityKind.rule, id=str(t.get("uuid", "")), name=name),
+                evidence=ev,
+                references=[Reference(type="mitre", id=x) for x in (t.get("techniques") or [])],
+            )
+        )
+    return out
+
+
 async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
     frm, to = _window(days)
     try:
