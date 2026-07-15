@@ -32,3 +32,7 @@
 - prompt: "Show me the top processes on host web-01."
   expect_tool: query_telemetry
   expect_args_contains: { hostname: "web-01" }
+
+- prompt: "Did web-01 connect to microsoft.com in the last 15 minutes?"
+  expect_tool: query_telemetry
+  expect_args_contains: { domain: "microsoft.com" }

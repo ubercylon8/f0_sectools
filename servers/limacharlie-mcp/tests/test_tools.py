@@ -247,6 +247,54 @@ def test_query_telemetry_ignores_result_stream_metadata_objects():
     assert "timeline" not in titles and "searchresult" not in titles
 
 
+def test_query_telemetry_domain_filter_routes_to_dns_contains():
+    # "does host connect to microsoft.com" -> DNS_REQUEST filtered by domain, since
+    # NETWORK_CONNECTIONS carries IPs not domains.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hostname="web-01", domain="microsoft.com")
+    q = captured["lcql"]
+    assert "DNS_REQUEST" in q
+    assert 'event/DOMAIN_NAME contains "microsoft.com"' in q
+    assert 'hostname == "web-01"' in q
+
+
+def test_query_telemetry_domain_strips_leading_wildcard():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), domain="*.microsoft.com")
+    assert 'contains "microsoft.com"' in captured["lcql"]  # wildcard stripped for contains
+
+
+def test_query_telemetry_domain_rejects_injection():
+    lc = FakeClient(query=[{"rows": []}])
+    findings = tools.query_telemetry(lc, domain='x" | evil')
+    assert findings[0].finding_type.value == "posture"
+    assert "domain" in findings[0].title.lower()
+
+
+def test_query_telemetry_empty_domain_falls_back_to_preset():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="new_processes", domain="")
+    assert "NEW_PROCESS" in captured["lcql"]  # empty domain -> normal preset, not DNS
+
+
 def test_query_telemetry_never_blank_title():
     # An empty-string first projection must not yield a blank title.
     lc = FakeClient(query=[{"rows": [{"data": {"event/FILE_PATH": ""}}]}])

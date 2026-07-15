@@ -190,8 +190,9 @@ _HUNT_PRESETS = {
     "network_connections": "{t} | {sel} | NETWORK_CONNECTIONS | * | event/NETWORK_ACTIVITY",
 }
 
-# LCQL string literals are double-quoted; only allow hostnames that can't break out.
+# LCQL string literals are double-quoted; only allow values that can't break out.
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_DOMAIN_RE = re.compile(r"^[A-Za-z0-9.*_-]+$")
 
 
 def _time_descriptor(hours_back: float) -> str:
@@ -229,14 +230,16 @@ def query_telemetry(
     hours_back: float = 24,
     limit: int = _MAX_ITEMS,
     hostname: str | None = None,
+    domain: str | None = None,
     lcql: str | None = None,
 ) -> list[Finding]:
     end = int(time.time())
     start = int(end - hours_back * 3600)
     # Scope is only meaningful on the guided preset path; a raw lcql override ignores
-    # `hostname`, so don't mislabel the summary/entity by it. An empty hostname ("",
-    # which a small model may emit for the optional arg) means unscoped, not invalid.
+    # `hostname`/`domain`, so don't mislabel the summary/entity by them. An empty
+    # value ("", which a small model may emit for an optional arg) means unset.
     scope_host = hostname if (hostname and lcql is None) else None
+    scope_domain = domain if (domain and lcql is None) else None
     if not lcql:
         if hostname and not _HOSTNAME_RE.match(hostname):
             return [
@@ -250,9 +253,32 @@ def query_telemetry(
                     ),
                 )
             ]
+        if domain and not _DOMAIN_RE.match(domain):
+            return [
+                Finding(
+                    source="limacharlie",
+                    finding_type=FindingType.posture,
+                    severity=Severity.info,
+                    title=f"Invalid domain '{domain}' — telemetry query not run",
+                    recommended_action=RecommendedAction(
+                        summary="domain may contain only letters, digits, '.', '*', '-', '_'.",
+                    ),
+                )
+            ]
         sel = f'hostname == "{hostname}"' if hostname else "*"
-        template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
-        lcql = template.format(t=_time_descriptor(hours_back), sel=sel)
+        td = _time_descriptor(hours_back)
+        if domain:
+            # Domains live in DNS_REQUEST, not NETWORK_CONNECTIONS (which has IPs) —
+            # route domain questions to DNS and filter with `contains`. Strip a leading
+            # "*." wildcard so `*.microsoft.com` matches via the substring contains.
+            needle = domain.lstrip("*.") or domain
+            lcql = (
+                f'{td} | {sel} | DNS_REQUEST '
+                f'| event/DOMAIN_NAME contains "{needle}" | event/DOMAIN_NAME'
+            )
+        else:
+            template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
+            lcql = template.format(t=td, sel=sel)
     try:
         rows = lc.query(lcql, start, end, limit=limit)
     except Exception as e:
@@ -262,7 +288,12 @@ def query_telemetry(
         raise
     events = _telemetry_events(rows)
     total = len(events)
-    scope = f" on {scope_host}" if scope_host else ""
+    scope = "".join(
+        part for part in (
+            f" on {scope_host}" if scope_host else "",
+            f" matching {scope_domain}" if scope_domain else "",
+        )
+    )
     out: list[Finding] = [
         Finding(
             source="limacharlie",
