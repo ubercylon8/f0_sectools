@@ -327,3 +327,64 @@ async def test_find_tests_401_degrades():
     findings = await tools.find_tests(pa, by="technique", value="T1110")
     assert findings[0].finding_type.value == "posture"
     assert "authentication" in findings[0].title.lower()
+
+
+_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+
+@pytest.mark.asyncio
+async def test_get_test_by_uuid_maps_full_detail():
+    pa = FakeClient(responses={"/browser/tests/": {"test": {
+        "uuid": _UUID, "name": "Kerberoast", "category": "mitre-top10",
+        "subcategory": "credential-access", "severity": "high", "complexity": "medium",
+        "techniques": ["T1558.003"], "tactics": ["TA0006"], "target": ["windows-endpoint"],
+        "tags": ["kerberos"], "description": "Request SPNs and crack offline.",
+        "stageCount": 2}}})
+    findings = await tools.get_test(pa, _UUID)
+    assert pa.calls[0][0] == f"/browser/tests/{_UUID}"
+    f = findings[0]
+    assert f.title == "Test: Kerberoast" and f.entity.kind.value == "rule"
+    ev = {e.key: e.value for e in f.evidence}
+    assert ev["os"] == "windows-endpoint" and ev["stage_count"] == "2"
+    assert ev["subcategory"] == "credential-access"
+    assert any(r.id == "T1558.003" for r in f.references)
+
+
+@pytest.mark.asyncio
+async def test_get_test_by_uuid_404_is_graceful():
+    pa = FakeClient(raise_on={"/browser/tests/": ProjectAchillesError(404, "not found")})
+    findings = await tools.get_test(pa, _UUID)
+    assert len(findings) == 1
+    assert "no test found" in findings[0].title.lower()
+    assert findings[0].finding_type.value == "posture"
+
+
+@pytest.mark.asyncio
+async def test_get_test_by_name_resolves_via_search():
+    pa = FakeClient(responses={"/browser/tests": {"tests": [
+        {"uuid": "u1", "name": "Kerberoast", "category": "mitre-top10",
+         "description": "d", "techniques": []},
+    ]}})
+    findings = await tools.get_test(pa, "Kerberoast")
+    assert pa.calls[0] == ("/browser/tests", {"search": "Kerberoast"})
+    assert findings[0].title == "Test: Kerberoast"
+
+
+@pytest.mark.asyncio
+async def test_get_test_by_name_ambiguous_asks_for_uuid():
+    pa = FakeClient(responses={"/browser/tests": {"tests": [
+        {"uuid": "u1", "name": "Dump LSASS", "category": "c"},
+        {"uuid": "u2", "name": "Dump LSASS via comsvcs", "category": "c"},
+    ]}})
+    findings = await tools.get_test(pa, "Dump")
+    assert len(findings) == 1
+    assert "specify by uuid" in findings[0].title.lower()
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["Dump LSASS"] == "u1"  # candidates listed name->uuid
+
+
+@pytest.mark.asyncio
+async def test_get_test_by_name_not_found():
+    pa = FakeClient(responses={"/browser/tests": {"tests": []}})
+    findings = await tools.get_test(pa, "Nonexistent")
+    assert "no test found" in findings[0].title.lower()

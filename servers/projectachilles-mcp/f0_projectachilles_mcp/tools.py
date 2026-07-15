@@ -7,6 +7,7 @@ controls blocked or detected them.
 """
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -21,6 +22,7 @@ from f0_sectools_core.schema.findings import (
     Severity,
 )
 
+from .client import ProjectAchillesError
 from .errors import map_pa_error
 
 _SEV = {
@@ -66,6 +68,10 @@ _SCORING_MODE = "any-stage"
 
 
 _FIND_BY = {"technique", "actor", "tactic", "category", "tag", "keyword"}
+
+_UUID_RE = re.compile(
+    r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", re.IGNORECASE
+)
 
 # PA supports these filters server-side on GET /api/browser/tests; the rest
 # (actor/tactic/tag) are filtered client-side over the returned list.
@@ -159,6 +165,90 @@ async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Find
             )
         )
     return out
+
+
+def _not_found(test_id: str) -> Finding:
+    return Finding(
+        source="projectachilles",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=f"No test found for '{test_id}'",
+        recommended_action=RecommendedAction(
+            summary="Use find_tests to browse the catalog, then get_test by uuid or exact name.",
+        ),
+    )
+
+
+def _test_detail_finding(t: dict[str, Any]) -> Finding:
+    name = str(t.get("name", "test"))
+    ev = [
+        Evidence(key="description", value=str(t.get("description") or "none").strip()),
+        Evidence(key="os", value=", ".join(t.get("target") or []) or "any"),
+        Evidence(key="complexity", value=str(t.get("complexity") or "unspecified")),
+        Evidence(key="category", value=str(t.get("category", "?"))),
+        Evidence(key="subcategory", value=str(t.get("subcategory") or "none")),
+        Evidence(key="severity", value=str(t.get("severity") or "unspecified")),
+        Evidence(key="tactics", value=", ".join(t.get("tactics") or []) or "none"),
+        Evidence(key="tags", value=", ".join(t.get("tags") or []) or "none"),
+        Evidence(key="threat_actor", value=str(t.get("threatActor") or "none")),
+    ]
+    stage_count = t.get("stageCount")
+    if stage_count is None and isinstance(t.get("stages"), list):
+        stage_count = len(t["stages"])
+    if stage_count is not None:
+        ev.append(Evidence(key="stage_count", value=str(stage_count)))
+    return Finding(
+        source="projectachilles",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=f"Test: {name}",
+        entity=Entity(kind=EntityKind.rule, id=str(t.get("uuid", "")), name=name),
+        evidence=ev,
+        references=[Reference(type="mitre", id=x) for x in (t.get("techniques") or [])],
+    )
+
+
+async def get_test(pa: Any, test_id: str) -> list[Finding]:
+    test_id = test_id.strip()
+    if _UUID_RE.match(test_id):
+        try:
+            resp = await pa.get(f"/browser/tests/{test_id}")
+        except ProjectAchillesError as e:
+            if e.status == 404:
+                return [_not_found(test_id)]
+            finding = map_pa_error(e, "ProjectAchilles test detail")
+            if finding:
+                return [finding]
+            raise
+        t = resp.get("test") if isinstance(resp, dict) else None
+        return [_test_detail_finding(t)] if t else [_not_found(test_id)]
+    # Resolve by name via search.
+    try:
+        resp = await pa.get("/browser/tests", params={"search": test_id})
+    except Exception as e:
+        finding = map_pa_error(e, "ProjectAchilles test detail")
+        if finding:
+            return [finding]
+        raise
+    rows = _tests(resp)
+    exact = [r for r in rows if str(r.get("name", "")).lower() == test_id.lower()]
+    candidates = exact or rows
+    if len(candidates) == 1:
+        return [_test_detail_finding(candidates[0])]
+    if len(candidates) > 1:
+        return [
+            Finding(
+                source="projectachilles",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Multiple tests match '{test_id}' — specify by uuid",
+                evidence=[
+                    Evidence(key=str(r.get("name", "?")), value=str(r.get("uuid", "")))
+                    for r in candidates[:10]
+                ],
+            )
+        ]
+    return [_not_found(test_id)]
 
 
 async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
