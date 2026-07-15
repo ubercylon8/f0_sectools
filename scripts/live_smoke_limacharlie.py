@@ -23,7 +23,7 @@ from f0_sectools_core.redaction.redact import redact_obj
 load_dotenv(".env.limacharlie")
 
 # Optional: set LIMACHARLIE_SMOKE_HOSTNAME to a real sensor to exercise host-scoping.
-# Empty -> the host-scoped call runs unscoped (all sensors), still valid.
+# Empty -> query_telemetry runs unscoped (all sensors), so the step still runs.
 SMOKE_HOSTNAME = os.getenv("LIMACHARLIE_SMOKE_HOSTNAME", "")
 
 

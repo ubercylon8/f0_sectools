@@ -214,8 +214,12 @@ def query_telemetry(
 ) -> list[Finding]:
     end = int(time.time())
     start = end - hours_back * 3600
+    # Scope is only meaningful on the guided preset path; a raw lcql override ignores
+    # `hostname`, so don't mislabel the summary/entity by it. An empty hostname ("",
+    # which a small model may emit for the optional arg) means unscoped, not invalid.
+    scope_host = hostname if (hostname and lcql is None) else None
     if not lcql:
-        if hostname is not None and not _HOSTNAME_RE.match(hostname):
+        if hostname and not _HOSTNAME_RE.match(hostname):
             return [
                 Finding(
                     source="limacharlie",
@@ -239,7 +243,7 @@ def query_telemetry(
         raise
     events = _telemetry_events(rows)
     total = len(events)
-    scope = f" on {hostname}" if hostname else ""
+    scope = f" on {scope_host}" if scope_host else ""
     out: list[Finding] = [
         Finding(
             source="limacharlie",
@@ -248,8 +252,8 @@ def query_telemetry(
             title=f"{total} telemetry event(s){scope}"
             + (f" (showing first {limit})" if total > limit else ""),
             entity=(
-                Entity(kind=EntityKind.host, id=str(hostname), name=str(hostname))
-                if hostname
+                Entity(kind=EntityKind.host, id=str(scope_host), name=str(scope_host))
+                if scope_host
                 else None
             ),
             evidence=[

@@ -157,6 +157,32 @@ def test_query_telemetry_rejects_injection_in_hostname():
     assert "hostname" in findings[0].title.lower()
 
 
+def test_query_telemetry_empty_hostname_runs_unscoped():
+    # A small model may emit hostname="" for the optional arg — treat it as unscoped,
+    # NOT as an invalid hostname.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": [{"data": {"event/FILE_PATH": "x"}}]}]
+
+    findings = tools.query_telemetry(_Cap(), hunt="new_processes", hostname="")
+    assert "| * |" in captured["lcql"]  # unscoped selector, not rejected
+    assert findings[0].finding_type.value == "hunt_result"
+    assert findings[0].entity is None  # no host scope labelled
+
+
+def test_query_telemetry_lcql_override_does_not_mislabel_scope():
+    # Raw lcql override ignores hostname for the query, so it must not label scope by it.
+    lc = FakeClient(query=[{"rows": [{"data": {"event/DOMAIN_NAME": "x"}}]}])
+    findings = tools.query_telemetry(
+        lc, hostname="h1", lcql='-1h | * | DNS_REQUEST | * | event/DOMAIN_NAME'
+    )
+    assert "on h1" not in findings[0].title
+    assert findings[0].entity is None
+
+
 def test_query_telemetry_lcql_override():
     captured = {}
 
