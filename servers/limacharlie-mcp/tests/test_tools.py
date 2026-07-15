@@ -288,6 +288,22 @@ def test_query_telemetry_domain_rejects_injection():
     assert "domain" in findings[0].title.lower()
 
 
+def test_query_telemetry_bare_wildcard_domain_falls_back_to_preset():
+    # domain="*." (or bare "*") strips to empty -> must NOT become contains "" (which
+    # matches every DNS record); fall back to the preset instead.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    for d in ("*.", "*"):
+        tools.query_telemetry(_Cap(), hunt="new_processes", domain=d)
+        assert "NEW_PROCESS" in captured["lcql"], f"domain={d!r} should fall back to preset"
+        assert 'contains ""' not in captured["lcql"]
+
+
 def test_query_telemetry_empty_domain_falls_back_to_preset():
     captured = {}
 

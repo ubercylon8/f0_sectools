@@ -267,14 +267,17 @@ def query_telemetry(
             ]
         sel = f'hostname == "{hostname}"' if hostname else "*"
         td = _time_descriptor(hours_back)
-        if domain:
+        # A leading "*." is a wildcard; strip it to the base domain. A base that is
+        # empty or all-wildcard (domain="", "*", "*.") is NOT a meaningful filter —
+        # it must fall through to the preset, never become `contains ""` (match-all).
+        base = domain[2:] if (domain and domain.startswith("*.")) else (domain or "")
+        if base.strip("*."):
             # Domains live in DNS_REQUEST, not NETWORK_CONNECTIONS (which has IPs) —
             # route domain questions to DNS. The LCQL query filter's documented string
             # operators are `==` / `contains`; we use `contains` for the subdomain case
             # (`==` alone would miss winatp-gw-eus.microsoft.com). `contains` is a
             # SUBSTRING match, so the summary flags that lookalikes (microsoft.com.evil)
             # can also match — an analyst must confirm the returned domains are real.
-            base = domain[2:] if domain.startswith("*.") else domain
             lcql = (
                 f'{td} | {sel} | DNS_REQUEST '
                 f'| event/DOMAIN_NAME contains "{base}" | event/DOMAIN_NAME'
