@@ -329,3 +329,110 @@ async def schedule_test(
             ),
         )
     ]
+
+
+async def set_schedule_status(
+    pa: Any,
+    gate: GatedAction,
+    schedule_id: str,
+    status: str,
+    confirmation_token: str = "",
+    actor: str = "mcp-operator",
+) -> list[Finding]:
+    """Pause or resume a schedule (gated write). No token -> intent."""
+    sid = schedule_id.strip()
+    if not sid:
+        return [guidance(
+            "schedule_id is required",
+            "Find the id with list_schedules first.",
+        )]
+    if status not in ("active", "paused"):
+        return [guidance(
+            f"Unknown status '{status}'",
+            "Use status='paused' to pause or status='active' to resume.",
+        )]
+    target = f"{sid}:{status}"
+    verb = "pause" if status == "paused" else "resume"
+    entity = Entity(kind=EntityKind.rule, id=sid)
+    evidence = [Evidence(key="schedule_id", value=sid),
+                Evidence(key="new_status", value=status)]
+    if not confirmation_token:
+        return [_intent(gate.name, target, f"{verb} schedule {sid}", entity, evidence)]
+    try:
+        result = await gate.execute_async(
+            target=target,
+            actor=actor,
+            token=confirmation_token,
+            run=lambda: pa.patch(f"/agent/admin/schedules/{sid}", json={"status": status}),
+        )
+    except GateDenied as e:
+        return [_refusal(gate.name, target, e)]
+    except ProjectAchillesError as e:
+        return _after_gate_error(e, gate.name, target, f"{verb} schedule")
+    sched = result.get("data") or {}
+    return [
+        Finding(
+            source=_SOURCE,
+            finding_type=FindingType.action,
+            severity=Severity.info,
+            title=f"Action completed: {verb} schedule {sid}",
+            entity=entity,
+            evidence=[
+                Evidence(key="status", value=str(sched.get("status", status))),
+                Evidence(key="next_run_at", value=str(sched.get("next_run_at") or "—")),
+            ],
+            recommended_action=RecommendedAction(
+                summary="Verify with list_schedules.",
+                gated_action=gate.name,
+                confidence="high",
+            ),
+        )
+    ]
+
+
+async def cancel_task(
+    pa: Any,
+    gate: GatedAction,
+    task_id: str,
+    confirmation_token: str = "",
+    actor: str = "mcp-operator",
+) -> list[Finding]:
+    """Cancel a pending/running test task (gated write). No token -> intent."""
+    tid = task_id.strip()
+    if not tid:
+        return [guidance(
+            "task_id is required",
+            "The task_id comes from run_test's result or get_task_status.",
+        )]
+    target = tid
+    entity = Entity(kind=EntityKind.rule, id=tid)
+    evidence = [Evidence(key="task_id", value=tid)]
+    if not confirmation_token:
+        return [_intent(gate.name, target, f"cancel task {tid}", entity, evidence)]
+    try:
+        result = await gate.execute_async(
+            target=target,
+            actor=actor,
+            token=confirmation_token,
+            run=lambda: pa.post(f"/agent/admin/tasks/{tid}/cancel"),
+        )
+    except GateDenied as e:
+        return [_refusal(gate.name, target, e)]
+    except ProjectAchillesError as e:
+        return _after_gate_error(e, gate.name, target, "cancel task")
+    task = result.get("data") or {}
+    return [
+        Finding(
+            source=_SOURCE,
+            finding_type=FindingType.action,
+            severity=Severity.info,
+            title=f"Action completed: cancel task {tid}",
+            entity=entity,
+            evidence=[Evidence(key="status", value=str(task.get("status", "expired")))],
+            recommended_action=RecommendedAction(
+                summary="Confirm with get_task_status.",
+                gated_action=gate.name,
+                confidence="high",
+            ),
+        )
+    ]
