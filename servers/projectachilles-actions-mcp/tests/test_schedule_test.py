@@ -116,12 +116,14 @@ async def test_invalid_args_never_touch_network_or_gate(tmp_path):
 
 @pytest.mark.asyncio
 async def test_no_token_returns_intent_with_schedule_description(tmp_path):
-    with respx.mock() as router:
+    with respx.mock(assert_all_called=False) as router:
         _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/schedules")
         async with ProjectAchillesClient(_cfg()) as pa:
             findings = await schedule_test(
                 pa, _gate(tmp_path), UUID, "web-01", "weekly", "23:00", day="sunday"
             )
+    assert post.called is False
     f = findings[0]
     assert "Pending action" in f.title
     assert any(ev.key == "schedule" and "weekly" in ev.value for ev in f.evidence)
@@ -160,8 +162,9 @@ async def test_valid_token_posts_schedule_payload(tmp_path):
 
 @pytest.mark.asyncio
 async def test_flag_off_refuses_schedule(tmp_path):
-    with respx.mock() as router:
+    with respx.mock(assert_all_called=False) as router:
         _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/schedules")
         store = TokenStore(str(tmp_path / "pending"))
         token = store.issue("projectachilles.schedule_test", TARGET)
         async with ProjectAchillesClient(_cfg()) as pa:
@@ -169,4 +172,22 @@ async def test_flag_off_refuses_schedule(tmp_path):
                 pa, _gate(tmp_path, enabled=False), UUID, "web-01", "daily",
                 "02:30", confirmation_token=token,
             )
+    assert post.called is False
     assert "not taken" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_invalid_args_with_token_do_not_consume_it(tmp_path):
+    store = TokenStore(str(tmp_path / "pending"))
+    token = store.issue("projectachilles.schedule_test", TARGET)
+    with respx.mock(assert_all_called=False):
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await schedule_test(
+                pa, _gate(tmp_path), UUID, "web-01", "weekly", "23:00",
+                confirmation_token=token,  # missing day for weekly
+            )
+    assert "day" in findings[0].title.lower()
+    token_survived = TokenStore(str(tmp_path / "pending")).consume(
+        "projectachilles.schedule_test", TARGET, token
+    )
+    assert token_survived is True
