@@ -6,6 +6,7 @@ Every failure is a finding, never an exception.
 """
 from __future__ import annotations
 
+import datetime
 import re
 from typing import Any
 
@@ -25,6 +26,7 @@ from .errors import map_pa_error
 from .resolve import ResolveFailed, guidance, resolve_agent, resolve_build, resolve_test
 
 _SOURCE = "projectachilles"
+_ID_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,64}$")
 
 
 def _intent(
@@ -44,9 +46,10 @@ def _intent(
         evidence=[*evidence, Evidence(key="confirmation_target", value=target)],
         recommended_action=RecommendedAction(
             summary=(
-                f"To execute, an operator must run: python scripts/confirm_action.py "
-                f'{short} "{target}" --platform projectachilles — then call this '
-                f"tool again with the printed confirmation_token."
+                "To execute, an operator must run:\n"
+                f'python scripts/confirm_action.py {short} "{target}" '
+                "--platform projectachilles\n"
+                "Then call this tool again with the printed confirmation_token."
             ),
             gated_action=action_name,
             confidence="high",
@@ -211,6 +214,13 @@ def _schedule_config(
                 "A one-off schedule needs run_date as YYYY-MM-DD",
                 "Example: schedule='once', run_date='2026-08-01', run_time='14:30'.",
             ))
+        try:
+            datetime.date.fromisoformat(run_date)
+        except ValueError:
+            raise ResolveFailed(guidance(
+                f"run_date '{run_date}' is not a real calendar date",
+                "Use a valid YYYY-MM-DD date, e.g. 2026-08-01.",
+            )) from None
         return {"date": run_date, "time": run_time}
     if schedule == "daily":
         return {"time": run_time}
@@ -319,7 +329,7 @@ async def schedule_test(
             evidence=[
                 *evidence,
                 Evidence(key="schedule_id", value=str(sched.get("id", ""))),
-                Evidence(key="next_run_at", value=str(sched.get("next_run_at") or "?")),
+                Evidence(key="next_run_at", value=str(sched.get("next_run_at") or "—")),
             ],
             recommended_action=RecommendedAction(
                 summary="Verify with list_schedules; pause/resume later with "
@@ -345,6 +355,11 @@ async def set_schedule_status(
         return [guidance(
             "schedule_id is required",
             "Find the id with list_schedules first.",
+        )]
+    if not _ID_RE.match(sid):
+        return [guidance(
+            f"schedule_id '{sid}' contains unsupported characters",
+            "Use the id exactly as shown by list_schedules.",
         )]
     if status not in ("active", "paused"):
         return [guidance(
@@ -403,6 +418,11 @@ async def cancel_task(
         return [guidance(
             "task_id is required",
             "The task_id comes from run_test's result or get_task_status.",
+        )]
+    if not _ID_RE.match(tid):
+        return [guidance(
+            f"task_id '{tid}' contains unsupported characters",
+            "Use the id exactly as shown by run_test or get_task_status.",
         )]
     target = tid
     entity = Entity(kind=EntityKind.rule, id=tid)

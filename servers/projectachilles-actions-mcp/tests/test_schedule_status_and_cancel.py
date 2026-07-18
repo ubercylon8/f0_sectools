@@ -80,6 +80,26 @@ async def test_empty_schedule_id_guides_without_gate(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_bad_charset_schedule_id_guides_without_gate(tmp_path):
+    gate = _gate(tmp_path, "projectachilles.set_schedule_status")
+    with respx.mock(assert_all_called=False):
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await set_schedule_status(pa, gate, "sched;rm -rf", "paused")
+    assert len(findings) == 1
+    assert "unsupported characters" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_bad_charset_task_id_guides_without_gate(tmp_path):
+    gate = _gate(tmp_path, "projectachilles.cancel_task")
+    with respx.mock(assert_all_called=False):
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await cancel_task(pa, gate, "$(curl evil)")
+    assert len(findings) == 1
+    assert "unsupported characters" in findings[0].title
+
+
+@pytest.mark.asyncio
 async def test_cancel_no_token_returns_intent(tmp_path):
     with respx.mock(assert_all_called=False) as router:
         post = router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel")

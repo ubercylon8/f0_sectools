@@ -37,7 +37,11 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
    projectachilles`. You cannot generate this token yourself.
 4. Call the same tool again with the SAME arguments plus the operator's
    token. Tokens are single-use, expire in 15 minutes, and are bound to the
-   exact action + target — changed arguments mean a fresh token.
+   action + target (test+host for run/schedule; schedule id+status for
+   pause/resume; task id for cancel). Changing the test, host, schedule
+   id/status, or task id needs a fresh token. Schedule timing arguments
+   (time/day/date) are NOT part of the binding — re-read the intent finding
+   before confirming so you approve the exact schedule shown.
 5. Verify: `get_task_status` for runs (then `list_test_executions` on the
    read server for the blocked/not-blocked outcome); `list_schedules` for
    schedules.

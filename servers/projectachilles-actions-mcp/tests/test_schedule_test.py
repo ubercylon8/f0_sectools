@@ -88,6 +88,7 @@ def test_config_monthly():
     [
         ("once", "14:30", "", "", 0),            # once without run_date
         ("once", "14:30", "08/01/2026", "", 0),  # bad date format
+        ("once", "14:30", "2026-02-31", "", 0),  # impossible calendar date
         ("weekly", "23:00", "", "", 0),          # weekly without day
         ("monthly", "06:00", "", "", 0),         # monthly without day_of_month
         ("monthly", "06:00", "", "", 32),        # day_of_month out of range
