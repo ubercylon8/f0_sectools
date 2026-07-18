@@ -49,7 +49,7 @@ ignore = []
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["core", "servers", "evals", "skills", "scripts"]
+testpaths = ["core", "servers", "evals", "skills", "scripts", "integrations"]
 # importlib mode lets same-basename test files (e.g. each server's
 # tests/test_tools.py) coexist without module-name collisions.
 addopts = "--import-mode=importlib"

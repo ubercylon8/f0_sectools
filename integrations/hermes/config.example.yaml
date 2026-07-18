@@ -8,21 +8,39 @@
 # OpenAI-compatible endpoint (vLLM / llama.cpp) per the Hermes configuration
 # docs — any OpenAI-compatible endpoint works.
 
-# 1) Connect the read-only f0_sectools MCP servers.
-#    Credentials are NOT here — each server loads .env.defender / .env.entra
-#    from the repo root via `uv run --directory`.
+# 1) Connect the f0_sectools MCP servers.
+#    Credentials are NOT here — each server loads its own .env.<platform>
+#    from the repo root via `uv run --directory`. Replace the placeholder
+#    path with your checkout and `uv` with its absolute path (which uv).
+#    f0-pa-actions is the gated-write ProjectAchilles companion — its write
+#    tools stay inert unless you also set PROJECTACHILLES_ALLOW_WRITE=true.
 mcp_servers:
   f0-defender:
-    command: "/home/jimx/.local/bin/uv"
-    args: ["run", "--directory", "/home/jimx/F0RT1KA/sec-tools", "f0-defender-mcp"]
+    command: "uv"
+    args: ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-defender-mcp"]
   f0-entra:
-    command: "/home/jimx/.local/bin/uv"
-    args: ["run", "--directory", "/home/jimx/F0RT1KA/sec-tools", "f0-entra-mcp"]
+    command: "uv"
+    args: ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-entra-mcp"]
+  f0-limacharlie:
+    command: "uv"
+    args: ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-limacharlie-mcp"]
+  f0-projectachilles:
+    command: "uv"
+    args: ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-projectachilles-mcp"]
+  f0-pa-actions:
+    command: "uv"
+    args: ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-projectachilles-actions-mcp"]
+  f0-intune:
+    command: "uv"
+    args: ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-intune-mcp"]
+  f0-tenable:
+    command: "uv"
+    args: ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-tenable-mcp"]
 
 # 2) Load the f0_sectools skills straight from the repo (no copying).
 skills:
   external_dirs:
-    - /home/jimx/F0RT1KA/sec-tools/skills
+    - /ABSOLUTE/PATH/TO/sec-tools/skills
 
 # 3) Role profiles. Switch at runtime with: /personality <name>
 #    The shared identity and operating principles live in SOUL.md; each profile
