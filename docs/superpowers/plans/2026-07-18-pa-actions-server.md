@@ -25,7 +25,7 @@
 - **Task metadata is snake_case and all-fields-required-if-present** (backend Zod `TaskTestMetadataSchema` has no per-field optionality): category, subcategory, severity, techniques, tactics, threat_actor, target, complexity, tags, score (nullable), integrations.
 - **NO `tests/__init__.py`** in the new server's tests dir (importlib package-name collision — bit us in PR #24).
 - **Commits:** conventional style, `git add` specific files (never `-A`), NO backticks in `-m` strings. Do not push.
-- **Verification for every task:** the named tests pass, plus `uv run ruff check servers/projectachilles-actions-mcp` and `uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp` are clean.
+- **Verification for every task:** the named tests pass, plus `uv run ruff check servers/projectachilles-actions-mcp` and `uv run mypy .` are clean.
 
 ---
 
@@ -290,7 +290,7 @@ Expected: 5 PASS
 
 - [ ] **Step 8: Lint + type-check**
 
-Run: `uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: clean
 
 - [ ] **Step 9: Commit**
@@ -435,7 +435,7 @@ def map_pa_error(e: Exception, capability: str) -> Finding | None:
 
 - [ ] **Step 4: Run tests, lint, type-check**
 
-Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_errors.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_errors.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: 8 PASS, clean
 
 - [ ] **Step 5: Commit**
@@ -826,7 +826,7 @@ async def resolve_agent(pa: Any, hostname: str) -> dict[str, str]:
 
 - [ ] **Step 4: Run tests, lint, type-check**
 
-Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_resolve.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_resolve.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: 9 PASS, clean
 
 - [ ] **Step 5: Commit**
@@ -1207,7 +1207,7 @@ async def run_test(
 
 - [ ] **Step 4: Run tests, lint, type-check**
 
-Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_run_test.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_run_test.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: 6 PASS, clean
 
 - [ ] **Step 5: Commit**
@@ -1585,7 +1585,7 @@ async def schedule_test(
 
 - [ ] **Step 4: Run tests, lint, type-check**
 
-Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_schedule_test.py servers/projectachilles-actions-mcp/tests/test_run_test.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run pytest servers/projectachilles-actions-mcp/tests/test_schedule_test.py servers/projectachilles-actions-mcp/tests/test_run_test.py -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: all PASS, clean
 
 - [ ] **Step 5: Commit**
@@ -1854,7 +1854,7 @@ async def cancel_task(
 
 - [ ] **Step 4: Run tests, lint, type-check**
 
-Run: `uv run pytest servers/projectachilles-actions-mcp/tests -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run pytest servers/projectachilles-actions-mcp/tests -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: all PASS, clean
 
 - [ ] **Step 5: Commit**
@@ -2096,7 +2096,7 @@ async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
 
 - [ ] **Step 4: Run tests, lint, type-check**
 
-Run: `uv run pytest servers/projectachilles-actions-mcp/tests -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run pytest servers/projectachilles-actions-mcp/tests -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: all PASS, clean
 
 - [ ] **Step 5: Commit**
@@ -2346,7 +2346,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run tests, lint, type-check**
 
-Run: `uv run pytest servers/projectachilles-actions-mcp/tests -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy servers/projectachilles-actions-mcp/f0_pa_actions_mcp`
+Run: `uv run pytest servers/projectachilles-actions-mcp/tests -v && uv run ruff check servers/projectachilles-actions-mcp && uv run mypy .`
 Expected: all PASS, clean. If the `day` enum assertion fails because FastMCP renders the Literal via `anyOf`/`const` instead of a flat `enum` list, adjust the TEST to read the schema the way FastMCP emits it (check `tools["schedule_test"].inputSchema` shape) — the requirement is that the schema advertises a CLOSED value set, not a free string; the tool code itself must not change.
 
 - [ ] **Step 5: Commit**
