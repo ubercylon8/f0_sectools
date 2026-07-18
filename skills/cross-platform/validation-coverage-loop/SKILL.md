@@ -51,6 +51,9 @@ One tool at a time.
    State plainly: f0_library is the separate offensive repo the operator runs —
    this skill only produces the recommendation.
 
+   To actually run or schedule the covering test from here, switch to the
+   run-validation-test skill (ProjectAchilles actions server, gated).
+
 ## Pitfalls
 
 - **Technique ↔ rule matching is best-effort.** If you can't tie a weak technique
