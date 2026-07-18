@@ -436,3 +436,102 @@ async def cancel_task(
             ),
         )
     ]
+
+
+async def list_schedules(pa: Any, status: str = "") -> list[Finding]:
+    """List recurring test schedules (read). status '' = all."""
+    params: dict[str, Any] = {}
+    if status:
+        params["status"] = status
+    try:
+        resp = await pa.get("/agent/admin/schedules", params=params or None)
+    except Exception as e:
+        finding = map_pa_error(e, "list schedules")
+        if finding:
+            return [finding]
+        raise
+    rows = resp.get("data") if isinstance(resp, dict) else None
+    rows = rows if isinstance(rows, list) else []
+    if not rows:
+        which = f"{status} " if status else ""
+        return [
+            Finding(
+                source=_SOURCE,
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"0 {which}test schedules found",
+                entity=Entity(kind=EntityKind.tenant, id="schedules"),
+            )
+        ]
+    out: list[Finding] = []
+    for s in rows[:50]:
+        if not isinstance(s, dict):
+            continue
+        name = s.get("name") or s.get("test_name") or "schedule"
+        out.append(
+            Finding(
+                source=_SOURCE,
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Schedule: {name} ({s.get('schedule_type', '?')}, "
+                f"{s.get('status', '?')})",
+                entity=Entity(kind=EntityKind.rule, id=str(s.get("id", "")),
+                              name=str(name)),
+                evidence=[
+                    Evidence(key="test_name", value=str(s.get("test_name") or "?")),
+                    Evidence(key="next_run_at", value=str(s.get("next_run_at") or "—")),
+                    Evidence(key="agent_count",
+                             value=str(len(s.get("agent_ids") or []))),
+                ],
+            )
+        )
+    return out
+
+
+_TASK_DONE_BAD = ("failed", "expired")
+
+
+async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
+    """Status of one test-run task by task_id (read)."""
+    tid = task_id.strip()
+    if not tid:
+        return [guidance(
+            "task_id is required",
+            "The task_id comes from run_test's result finding.",
+        )]
+    try:
+        resp = await pa.get(f"/agent/admin/tasks/{tid}")
+    except Exception as e:
+        finding = map_pa_error(e, "task status")
+        if finding:
+            return [finding]
+        raise
+    t = resp.get("data") if isinstance(resp, dict) else None
+    t = t if isinstance(t, dict) else {}
+    status = str(t.get("status", "unknown"))
+    payload_obj = t.get("payload")
+    payload = payload_obj if isinstance(payload_obj, dict) else {}
+    sev = Severity.medium if status in _TASK_DONE_BAD else Severity.info
+    evidence = [
+        Evidence(key="status", value=status),
+        Evidence(key="test_name", value=str(payload.get("test_name") or "?")),
+        Evidence(key="agent_id", value=str(t.get("agent_id") or "?")),
+    ]
+    if t.get("error"):
+        evidence.append(Evidence(key="error", value=str(t["error"])))
+    summary = (
+        "See the outcome with list_test_executions on the ProjectAchilles read server."
+        if status == "completed"
+        else "Poll again later; cancel with cancel_task if it should not run."
+    )
+    return [
+        Finding(
+            source=_SOURCE,
+            finding_type=FindingType.posture,
+            severity=sev,
+            title=f"Task {tid}: {status}",
+            entity=Entity(kind=EntityKind.rule, id=tid),
+            evidence=evidence,
+            recommended_action=RecommendedAction(summary=summary, confidence="high"),
+        )
+    ]
