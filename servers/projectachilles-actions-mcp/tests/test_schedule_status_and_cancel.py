@@ -109,8 +109,8 @@ async def test_cancel_valid_token_posts_and_reports_status(tmp_path):
 
 @pytest.mark.asyncio
 async def test_cancel_terminal_task_400_becomes_finding(tmp_path):
-    with respx.mock(assert_all_called=False) as router:
-        router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel").mock(
+    with respx.mock() as router:
+        post = router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel").mock(
             return_value=httpx.Response(400, json={"error": "task already terminal"})
         )
         gate = _gate(tmp_path, "projectachilles.cancel_task")
@@ -118,5 +118,6 @@ async def test_cancel_terminal_task_400_becomes_finding(tmp_path):
         token = store.issue("projectachilles.cancel_task", "task-1")
         async with ProjectAchillesClient(_cfg()) as pa:
             findings = await cancel_task(pa, gate, "task-1", token)
+    assert post.call_count == 1
     assert len(findings) == 1
     assert "rejected" in findings[0].title.lower()
