@@ -17,11 +17,11 @@ from evals.run import (
 
 
 @pytest.mark.asyncio
-async def test_combined_registry_unions_all_38_tools():
+async def test_combined_registry_unions_all_44_tools():
     tools = await combined_tool_schemas()
     names = [t["function"]["name"] for t in tools]
-    assert len(names) == 38, f"expected 38 tools, got {len(names)}"
-    assert len(set(names)) == 38, "tool names must be unique across servers"
+    assert len(names) == 44, f"expected 44 tools, got {len(names)}"
+    assert len(set(names)) == 44, "tool names must be unique across servers"
     # spot-check one tool from each server is present
     for expected in (
         "isolate_host",
@@ -29,6 +29,7 @@ async def test_combined_registry_unions_all_38_tools():
         "query_telemetry",
         "get_defense_score",
         "list_assets",
+        "schedule_test",
     ):
         assert expected in names
 
@@ -61,16 +62,19 @@ async def test_combined_registry_raises_on_duplicate_name(monkeypatch):
 def test_combined_tasks_tagged_with_origin_and_include_probes():
     import yaml
     tasks = combined_tasks()
-    # 15 defender + 8 entra + 10 limacharlie + 12 projectachilles + 8 intune + 10 tenable
-    # = 63, plus probes.
+    # 15 defender + 8 entra + 10 limacharlie + 12 projectachilles + 8 intune
+    # + 10 tenable + 9 projectachilles-actions = 72, plus probes.
     # Distinguish by checking against native task prompts.
     native_prompts = set()
-    for server in ["defender", "entra", "limacharlie", "projectachilles", "intune", "tenable"]:
+    for server in [
+        "defender", "entra", "limacharlie", "projectachilles", "intune", "tenable",
+        "projectachilles-actions",
+    ]:
         with open(f"evals/{server}/tasks.yaml") as fh:
             native = yaml.safe_load(fh)
         native_prompts.update(t["prompt"] for t in (native or []))
     per_server = [t for t in tasks if t["prompt"] in native_prompts]
-    assert len(per_server) == 63
+    assert len(per_server) == 72
     probes = [t for t in tasks if t["prompt"] not in native_prompts]
     assert len(probes) >= 6, "expected the cross-platform probe set"
     assert all("origin" in t and "prompt" in t and "expect_tool" in t for t in tasks)
