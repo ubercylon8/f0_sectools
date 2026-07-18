@@ -1,0 +1,165 @@
+"""Resolution tests: test/build/agent lookups fail gracefully BEFORE the gate."""
+from __future__ import annotations
+
+import httpx
+import pytest
+import respx
+from f0_pa_actions_mcp.client import ProjectAchillesClient
+from f0_pa_actions_mcp.resolve import (
+    ResolveFailed,
+    resolve_agent,
+    resolve_build,
+    resolve_test,
+)
+from f0_sectools_core.auth.config import ProjectAchillesConfig
+
+BASE = "https://org.agent.example.com"
+UUID = "3f2a9c10-1111-4222-8333-444455556666"
+
+TEST_RECORD = {
+    "uuid": UUID,
+    "name": "Brute Force SSH",
+    "category": "credential-access",
+    "subcategory": "brute-force",
+    "severity": "high",
+    "techniques": ["T1110"],
+    "tactics": ["TA0006"],
+    "threatActor": "APT29",
+    "target": ["linux"],
+    "complexity": "low",
+    "tags": ["ssh"],
+    "score": None,
+    "integrations": [],
+}
+
+
+def _cfg() -> ProjectAchillesConfig:
+    return ProjectAchillesConfig(base_url=BASE, api_key="pa_test")
+
+
+@pytest.mark.asyncio
+async def test_resolve_test_returns_uuid_name_and_snake_case_metadata():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/browser/tests/{UUID}").mock(
+            return_value=httpx.Response(200, json={"test": TEST_RECORD})
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            t = await resolve_test(pa, UUID)
+    assert t["test_uuid"] == UUID
+    assert t["test_name"] == "Brute Force SSH"
+    md = t["metadata"]
+    assert md["threat_actor"] == "APT29"          # camelCase -> snake_case
+    assert md["techniques"] == ["T1110"]
+    assert md["score"] is None
+    # Zod TaskTestMetadataSchema requires ALL keys when metadata is present:
+    for key in (
+        "category", "subcategory", "severity", "techniques", "tactics",
+        "threat_actor", "target", "complexity", "tags", "score", "integrations",
+    ):
+        assert key in md
+
+
+@pytest.mark.asyncio
+async def test_resolve_test_non_uuid_fails_with_guidance():
+    async with ProjectAchillesClient(_cfg()) as pa:
+        with pytest.raises(ResolveFailed) as ei:
+            await resolve_test(pa, "brute force")
+    assert "uuid" in ei.value.finding.title.lower()
+
+
+@pytest.mark.asyncio
+async def test_resolve_test_404_fails_with_not_found_finding():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/browser/tests/{UUID}").mock(
+            return_value=httpx.Response(404, json={"error": "not found"})
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            with pytest.raises(ResolveFailed) as ei:
+                await resolve_test(pa, UUID)
+    assert "not found" in ei.value.finding.title.lower()
+
+
+@pytest.mark.asyncio
+async def test_resolve_build_returns_filename():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/tests/builds/{UUID}").mock(
+            return_value=httpx.Response(
+                200,
+                json={"success": True, "data": {"exists": True, "filename": "brute_force_ssh"}},
+            )
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            assert await resolve_build(pa, UUID) == "brute_force_ssh"
+
+
+@pytest.mark.asyncio
+async def test_resolve_build_not_built_is_200_exists_false():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/tests/builds/{UUID}").mock(
+            return_value=httpx.Response(200, json={"success": True, "data": {"exists": False}})
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            with pytest.raises(ResolveFailed) as ei:
+                await resolve_build(pa, UUID)
+    assert "not built" in ei.value.finding.title.lower()
+
+
+AGENTS = {
+    "success": True,
+    "data": {
+        "agents": [
+            {"id": "ag-1", "org_id": "org-1", "hostname": "web-01", "status": "online"},
+            {"id": "ag-2", "org_id": "org-1", "hostname": "db-01", "status": "online"},
+        ]
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_exact_case_insensitive_match():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json=AGENTS)
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            a = await resolve_agent(pa, "WEB-01")
+    assert a == {"agent_id": "ag-1", "org_id": "org-1", "hostname": "web-01"}
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_no_match_lists_guidance():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json=AGENTS)
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            with pytest.raises(ResolveFailed) as ei:
+                await resolve_agent(pa, "gone-99")
+    assert "gone-99" in ei.value.finding.title
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_ambiguous_lists_candidates():
+    dup = {
+        "success": True,
+        "data": {"agents": [
+            {"id": "ag-1", "org_id": "org-1", "hostname": "web-01"},
+            {"id": "ag-9", "org_id": "org-1", "hostname": "web-01"},
+        ]},
+    }
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json=dup)
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            with pytest.raises(ResolveFailed) as ei:
+                await resolve_agent(pa, "web-01")
+    ev = ei.value.finding.evidence
+    assert {e.value for e in ev} >= {"ag-1", "ag-9"}
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_empty_hostname_guides():
+    async with ProjectAchillesClient(_cfg()) as pa:
+        with pytest.raises(ResolveFailed):
+            await resolve_agent(pa, "  ")
