@@ -10,7 +10,7 @@
 
 ## What works today
 
-Six MCP servers, each **live-validated against a real tenant**, exposing read tools (and, for Defender, gated write actions):
+Seven MCP servers — six **live-validated against a real tenant**, one built with live-validation pending — exposing read tools (and, for Defender and the ProjectAchilles actions server, gated write actions):
 
 | Server | Status | Tools | What it reads |
 |---|---|---|---|
@@ -20,8 +20,9 @@ Six MCP servers, each **live-validated against a real tenant**, exposing read to
 | `f0-projectachilles-mcp` | ✅ live-validated | 8 | defense score, weak techniques, test executions, risk acceptances, agents, fleet health, test-catalog search, test detail |
 | `f0-intune-mcp` | ✅ live-validated | 6 | managed devices, compliance, stale devices, policies, config profiles |
 | `f0-tenable-mcp` | ✅ live-validated | 7 | vuln summary, top vulns, assets, per-asset vulns, plugin info, scans, plugin affected-hosts |
+| `f0-projectachilles-actions-mcp` | 🔧 built — live-validation pending | 6 (2 read + 4 gated) | list schedules, task status; gated `run_test` / `schedule_test` / `set_schedule_status` / `cancel_task` |
 
-**38 registered tools.** Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 21 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
+**44 registered tools.** Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 22 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
 
 ## For security teams
 

@@ -12,7 +12,8 @@ role personas.
 
 Read-only AI tooling over your own security platforms, running on **your**
 infrastructure with a **local open-weights model** (GPT-OSS, Gemma 4, Qwen3).
-Nothing leaves the host. Six platforms are live-validated today — see the
+Nothing leaves the host. Six platforms are live-validated today, with a
+seventh (ProjectAchilles gated actions) built and pending — see the
 support matrix below.
 
 ## Start here
@@ -51,6 +52,7 @@ support matrix below.
 | ProjectAchilles | `f0-projectachilles-mcp` | ✅ live-validated | defense score, score trend, weak techniques, test results, risk acceptances, agents, fleet health |
 | Microsoft Intune | `f0-intune-mcp` | ✅ live-validated | managed devices, compliance summary, stale devices, compliance policies, config profiles |
 | Tenable Vulnerability Management | `f0-tenable-mcp` | ✅ live-validated | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans, plugin affected-hosts |
+| ProjectAchilles (actions) | `f0-projectachilles-actions-mcp` | 🔧 built — live-validation pending | gated `run_test`, `schedule_test`, `set_schedule_status`, `cancel_task`; reads `list_schedules`, `get_task_status` (needs a read-write `pa_` key + `PROJECTACHILLES_ALLOW_WRITE=true`; driven by the `run-validation-test` skill, alongside the other ProjectAchilles skills) |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph
 permissions; otherwise they return a graceful "permission/throttled" finding.

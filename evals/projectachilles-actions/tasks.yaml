@@ -1,0 +1,35 @@
+# Small-model tool-calling eval task set — ProjectAchilles ACTIONS server.
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every tool has at least one task. These measure the gated-write
+# two-step callability question (see the eval-findings memory: Gemma-12B gap).
+
+- prompt: "Run the ProjectAchilles test 3f2a9c10-1111-4222-8333-444455556666 on host web-01 now."
+  expect_tool: run_test
+
+- prompt: "Execute validation test 8c1d2e30-2222-4333-9444-555566667777 against agent db-02."
+  expect_tool: run_test
+
+- prompt: "Schedule test 3f2a9c10-1111-4222-8333-444455556666 to run daily at 02:30 on host web-01."
+  expect_tool: schedule_test
+  expect_args: { schedule: daily, run_time: "02:30" }
+
+- prompt: "Set up test 3f2a9c10-1111-4222-8333-444455556666 to run every sunday at 23:00 on web-01."
+  expect_tool: schedule_test
+  expect_args: { schedule: weekly, day: sunday }
+
+- prompt: "Pause the ProjectAchilles schedule sched-42."
+  expect_tool: set_schedule_status
+  expect_args: { status: paused }
+
+- prompt: "Resume schedule sched-42."
+  expect_tool: set_schedule_status
+  expect_args: { status: active }
+
+- prompt: "Cancel the pending ProjectAchilles test task task-99."
+  expect_tool: cancel_task
+
+- prompt: "What recurring ProjectAchilles test schedules do we have?"
+  expect_tool: list_schedules
+
+- prompt: "Did ProjectAchilles task task-99 finish yet?"
+  expect_tool: get_task_status
