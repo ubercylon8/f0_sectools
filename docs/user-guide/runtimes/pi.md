@@ -73,7 +73,31 @@ replace the placeholder path with your checkout:
 }
 ```
 
-(The shipped file wires all six servers.)
+(The shipped file wires all seven servers, including `f0-pa-actions` — the
+gated-write ProjectAchilles companion, whose write tools stay inert without
+`PROJECTACHILLES_ALLOW_WRITE=true` and a per-action confirmation token.)
+
+**Prefer the sync script over hand-copying.** From the repo root:
+
+```bash
+uv run python scripts/sync_pi_config.py
+```
+
+It renders the template into `~/.pi/agent/mcp.json` (placeholder path → your
+checkout, `uv` → its absolute path) and symlinks `~/.pi/agent/AGENTS.md` to the
+repo copy (making step 4 automatic). It is idempotent — re-run it after every
+`git pull` so new servers appear in pi without manual edits, or make it
+automatic with a local git hook:
+
+```bash
+echo 'uv run python scripts/sync_pi_config.py' >> .git/hooks/post-merge
+chmod +x .git/hooks/post-merge
+```
+
+Skills and persona prompts never need syncing: step 5 points pi at the repo's
+`skills/` and `integrations/pi/prompts/` directories in place, so they always
+track your checkout. CI enforces the template itself can't drift from the
+server list (`integrations/test_integrations_valid.py`).
 
 - `lifecycle: "eager"` connects the server **at session start**, so its tools are
   visible to the model immediately. With `"lazy"` (the extension's default) the
@@ -94,11 +118,12 @@ replace the placeholder path with your checkout:
 
 ## 4. Base identity (the SOUL.md equivalent)
 
-pi has no `SOUL.md`; it auto-loads `AGENTS.md` context files. Copy our base
-identity into place:
+pi has no `SOUL.md`; it auto-loads `AGENTS.md` context files. If you ran
+`scripts/sync_pi_config.py` in step 3 this is already a symlink and you can
+skip ahead. Manual alternative:
 
 ```bash
-cp integrations/pi/AGENTS.md ~/.pi/agent/AGENTS.md
+ln -s "$(pwd)/integrations/pi/AGENTS.md" ~/.pi/agent/AGENTS.md
 ```
 
 It carries the same read-only / never-fabricate principles as the Hermes

@@ -70,6 +70,17 @@
       ],
       "transport": "stdio",
       "lifecycle": "eager"
+    },
+    "f0-pa-actions": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/ABSOLUTE/PATH/TO/sec-tools",
+        "f0-projectachilles-actions-mcp"
+      ],
+      "transport": "stdio",
+      "lifecycle": "eager"
     }
   }
 }
