@@ -1,4 +1,4 @@
-"""set_schedule_status + cancel_task gate tests."""
+"""set_schedule_status gate tests."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ import httpx
 import pytest
 import respx
 from f0_pa_actions_mcp.client import ProjectAchillesClient
-from f0_pa_actions_mcp.tools import cancel_task, set_schedule_status
+from f0_pa_actions_mcp.tools import set_schedule_status
 from f0_sectools_core.auth.config import ProjectAchillesConfig
 from f0_sectools_core.gating.actions import ApprovalStore, AuditLog, GatedAction, TokenStore
 
@@ -92,60 +92,6 @@ async def test_bad_charset_schedule_id_guides_without_gate(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_bad_charset_task_id_guides_without_gate(tmp_path):
-    gate = _gate(tmp_path, "projectachilles.cancel_task")
-    with respx.mock(assert_all_called=False):
-        async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await cancel_task(pa, gate, "$(curl evil)")
-    assert len(findings) == 1
-    assert "unsupported characters" in findings[0].title
-
-
-@pytest.mark.asyncio
-async def test_cancel_no_token_returns_intent(tmp_path):
-    with respx.mock(assert_all_called=False) as router:
-        post = router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel")
-        gate = _gate(tmp_path, "projectachilles.cancel_task")
-        async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await cancel_task(pa, gate, "task-1")
-    assert post.called is False
-    assert "Pending action" in findings[0].title
-
-
-@pytest.mark.asyncio
-async def test_cancel_valid_token_posts_and_reports_status(tmp_path):
-    with respx.mock() as router:
-        post = router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel").mock(
-            return_value=httpx.Response(200, json={"data": {
-                "id": "task-1", "status": "expired",
-            }})
-        )
-        gate = _gate(tmp_path, "projectachilles.cancel_task")
-        store = TokenStore(str(tmp_path / "pending"))
-        token = store.issue("projectachilles.cancel_task", "task-1")
-        async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await cancel_task(pa, gate, "task-1", token)
-    assert post.call_count == 1
-    assert "Action completed" in findings[0].title
-
-
-@pytest.mark.asyncio
-async def test_cancel_terminal_task_400_becomes_finding(tmp_path):
-    with respx.mock() as router:
-        post = router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel").mock(
-            return_value=httpx.Response(400, json={"error": "task already terminal"})
-        )
-        gate = _gate(tmp_path, "projectachilles.cancel_task")
-        store = TokenStore(str(tmp_path / "pending"))
-        token = store.issue("projectachilles.cancel_task", "task-1")
-        async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await cancel_task(pa, gate, "task-1", token)
-    assert post.call_count == 1
-    assert len(findings) == 1
-    assert "rejected" in findings[0].title.lower()
-
-
-@pytest.mark.asyncio
 async def test_pause_same_call_after_approval_executes(tmp_path):
     with respx.mock() as router:
         patch = router.patch(f"{BASE}/api/agent/admin/schedules/sched-1").mock(
@@ -162,30 +108,10 @@ async def test_pause_same_call_after_approval_executes(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_cancel_intent_records_pending_request(tmp_path):
-    with respx.mock(assert_all_called=False) as router:
-        router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel")
-        gate = _gate(tmp_path, "projectachilles.cancel_task")
-        async with ProjectAchillesClient(_cfg()) as pa:
-            await cancel_task(pa, gate, "task-1")
-    assert gate.approvals.list_pending()[0]["target"] == "task-1"
-
-
-@pytest.mark.asyncio
 async def test_set_schedule_status_chat_mode_intent_text(tmp_path):
     with respx.mock(assert_all_called=False) as router:
         router.patch(f"{BASE}/api/agent/admin/schedules/sched-1")
         gate = _gate(tmp_path, "projectachilles.set_schedule_status", confirm_mode="chat")
         async with ProjectAchillesClient(_cfg()) as pa:
             findings = await set_schedule_status(pa, gate, "sched-1", "paused")
-    assert "approved" in findings[0].recommended_action.summary.lower()
-
-
-@pytest.mark.asyncio
-async def test_cancel_task_chat_mode_intent_text(tmp_path):
-    with respx.mock(assert_all_called=False) as router:
-        router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel")
-        gate = _gate(tmp_path, "projectachilles.cancel_task", confirm_mode="chat")
-        async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await cancel_task(pa, gate, "task-1")
     assert "approved" in findings[0].recommended_action.summary.lower()

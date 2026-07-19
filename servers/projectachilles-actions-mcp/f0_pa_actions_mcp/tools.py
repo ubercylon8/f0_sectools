@@ -36,6 +36,8 @@ from .resolve import (
 _SOURCE = "projectachilles"
 _ID_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,64}$")
 _TASK_STATUS = {"pending", "assigned", "running", "completed", "failed", "expired"}
+_SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
+_MAX_CANCEL = 200
 
 
 def _intent(
@@ -457,61 +459,169 @@ async def set_schedule_status(
     ]
 
 
-async def cancel_task(
+async def cancel_tasks(
     pa: Any,
     gate: GatedAction,
-    task_id: str,
+    task_id: str = "",
+    status: str = "pending",
+    search: str = "",
     confirmation_token: str = "",
     actor: str = "mcp-operator",
 ) -> list[Finding]:
-    """Cancel a pending/running test task (gated write). No token -> intent."""
+    """Cancel a validation task (gated). Pass EITHER task_id (one task) OR a
+    status/search filter (bulk). No token -> intent only."""
     tid = task_id.strip()
-    if not tid:
-        return [guidance(
-            "task_id is required",
-            "The task_id comes from run_test's result or get_task_status.",
-        )]
-    if not _ID_RE.match(tid):
-        return [guidance(
-            f"task_id '{tid}' contains unsupported characters",
-            "Use the id exactly as shown by run_test or get_task_status.",
-        )]
-    target = tid
-    entity = Entity(kind=EntityKind.rule, id=tid)
-    evidence = [Evidence(key="task_id", value=tid)]
+    srch = search.strip()
+
+    if tid:
+        # --- single mode ---
+        if srch:
+            return [guidance(
+                "pass either task_id or a status/search filter, not both",
+                "Give task_id for one task, or status/search for a bulk cancel.",
+            )]
+        if not _ID_RE.match(tid):
+            return [guidance(
+                f"task_id '{tid}' contains unsupported characters",
+                "Use the id exactly as shown by run_test, list_tasks, or get_task_status.",
+            )]
+        ids = [tid]
+        target = tid
+        label = f"task {tid}"
+        entity: Entity | None = Entity(kind=EntityKind.rule, id=tid)
+    else:
+        # --- bulk mode ---
+        st = (status or "pending").strip()
+        if st not in _TASK_STATUS:
+            return [guidance(
+                f"status '{st}' is not a task state",
+                "Use one of: " + ", ".join(sorted(_TASK_STATUS)) + ".",
+            )]
+        if srch and not _SCOPE_RE.match(srch):
+            return [guidance(
+                "search contains unsupported characters",
+                "Pass a plain test-name or hostname substring.",
+            )]
+        params: dict[str, Any] = {"status": st, "limit": _MAX_CANCEL + 1}
+        if srch:
+            params["search"] = srch
+        try:
+            resp = await pa.get("/agent/admin/tasks", params=params)
+        except ProjectAchillesError as e:
+            finding = map_pa_error(e, "ProjectAchilles tasks")
+            if finding:
+                return [finding]
+            raise
+        data = _as_dict(resp.get("data") if isinstance(resp, dict) else None)
+        rows = [t for t in (data.get("tasks") or []) if isinstance(t, dict) and t.get("id")]
+        total = data.get("total")
+        usable_total = total if isinstance(total, int) and not isinstance(total, bool) else None
+        if (usable_total is not None and usable_total > _MAX_CANCEL) or (
+            usable_total is None and len(rows) >= _MAX_CANCEL
+        ):
+            return [guidance(
+                f"filter matches more than {_MAX_CANCEL} tasks",
+                "Narrow with search=<test name or hostname>.",
+            )]
+        ids = [str(t["id"]) for t in rows]
+        n = usable_total if usable_total is not None else len(ids)
+        target = f"cancel:{st}:{srch or '*'}:{n}"
+        label = f"{n} {st} task(s)" + (f" matching '{srch}'" if srch else "")
+        entity = Entity(kind=EntityKind.rule, id=target)
+
+    evidence = [
+        Evidence(key="scope", value=label),
+        Evidence(key="match_count", value=str(len(ids))),
+    ]
+    for i, x in enumerate(ids[:15]):
+        evidence.append(Evidence(key=f"task_{i + 1}", value=x))
+    if len(ids) > 15:
+        evidence.append(Evidence(key="tasks_more", value=f"{len(ids) - 15} more not shown"))
+
     if not confirmation_token and not gate.has_approval(target):
         gate.record_request(target)
         return [_intent(
-            gate.name, target, f"cancel task {tid}", entity, evidence,
+            gate.name, target, f"cancel {label}", entity, evidence,
             confirm_mode=gate.confirm_mode,
         )]
+
+    async def _run() -> dict[str, Any]:
+        cancelled = terminal = failed = 0
+        interrupted = ""
+        for x in ids:
+            try:
+                await pa.post(f"/agent/admin/tasks/{x}/cancel")
+                cancelled += 1
+            except ProjectAchillesError as e:
+                if e.status in (401, 403):
+                    # Systemic auth failure: stop the batch WITHOUT raising, so
+                    # run() returns normally and execute_async still audits the
+                    # partial result (a bare raise here would skip the audit —
+                    # execute_async only audits after run() returns).
+                    interrupted = f"permission error (HTTP {e.status})"
+                    break
+                if e.status in (400, 404, 409, 422):
+                    terminal += 1  # already-terminal / gone -> skip, don't fail batch
+                else:
+                    failed += 1
+        return {
+            "cancelled": cancelled, "terminal": terminal, "failed": failed,
+            "interrupted": interrupted,
+        }
+
     try:
-        result = await gate.execute_async(
-            target=target,
-            actor=actor,
-            token=confirmation_token,
-            run=lambda: pa.post(f"/agent/admin/tasks/{tid}/cancel"),
+        tally = await gate.execute_async(
+            target=target, actor=actor, token=confirmation_token, run=_run,
         )
     except GateDenied as e:
         return [_refusal(gate.name, target, e)]
     except ProjectAchillesError as e:
-        return _after_gate_error(e, gate.name, target, "cancel task")
-    task = result.get("data") or {}
-    return [
-        Finding(
-            source=_SOURCE,
-            finding_type=FindingType.action,
-            severity=Severity.info,
-            title=f"Action completed: cancel task {tid}",
-            entity=entity,
-            evidence=[Evidence(key="status", value=str(task.get("status", "expired")))],
-            recommended_action=RecommendedAction(
-                summary="Confirm with get_task_status.",
-                gated_action=gate.name,
-                confidence="high",
-            ),
+        return _after_gate_error(e, gate.name, target, "cancel tasks")
+
+    interrupted = str(tally.get("interrupted") or "")
+    if interrupted:
+        title = (
+            f"Action interrupted: cancelled {tally['cancelled']} of {len(ids)} task(s) "
+            f"before a {interrupted} stopped the batch"
         )
+        severity = Severity.high
+        summary = (
+            "The confirmation token was consumed and the batch stopped partway. "
+            "Check the pa_ key's permission to cancel tasks, then re-run cancel_tasks "
+            "(status/search) to finish the remainder; use list_tasks to see what's left."
+        )
+    else:
+        title = (
+            f"Action completed: cancelled {tally['cancelled']} of {len(ids)} task(s) "
+            f"({tally['terminal']} already finished, {tally['failed']} failed)"
+        )
+        severity = Severity.info
+        summary = "Confirm remaining state with list_tasks."
+
+    evidence_out = [
+        Evidence(key="cancelled", value=str(tally["cancelled"])),
+        Evidence(key="already_finished", value=str(tally["terminal"])),
+        Evidence(key="failed", value=str(tally["failed"])),
     ]
+    if interrupted:
+        evidence_out.append(Evidence(key="interrupted", value=interrupted))
+    evidence_out.extend(
+        Evidence(key=f"task_{i + 1}", value=x) for i, x in enumerate(ids[:15])
+    )
+
+    return [Finding(
+        source=_SOURCE,
+        finding_type=FindingType.action,
+        severity=severity,
+        title=title,
+        entity=entity,
+        evidence=evidence_out,
+        recommended_action=RecommendedAction(
+            summary=summary,
+            gated_action=gate.name,
+            confidence="high",
+        ),
+    )]
 
 
 async def list_schedules(pa: Any, status: str = "") -> list[Finding]:

@@ -10,7 +10,7 @@ async def test_exactly_seven_tools_registered():
     tools = await server.mcp.list_tools()
     assert {t.name for t in tools} == {
         "run_test", "schedule_test", "set_schedule_status",
-        "cancel_task", "list_schedules", "get_task_status", "list_tasks",
+        "cancel_tasks", "list_schedules", "get_task_status", "list_tasks",
     }
 
 
@@ -48,3 +48,10 @@ async def test_list_tasks_status_enum_closed():
     assert set(props["status"]["enum"]) == {
         "", "pending", "assigned", "running", "completed", "failed", "expired",
     }
+
+
+@pytest.mark.asyncio
+async def test_cancel_tasks_exposes_task_id_and_filter():
+    tools = {t.name: t for t in await server.mcp.list_tools()}
+    props = tools["cancel_tasks"].inputSchema["properties"]
+    assert "task_id" in props and "status" in props and "search" in props
