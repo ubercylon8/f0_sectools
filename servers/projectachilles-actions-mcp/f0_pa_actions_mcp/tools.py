@@ -180,8 +180,10 @@ async def run_test(
                 *[Evidence(key="task_id", value=str(t)) for t in task_ids[:5]],
             ],
             recommended_action=RecommendedAction(
-                summary="Track it with get_task_status; once completed, see the "
-                "outcome with list_test_executions on the read server.",
+                summary="Submitted as task "
+                f"{task_ids[0] if task_ids else '(id pending)'}; it runs "
+                "asynchronously (often minutes). Ask me later and I'll check once "
+                "with get_task_status.",
                 gated_action=gate.name,
                 confidence="high",
             ),
@@ -615,7 +617,13 @@ def _bundle_rollup(host: str, result: dict[str, Any]) -> Finding | None:
 
 
 async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
-    """Status of one test-run task by task_id (read)."""
+    """One-shot status-and-result check for one task_id (read).
+
+    If the task is still running, report that status and STOP — do not call again
+    until the user asks. On completion this returns the run's OUTCOME (bundle
+    verdict or pass/not-passed), so there is no need to check again or to call
+    the read server.
+    """
     tid = task_id.strip()
     if not tid:
         return [guidance(
