@@ -127,6 +127,29 @@ async def test_resolve_agent_exact_case_insensitive_match():
 
 
 @pytest.mark.asyncio
+async def test_resolve_agent_org_id_from_detail_when_list_strips_it():
+    # Live shape (verified 2026-07-18): the admin LIST endpoint strips org_id,
+    # but the single-agent DETAIL endpoint keeps it. resolve_agent must fall
+    # back to detail so the write payload's org_id is never empty (else the
+    # backend 400s on "org_id is required").
+    stripped = {"data": {"agents": [
+        {"id": "ag-1", "hostname": "web-01", "status": "active"},  # no org_id
+    ]}}
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json=stripped)
+        )
+        router.get(f"{BASE}/api/agent/admin/agents/ag-1").mock(
+            return_value=httpx.Response(
+                200, json={"data": {"id": "ag-1", "org_id": "default", "hostname": "web-01"}}
+            )
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            a = await resolve_agent(pa, "web-01")
+    assert a == {"agent_id": "ag-1", "org_id": "default", "hostname": "web-01"}
+
+
+@pytest.mark.asyncio
 async def test_resolve_agent_no_match_lists_guidance():
     with respx.mock() as router:
         router.get(f"{BASE}/api/agent/admin/agents").mock(

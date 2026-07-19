@@ -172,8 +172,21 @@ async def resolve_agent(pa: Any, hostname: str) -> dict[str, str]:
             )
         )
     a = matches[0]
+    agent_id = str(a.get("id") or "")
+    org_id = str(a.get("org_id") or "")
+    if not org_id and agent_id:
+        # The admin LIST endpoint strips org_id (verified live 2026-07-18); the
+        # single-agent DETAIL endpoint keeps it. Without it the create payload
+        # fails the backend's "org_id is required" check.
+        try:
+            detail = await pa.get(f"/agent/admin/agents/{agent_id}")
+        except ProjectAchillesError as e:
+            raise _mapped(e, "agent org lookup") from e
+        d2 = detail.get("data") if isinstance(detail, dict) else None
+        if isinstance(d2, dict):
+            org_id = str(d2.get("org_id") or "")
     return {
-        "agent_id": str(a.get("id") or ""),
-        "org_id": str(a.get("org_id") or ""),
+        "agent_id": agent_id,
+        "org_id": org_id,
         "hostname": str(a.get("hostname") or h),
     }
