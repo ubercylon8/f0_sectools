@@ -1,4 +1,4 @@
-"""Registration test: 6 tools, Literal enums surface in the schema."""
+"""Registration test: 7 tools, Literal enums surface in the schema."""
 from __future__ import annotations
 
 import pytest
@@ -6,11 +6,11 @@ from f0_pa_actions_mcp import server
 
 
 @pytest.mark.asyncio
-async def test_exactly_six_tools_registered():
+async def test_exactly_seven_tools_registered():
     tools = await server.mcp.list_tools()
     assert {t.name for t in tools} == {
         "run_test", "schedule_test", "set_schedule_status",
-        "cancel_task", "list_schedules", "get_task_status",
+        "cancel_task", "list_schedules", "get_task_status", "list_tasks",
     }
 
 
@@ -39,3 +39,12 @@ async def test_run_and_schedule_expose_tag_param():
     tools = {t.name: t for t in await server.mcp.list_tools()}
     assert "tag" in tools["run_test"].inputSchema["properties"]
     assert "tag" in tools["schedule_test"].inputSchema["properties"]
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_status_enum_closed():
+    tools = {t.name: t for t in await server.mcp.list_tools()}
+    props = tools["list_tasks"].inputSchema["properties"]
+    assert set(props["status"]["enum"]) == {
+        "", "pending", "assigned", "running", "completed", "failed", "expired",
+    }

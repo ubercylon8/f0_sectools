@@ -1,4 +1,4 @@
-"""ProjectAchilles actions MCP server (stdio). Gated writes + 2 reads.
+"""ProjectAchilles actions MCP server (stdio). Gated writes + 3 reads.
 
 Companion to the read-only projectachilles-mcp server. Every write is gated:
 PROJECTACHILLES_ALLOW_WRITE=true AND a fresh single-use confirmation token
@@ -168,6 +168,22 @@ async def get_task_status(task_id: str) -> list[dict[str, Any]]:
     cfg = ProjectAchillesConfig.from_env()
     async with ProjectAchillesClient(cfg) as pa:
         return _render(await tools.get_task_status(pa, task_id))
+
+
+@mcp.tool()
+async def list_tasks(
+    status: Literal["", "pending", "assigned", "running", "completed", "failed", "expired"] = "",
+    search: str = "",
+    limit: int = 25,
+) -> list[dict[str, Any]]:
+    """List ProjectAchilles test tasks and their lifecycle status (read).
+
+    status filters by task state; search matches test name or hostname. One call
+    returns all matching tasks (N per-host rows) — use instead of calling
+    get_task_status once per task."""
+    cfg = ProjectAchillesConfig.from_env()
+    async with ProjectAchillesClient(cfg) as pa:
+        return _render(await tools.list_tasks(pa, status, search, limit))
 
 
 def main() -> None:

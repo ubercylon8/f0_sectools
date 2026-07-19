@@ -35,6 +35,7 @@ from .resolve import (
 
 _SOURCE = "projectachilles"
 _ID_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,64}$")
+_TASK_STATUS = {"pending", "assigned", "running", "completed", "failed", "expired"}
 
 
 def _intent(
@@ -560,6 +561,74 @@ async def list_schedules(pa: Any, status: str = "") -> list[Finding]:
                 ],
             )
         )
+    return out
+
+
+async def list_tasks(
+    pa: Any, status: str = "", search: str = "", limit: int = 25
+) -> list[Finding]:
+    """List admin tasks with their lifecycle status (read). One call, N per-host
+    rows — the fleet-aware alternative to N get_task_status calls."""
+    if status and status not in _TASK_STATUS:
+        return [guidance(
+            f"status '{status}' is not a task state",
+            "Use one of: " + ", ".join(sorted(_TASK_STATUS)) + " (or omit for all).",
+        )]
+    params: dict[str, Any] = {"limit": limit}
+    if status:
+        params["status"] = status
+    if search:
+        params["search"] = search
+    try:
+        resp = await pa.get("/agent/admin/tasks", params=params)
+    except ProjectAchillesError as e:
+        finding = map_pa_error(e, "ProjectAchilles tasks")
+        if finding:
+            return [finding]
+        raise
+    data = _as_dict(resp.get("data") if isinstance(resp, dict) else None)
+    tasks = data.get("tasks") or []
+    total = data.get("total")
+    total_str = str(total if isinstance(total, int) and not isinstance(total, bool) else len(tasks))
+
+    shown_tasks = tasks[:limit]
+    counts: dict[str, int] = {}
+    for t in shown_tasks:
+        if isinstance(t, dict):
+            s = str(t.get("status", "unknown"))
+            counts[s] = counts.get(s, 0) + 1
+    breakdown = ", ".join(f"{v} {k}" for k, v in sorted(counts.items())) or "none"
+
+    out: list[Finding] = [Finding(
+        source=_SOURCE,
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=f"Tasks: {total_str} match ({breakdown} shown)",
+        evidence=[
+            Evidence(key="total", value=total_str),
+            Evidence(key="shown", value=str(len(shown_tasks))),
+        ],
+    )]
+    for t in shown_tasks:
+        if not isinstance(t, dict):
+            continue
+        host = str(t.get("agent_hostname") or "")
+        name = str(_as_dict(t.get("payload")).get("test_name") or "test")
+        st = str(t.get("status") or "unknown")
+        ent = Entity(kind=EntityKind.host, id=host, name=host) if host else None
+        out.append(Finding(
+            source=_SOURCE,
+            finding_type=FindingType.posture,
+            severity=Severity.info,
+            title=f"{name} on {host}: {st}",
+            entity=ent,
+            evidence=[
+                Evidence(key="task_id", value=str(t.get("id", ""))),
+                Evidence(key="status", value=st),
+                Evidence(key="hostname", value=host),
+                Evidence(key="created_at", value=str(t.get("created_at") or "")),
+            ],
+        ))
     return out
 
 
