@@ -218,12 +218,14 @@ class GatedAction:
         audit: AuditLog,
         token_store: TokenStore,
         approvals: ApprovalStore | None = None,
+        confirm_mode: str = "token",
     ) -> None:
         self.name = name
         self.enabled = enabled
         self.audit = audit
         self.token_store = token_store
         self.approvals = approvals if approvals is not None else ApprovalStore()
+        self.confirm_mode = confirm_mode
 
     def has_approval(self, target: str) -> bool:
         """Non-consuming peek — lets a tool decide intent vs execute."""
@@ -238,6 +240,10 @@ class GatedAction:
             raise GateDenied(
                 f"Action '{self.name}' is disabled. Set the platform write flag to enable it."
             )
+        if self.confirm_mode == "chat" and token is not None and token == target:
+            # Chat-confirm: the operator replied "approved" and the model
+            # echoed the exact target back. Not forge-resistant (opt-in only).
+            return "chat-confirm"
         if token:
             if self.token_store.consume(self.name, target, token):
                 return "token"
@@ -253,7 +259,9 @@ class GatedAction:
 
     def _audit(self, target: str, actor: str, token: str | None, method: str) -> None:
         ref = (
-            ApprovalStore._key(self.name, target)[:16] if method == "approval" else None
+            ApprovalStore._key(self.name, target)[:16]
+            if method in ("approval", "chat-confirm")
+            else None
         )
         self.audit.record(self.name, target, actor, token or "", method=method, ref=ref)
 
