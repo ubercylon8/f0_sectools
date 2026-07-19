@@ -31,7 +31,7 @@ class GateDenied(Exception):
 
 class AuditLog:
     def __init__(self, path: str | None = None) -> None:
-        self.path = Path(path) if path else gating_dir() / "audit.log"
+        self.path = Path(path).expanduser() if path else gating_dir() / "audit.log"
 
     def record(
         self,
@@ -68,7 +68,7 @@ class TokenStore:
     """
 
     def __init__(self, dir: str | None = None) -> None:
-        self.dir = Path(dir) if dir else gating_dir() / "tokens"
+        self.dir = Path(dir).expanduser() if dir else gating_dir() / "tokens"
 
     @staticmethod
     def _hash(token: str) -> str:
@@ -129,7 +129,7 @@ class ApprovalStore:
     """
 
     def __init__(self, dir: str | None = None) -> None:
-        root = Path(dir) if dir else gating_dir()
+        root = Path(dir).expanduser() if dir else gating_dir()
         self.requests = root / "requests"
         self.approvals = root / "approvals"
 

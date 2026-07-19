@@ -178,6 +178,12 @@ def test_default_stores_anchor_on_gating_dir(monkeypatch, tmp_path):
     assert ApprovalStore().requests == tmp_path / "g" / "requests"
 
 
+def test_explicit_store_paths_expand_tilde():
+    assert AuditLog("~/x-audit-test.log").path == Path.home() / "x-audit-test.log"
+    assert TokenStore("~/x-tokens-test").dir == Path.home() / "x-tokens-test"
+    assert ApprovalStore("~/x-gating-test").requests == Path.home() / "x-gating-test" / "requests"
+
+
 # ── ApprovalStore lifecycle ───────────────────────────────────────────
 def _approvals(tmp_path) -> ApprovalStore:
     return ApprovalStore(str(tmp_path / "gating"))
