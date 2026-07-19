@@ -564,9 +564,12 @@ def _as_dict(value: Any) -> dict[str, Any]:
 def _bundle_rollup(host: str, result: dict[str, Any]) -> Finding | None:
     """One rollup Finding from a completed task's pre-aggregated bundle_results,
     or None when the result is not a bundle (caller falls back to exit_code)."""
-    # Try the "bundle_results" key first, then fall back to checking if result itself is a bundle
+    # Try the "bundle_results" key first, then fall back to checking if result itself is a bundle.
+    # Detect on "controls" (a list), NOT "total_controls" — the count fields can be
+    # entirely absent while controls is still populated, and that must still be
+    # recognized as a bundle rather than silently falling through to exit_code.
     br = _as_dict(result.get("bundle_results"))
-    if not br and "bundle_name" in result and "total_controls" in result:
+    if not br and "bundle_name" in result and isinstance(result.get("controls"), list):
         # Result is the bundle data directly
         br = result
     if not br:
@@ -578,7 +581,17 @@ def _bundle_rollup(host: str, result: dict[str, Any]) -> Finding | None:
     controls_raw = br.get("controls")
     controls = controls_raw if isinstance(controls_raw, list) else []
     failing = [c for c in controls if isinstance(c, dict) and not c.get("compliant")]
-    non_compliant = failed > 0 or _safe_int(br.get("overall_exit_code")) != 0
+    # The pre-aggregated counts can be missing/non-numeric (-> 0 via _safe_int).
+    # When that happens but controls is populated, derive trustworthy counts from
+    # it rather than reporting a bogus "0/0".
+    if total == 0 and controls:
+        total = len(controls)
+        failed = len(failing)
+        passed = total - failed
+    # A failing bundle must NEVER read COMPLIANT: fall back to the controls list
+    # itself (not just the count fields) so a missing/non-numeric failed_controls
+    # or overall_exit_code can't mask real failing controls in evidence.
+    non_compliant = failed > 0 or _safe_int(br.get("overall_exit_code")) != 0 or bool(failing)
     if non_compliant:
         any_high = any(str(c.get("severity", "")).lower() in _HIGH_SEV for c in failing)
         sev = Severity.high if any_high else Severity.medium
@@ -653,7 +666,7 @@ async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
         # Non-bundle single test: use the exit code.
         exit_code = result.get("exit_code")
         where = f" on {host}" if host else ""
-        if exit_code == 0 or exit_code == "0":
+        if exit_code in (0, "0") and not isinstance(exit_code, bool):
             return [Finding(
                 source=_SOURCE, finding_type=FindingType.posture, severity=Severity.info,
                 title=f"{test_name}{where}: passed",

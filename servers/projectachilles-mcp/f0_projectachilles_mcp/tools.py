@@ -414,6 +414,20 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
             return [finding]
         raise
     rows = _rows(d)[:limit]
+    # The rollup below only sees the fetched window (pageSize=limit). If the
+    # server-reported total exceeds what we actually fetched, a COMPLIANT verdict
+    # is only true FOR THIS WINDOW — failing rows outside it wouldn't be caught.
+    # A NON-COMPLIANT verdict stays definitive: a found failure is a found failure.
+    total_items = None
+    if isinstance(d, dict):
+        pagination = d.get("pagination")
+        if isinstance(pagination, dict):
+            total_items = pagination.get("totalItems")
+    truncated = (
+        isinstance(total_items, int)
+        and not isinstance(total_items, bool)
+        and total_items > len(rows)
+    )
     bundle_rows = [r for r in rows if r.get("is_bundle_control")]
     single_rows = [r for r in rows if not r.get("is_bundle_control")]
     out: list[Finding] = []
@@ -429,11 +443,20 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         failing = [c for c in ctrls if not c.get("is_protected")]
         passed = total - len(failing)
         non_compliant = bool(failing)
-        sev = (
-            _SEV.get("high", Severity.high) if non_compliant else Severity.info
-        )
+        if non_compliant:
+            any_high = any(
+                str(c.get("severity", "")).lower() in ("critical", "high") for c in failing
+            )
+            sev = Severity.high if any_high else Severity.medium
+        else:
+            sev = Severity.info
         ftype = FindingType.misconfig if non_compliant else FindingType.posture
         verdict = "NON-COMPLIANT" if non_compliant else "COMPLIANT"
+        # A found failure is definitive even over a truncated window; only soften
+        # a COMPLIANT verdict, which is only true for the rows we actually saw.
+        verdict_label = "COMPLIANT (in fetched window)" if (
+            truncated and not non_compliant
+        ) else verdict
         ev = [
             Evidence(key="verdict", value=verdict),
             Evidence(key="passed", value=str(passed)),
@@ -446,15 +469,20 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
                 value=f"{c.get('test_name', '?')} ({c.get('control_validator', '?')})",
             ))
         if len(failing) > 15:
-            ev.append(Evidence(key="failing_controls_more",
+            ev.append(Evidence(key="more_not_shown",
                                value=f"{len(failing) - 15} more not shown"))
+        if truncated:
+            ev.append(Evidence(
+                key="window_truncated",
+                value=f"verdict based on {len(rows)} of {total_items} rows in window",
+            ))
         techniques = {str(t) for c in failing for t in (c.get("techniques") or []) if t}
         ent = Entity(kind=EntityKind.host, id=host, name=host) if host else None
         out.append(Finding(
             source="projectachilles",
             finding_type=ftype,
             severity=sev,
-            title=f"{bname} on {host}: {verdict} ({passed}/{total} controls passed)",
+            title=f"{bname} on {host}: {verdict_label} ({passed}/{total} controls passed)",
             entity=ent,
             evidence=ev,
             references=[Reference(type="mitre", id=t) for t in sorted(techniques)],

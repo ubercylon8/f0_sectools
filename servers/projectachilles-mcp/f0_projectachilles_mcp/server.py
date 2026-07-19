@@ -55,7 +55,9 @@ async def get_weak_techniques(days: int = 30, limit: int = 10) -> list[dict[str,
 async def list_test_executions(days: int = 7, limit: int = 25) -> list[dict[str, Any]]:
     """Recent test executions per host. Two kinds (see the `check_kind` evidence):
     attack simulations — blocked vs NOT blocked; and cyber-hygiene control checks —
-    passed vs not passed (a config/hardening check, not an attack)."""
+    passed vs not passed (a config/hardening check, not an attack). Bundle runs are
+    rolled up into one per-run COMPLIANT/NON-COMPLIANT finding (X/Y controls), not
+    one finding per control."""
     async with _client() as pa:
         return _render(await tools.list_test_executions(pa, days, limit))
 

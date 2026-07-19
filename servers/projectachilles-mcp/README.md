@@ -15,7 +15,7 @@ the underlying results, and the test-agent fleet to a local model.
 |------|---------|
 | `get_defense_score` | Defense score — current snapshot, or the trend with `over_time=true` |
 | `get_weak_techniques` | Lowest-scoring MITRE techniques — where defenses fail |
-| `list_test_executions` | Recent test executions per host — two `check_kind`s: attack simulations (blocked / NOT blocked) and cyber-hygiene control checks (passed / not passed) |
+| `list_test_executions` | Recent test executions per host — two `check_kind`s: attack simulations (blocked / NOT blocked) and cyber-hygiene control checks (passed / not passed). Bundle runs are rolled up into one per-run COMPLIANT/NON-COMPLIANT finding (X/Y controls), not one finding per control. |
 | `list_risk_acceptances` | Risks deliberately accepted (not remediated) |
 | `list_agents` | Test-agent fleet: hostname, OS, status |
 | `get_fleet_health` | Fleet metrics: online/offline, uptime |

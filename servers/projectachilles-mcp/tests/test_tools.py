@@ -476,6 +476,64 @@ async def test_list_test_executions_rolls_up_a_bundle_run():
 
 
 @pytest.mark.asyncio
+async def test_list_test_executions_bundle_truncated_window_is_flagged():
+    # 10 passing bundle rows fetched, but the server says 40 total rows exist in
+    # the window -> the rollup would otherwise be COMPLIANT over an INCOMPLETE
+    # sample. Must be flagged, not reported as a flat COMPLIANT verdict.
+    rows = [_bundle_row(f"CH-{i}", f"ctl{i}", "V", protected=True) for i in range(10)]
+    resp = {"data": rows, "pagination": {"totalItems": 40}}
+    pa = FakeClient(responses={"/analytics/executions/paginated": resp})
+    findings = await tools.list_test_executions(pa, days=7, limit=25)
+    bundle_findings = [f for f in findings if "Identity Endpoint Posture Bundle" in f.title]
+    assert len(bundle_findings) == 1
+    f = bundle_findings[0]
+    assert "COMPLIANT (in fetched window)" in f.title
+    assert "NON-COMPLIANT" not in f.title
+    ev = {e.key: e.value for e in f.evidence}
+    assert "window_truncated" in ev
+    assert "10" in ev["window_truncated"] and "40" in ev["window_truncated"]
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_bundle_not_truncated_not_flagged():
+    rows = [_bundle_row(f"CH-{i}", f"ctl{i}", "V", protected=True) for i in range(10)]
+    resp = {"data": rows, "pagination": {"totalItems": 10}}
+    pa = FakeClient(responses={"/analytics/executions/paginated": resp})
+    findings = await tools.list_test_executions(pa, days=7, limit=25)
+    f = [f for f in findings if "Identity Endpoint Posture Bundle" in f.title][0]
+    assert "COMPLIANT (in fetched window)" not in f.title
+    assert f.title.endswith("COMPLIANT (10/10 controls passed)")
+    ev = {e.key: e.value for e in f.evidence}
+    assert "window_truncated" not in ev
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_bundle_severity_matches_failing_control_severity():
+    # All failing controls are "medium" severity (not critical/high) -> the
+    # rollup severity must be medium, not a hardcoded high.
+    rows = [
+        {**_bundle_row(f"CH-{i}", f"ctl{i}", "V", protected=(i > 1)), "severity": "medium"}
+        for i in range(5)
+    ]
+    pa = FakeClient(responses={"/analytics/executions/paginated": _exec_rows(rows)})
+    findings = await tools.list_test_executions(pa, days=7, limit=25)
+    f = [f for f in findings if "Identity Endpoint Posture Bundle" in f.title][0]
+    assert "NON-COMPLIANT" in f.title
+    assert f.severity.value == "medium"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_bundle_overflow_uses_more_not_shown():
+    rows = [_bundle_row(f"CH-{i}", f"ctl{i}", "V", protected=False) for i in range(20)]
+    pa = FakeClient(responses={"/analytics/executions/paginated": _exec_rows(rows)})
+    findings = await tools.list_test_executions(pa, days=7, limit=25)
+    f = [f for f in findings if "Identity Endpoint Posture Bundle" in f.title][0]
+    control_ev = [e for e in f.evidence if e.key.startswith("failing_control_")]
+    assert len(control_ev) <= 15
+    assert any(e.key == "more_not_shown" for e in f.evidence)
+
+
+@pytest.mark.asyncio
 async def test_list_test_executions_mixes_bundle_and_single_rows():
     single = {
         "is_bundle_control": False, "test_name": "Brute Force SSH",

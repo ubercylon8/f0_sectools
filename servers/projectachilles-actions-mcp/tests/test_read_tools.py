@@ -9,7 +9,7 @@ import respx
 from f0_pa_actions_mcp.client import ProjectAchillesClient
 from f0_pa_actions_mcp.tools import get_task_status, list_schedules
 from f0_sectools_core.auth.config import ProjectAchillesConfig
-from f0_sectools_core.schema.findings import Severity
+from f0_sectools_core.schema.findings import FindingType, Severity
 
 BASE = "https://org.agent.example.com"
 
@@ -205,7 +205,11 @@ async def test_get_task_status_completed_non_bundle_uses_exit_code():
         async with ProjectAchillesClient(_cfg()) as pa:
             findings = await get_task_status(pa, "task-2")
     assert len(findings) == 1
-    assert "Some Single Test" in findings[0].title
+    f = findings[0]
+    assert "Some Single Test" in f.title
+    assert f.title.endswith(": passed")
+    assert f.severity == Severity.info
+    assert f.finding_type == FindingType.posture
 
 
 @pytest.mark.asyncio
@@ -240,7 +244,8 @@ async def test_get_task_status_bounds_failing_controls_to_15():
 
 @pytest.mark.asyncio
 async def test_get_task_status_bundle_nonnumeric_counts_is_graceful():
-    # Nonnumeric total_controls should not crash; gracefully defaults to 0.
+    # Nonnumeric total_controls should not crash; and since controls is populated,
+    # the trustworthy count is DERIVED from controls (not left as a bogus "N/0").
     broken = {**_BUNDLE_RESULT, "total_controls": "nope"}
     with respx.mock() as router:
         router.get(f"{BASE}/api/agent/admin/tasks/task-5").mock(
@@ -249,9 +254,41 @@ async def test_get_task_status_bundle_nonnumeric_counts_is_graceful():
         async with ProjectAchillesClient(_cfg()) as pa:
             findings = await get_task_status(pa, "task-5")
     assert len(findings) == 1
-    assert "NON-COMPLIANT" in findings[0].title  # Still rolled up despite broken count
-    # passed_controls is valid (15), total_controls converted to 0; no crash
-    assert "15/0" in findings[0].title
+    f = findings[0]
+    assert "NON-COMPLIANT" in f.title  # Still rolled up despite broken count
+    # _BUNDLE_RESULT.controls has 3 entries, 2 failing -> derived total=3, passed=1
+    assert "1/3" in f.title
+    ev = {e.key: e.value for e in f.evidence}
+    assert ev.get("total") == "3" and ev.get("failed") == "2" and ev.get("passed") == "1"
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_bundle_missing_counts_but_failing_control_is_noncompliant():
+    # No total_controls/passed_controls/failed_controls/overall_exit_code keys at
+    # all — only a controls list with one failing entry. The verdict must still be
+    # NON-COMPLIANT (never fall back to COMPLIANT just because the count fields
+    # are absent), and the N/M in the title must reflect the real controls list.
+    bundle = {
+        "bundle_name": "Identity Endpoint Posture Bundle",
+        "controls": [
+            {"control_id": "c1", "control_name": "OK Control", "validator": "V",
+             "compliant": True, "severity": "info", "techniques": []},
+            {"control_id": "c2", "control_name": "X", "validator": "V",
+             "compliant": False, "severity": "critical", "techniques": ["T1"]},
+        ],
+    }
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-7").mock(
+            return_value=httpx.Response(200, json=_task_resp("completed", bundle))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-7")
+    assert len(findings) == 1
+    f = findings[0]
+    assert "NON-COMPLIANT" in f.title
+    assert "1/2" in f.title
+    assert f.severity == Severity.high
+    assert f.finding_type == FindingType.misconfig
 
 
 @pytest.mark.asyncio
