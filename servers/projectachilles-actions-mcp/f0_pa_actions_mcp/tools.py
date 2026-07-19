@@ -538,6 +538,14 @@ _HIGH_SEV = ("critical", "high")
 _MAX_FAILING = 15
 
 
+def _safe_int(value: Any) -> int:
+    """Safe integer conversion; returns 0 on any failure."""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _as_dict(value: Any) -> dict[str, Any]:
     """Accept a dict or a JSON string; return {} on anything else/malformed."""
     if isinstance(value, dict):
@@ -551,7 +559,7 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _bundle_rollup(tid: str, host: str, result: dict[str, Any]) -> Finding | None:
+def _bundle_rollup(host: str, result: dict[str, Any]) -> Finding | None:
     """One rollup Finding from a completed task's pre-aggregated bundle_results,
     or None when the result is not a bundle (caller falls back to exit_code)."""
     # Try the "bundle_results" key first, then fall back to checking if result itself is a bundle
@@ -562,13 +570,13 @@ def _bundle_rollup(tid: str, host: str, result: dict[str, Any]) -> Finding | Non
     if not br:
         return None
     name = str(br.get("bundle_name") or "bundle")
-    total = int(br.get("total_controls") or 0)
-    passed = int(br.get("passed_controls") or 0)
-    failed = int(br.get("failed_controls") or 0)
+    total = _safe_int(br.get("total_controls"))
+    passed = _safe_int(br.get("passed_controls"))
+    failed = _safe_int(br.get("failed_controls"))
     controls_raw = br.get("controls")
     controls = controls_raw if isinstance(controls_raw, list) else []
     failing = [c for c in controls if isinstance(c, dict) and not c.get("compliant")]
-    non_compliant = failed > 0 or int(br.get("overall_exit_code") or 0) != 0
+    non_compliant = failed > 0 or _safe_int(br.get("overall_exit_code")) != 0
     if non_compliant:
         any_high = any(str(c.get("severity", "")).lower() in _HIGH_SEV for c in failing)
         sev = Severity.high if any_high else Severity.medium
@@ -594,11 +602,12 @@ def _bundle_rollup(tid: str, host: str, result: dict[str, Any]) -> Finding | Non
     techniques = {
         str(t) for c in failing for t in (c.get("techniques") or []) if t
     }
+    where = f" on {host}" if host else ""
     return Finding(
         source=_SOURCE,
         finding_type=ftype,
         severity=sev,
-        title=f"{name} on {host}: {verdict} ({passed}/{total} controls passed)",
+        title=f"{name}{where}: {verdict} ({passed}/{total} controls passed)",
         entity=Entity(kind=EntityKind.host, id=host, name=host) if host else None,
         evidence=ev,
         references=[Reference(type="mitre", id=t) for t in sorted(techniques)],
@@ -630,15 +639,16 @@ async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
 
     if status == "completed":
         result = _as_dict(t.get("result"))
-        rollup = _bundle_rollup(tid, host, result)
+        rollup = _bundle_rollup(host, result)
         if rollup is not None:
             return [rollup]
         # Non-bundle single test: use the exit code.
         exit_code = result.get("exit_code")
+        where = f" on {host}" if host else ""
         if exit_code == 0 or exit_code == "0":
             return [Finding(
                 source=_SOURCE, finding_type=FindingType.posture, severity=Severity.info,
-                title=f"{test_name} on {host}: passed",
+                title=f"{test_name}{where}: passed",
                 entity=Entity(kind=EntityKind.host, id=host, name=host) if host else None,
                 evidence=[Evidence(key="status", value="completed"),
                           Evidence(key="exit_code", value=str(exit_code))],
@@ -646,7 +656,7 @@ async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
         if exit_code is not None:
             return [Finding(
                 source=_SOURCE, finding_type=FindingType.misconfig, severity=Severity.medium,
-                title=f"{test_name} on {host}: not passed",
+                title=f"{test_name}{where}: not passed",
                 entity=Entity(kind=EntityKind.host, id=host, name=host) if host else None,
                 evidence=[Evidence(key="status", value="completed"),
                           Evidence(key="exit_code", value=str(exit_code))],
@@ -654,7 +664,7 @@ async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
         # Completed but no parsable outcome — graceful, never a crash.
         return [Finding(
             source=_SOURCE, finding_type=FindingType.posture, severity=Severity.info,
-            title=f"Task {tid} on {host}: completed (outcome unavailable)",
+            title=f"Task {tid}{where}: completed (outcome unavailable)",
             entity=Entity(kind=EntityKind.rule, id=tid),
             evidence=[Evidence(key="status", value="completed"),
                       Evidence(key="test_name", value=test_name)],

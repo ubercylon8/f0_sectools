@@ -236,3 +236,36 @@ async def test_get_task_status_bounds_failing_controls_to_15():
     control_ev = [e for e in findings[0].evidence if e.key.startswith("failing_control")]
     assert len(control_ev) <= 15
     assert any("more" in e.value.lower() for e in findings[0].evidence)
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_bundle_nonnumeric_counts_is_graceful():
+    # Nonnumeric total_controls should not crash; gracefully defaults to 0.
+    broken = {**_BUNDLE_RESULT, "total_controls": "nope"}
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-5").mock(
+            return_value=httpx.Response(200, json=_task_resp("completed", broken))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-5")
+    assert len(findings) == 1
+    assert "NON-COMPLIANT" in findings[0].title  # Still rolled up despite broken count
+    # passed_controls is valid (15), total_controls converted to 0; no crash
+    assert "15/0" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_completed_non_bundle_failed_uses_exit_code():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-6").mock(
+            return_value=httpx.Response(200, json=_task_resp(
+                "completed", {"exit_code": 1}, test_name="Some Single Test"))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-6")
+    assert len(findings) == 1
+    f = findings[0]
+    assert "not passed" in f.title
+    assert "Some Single Test" in f.title
+    assert f.finding_type.value == "misconfig"
+    assert f.severity == Severity.medium
