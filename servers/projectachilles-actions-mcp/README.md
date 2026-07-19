@@ -23,7 +23,8 @@ A same-size membership swap (one host gains the tag, another loses it) is not
 caught—deliberate, for lower friction. A tag matching more than 200 hosts is
 refused — narrow it.
 Per-host results after a fleet run: `list_test_executions` on the read
-server (`get_task_status` here is one task id at a time).
+server, which groups a bundle run into one COMPLIANT/NON-COMPLIANT finding
+per host (`get_task_status` here is one task id at a time).
 
 ## Setup
 
