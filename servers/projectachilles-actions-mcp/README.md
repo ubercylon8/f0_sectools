@@ -24,9 +24,17 @@ credential file). Two extra requirements for writes:
 
 Executing a gated action is two-step: call the tool without
 `confirmation_token` to get the fully-resolved intent (and the exact target
-string), then run `python scripts/confirm_action.py <action> "<target>"
---platform projectachilles` and call again with the printed token. Tokens
-are single-use, expire in 15 minutes, and are bound to (action, target).
+string), then get human confirmation. Two equivalent ways:
+
+- **Watcher (default):** the operator runs `python scripts/confirm_action.py
+  --watch`, approves the pending request with one keypress, and the agent
+  calls the same tool again with the same arguments — no token needed.
+- **Token (fallback, headless/scripted):** run `python scripts/confirm_action.py
+  <action> "<target>" --platform projectachilles` and call again with the
+  printed token.
+
+Both are single-use, expire in 15 minutes, and are bound to (action, target).
+Gating state lives under `$F0_GATING_DIR` (default `~/.f0sectools/gating/`).
 
 ## Run
 
