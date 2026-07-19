@@ -2,7 +2,8 @@
 
 Companion to `servers/projectachilles-mcp/` (read-only). This server exposes
 the **write** side of the validation loop, every write gated by
-`core/gating` (operator flag + single-use confirmation token + local audit):
+`core/gating` (operator flag + per-action human confirmation
+(forge-resistant token/watcher, or opt-in chat-confirm) + local audit):
 
 | Tool | Type |
 |---|---|
@@ -35,6 +36,25 @@ string), then get human confirmation. Two equivalent ways:
 
 Both are single-use, expire in 15 minutes, and are bound to (action, target).
 Gating state lives under `$F0_GATING_DIR` (default `~/.f0sectools/gating/`).
+
+**Confirmation modes.** By default (`PROJECTACHILLES_CONFIRM_MODE=token`,
+also the value when unset) this server only accepts the watcher/token
+confirmations above — both **forge-resistant**, since the approval never
+enters model context. Set `PROJECTACHILLES_CONFIRM_MODE=chat` to opt into
+**chat-confirm**: the operator just replies "approved" in the chat, and the
+agent re-calls the same tool with `confirmation_token` set to the
+`confirmation_target` shown in the intent finding; execution is audited with
+`method=chat-confirm`. This is low-friction and convenient for supervised,
+reversible runs (e.g. `run_test`), but it is **not forge-resistant** — the
+model can see and echo the target itself, so a misaligned model could in
+principle fabricate the confirmation. It is opt-in, off by default, and
+**must never be enabled for a destructive or irreversible action**; use the
+watcher or token surface for those. Unlike a token or watcher approval, the
+chat echo is **not single-use and has no TTL** — `confirmation_token ==
+target` authorizes every call while `allow_write` is on, including a silent
+re-execute if the model retries a failed run with the same arguments. Get a
+fresh operator "approved" before each re-call, and never reuse the echo to
+retry a failed execution.
 
 ## Run
 

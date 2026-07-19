@@ -35,8 +35,24 @@ def _intent(
     title: str,
     entity: Entity | None,
     evidence: list[Evidence],
+    confirm_mode: str = "token",
 ) -> Finding:
     short = action_name.split(".")[-1]
+    if confirm_mode == "chat":
+        summary = (
+            "To execute: the operator replies 'approved' in the chat, then you "
+            "call this tool again with confirmation_token set to the exact "
+            f'target "{target}".'
+        )
+    else:
+        summary = (
+            "To execute: an operator approves this action in their "
+            "confirm_action.py --watch terminal, then you call this tool again "
+            "with the SAME arguments.\n"
+            "Token fallback: python scripts/confirm_action.py "
+            f'{short} "{target}" --platform projectachilles\n'
+            "then pass the printed confirmation_token."
+        )
     return Finding(
         source=_SOURCE,
         finding_type=FindingType.action,
@@ -45,14 +61,7 @@ def _intent(
         entity=entity,
         evidence=[*evidence, Evidence(key="confirmation_target", value=target)],
         recommended_action=RecommendedAction(
-            summary=(
-                "To execute: an operator approves this action in their "
-                "confirm_action.py --watch terminal, then you call this tool again "
-                "with the SAME arguments.\n"
-                "Token fallback: python scripts/confirm_action.py "
-                f'{short} "{target}" --platform projectachilles\n'
-                "then pass the printed confirmation_token."
-            ),
+            summary=summary,
             gated_action=action_name,
             confidence="high",
         ),
@@ -133,6 +142,7 @@ async def run_test(
                 gate.name, target,
                 f"run test '{test['test_name']}' on {agent['hostname']}",
                 entity, evidence,
+                confirm_mode=gate.confirm_mode,
             )
         ]
     body = {
@@ -296,6 +306,7 @@ async def schedule_test(
                 gate.name, target,
                 f"schedule test '{test['test_name']}' on {agent['hostname']} ({desc})",
                 entity, evidence,
+                confirm_mode=gate.confirm_mode,
             )
         ]
     body = {
@@ -377,7 +388,10 @@ async def set_schedule_status(
                 Evidence(key="new_status", value=status)]
     if not confirmation_token and not gate.has_approval(target):
         gate.record_request(target)
-        return [_intent(gate.name, target, f"{verb} schedule {sid}", entity, evidence)]
+        return [_intent(
+            gate.name, target, f"{verb} schedule {sid}", entity, evidence,
+            confirm_mode=gate.confirm_mode,
+        )]
     try:
         result = await gate.execute_async(
             target=target,
@@ -434,7 +448,10 @@ async def cancel_task(
     evidence = [Evidence(key="task_id", value=tid)]
     if not confirmation_token and not gate.has_approval(target):
         gate.record_request(target)
-        return [_intent(gate.name, target, f"cancel task {tid}", entity, evidence)]
+        return [_intent(
+            gate.name, target, f"cancel task {tid}", entity, evidence,
+            confirm_mode=gate.confirm_mode,
+        )]
     try:
         result = await gate.execute_async(
             target=target,

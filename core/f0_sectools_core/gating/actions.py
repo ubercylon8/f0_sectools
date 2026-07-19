@@ -1,10 +1,15 @@
-"""Gated write-action machinery: config flag + single-use confirmation token + audit.
+"""Gated write-action machinery: config flag + per-action human confirmation + audit.
 
 A small local model must never be able to take a state-changing action on a live
 platform by itself. Every gated action requires BOTH an explicit operator-set
-flag AND a per-action human confirmation token (issued out-of-band, so the model
-never sees it), and is recorded to a local audit trail. This module is the single
-hard stop for all write/response actions.
+flag AND a per-action human confirmation, and is recorded to a local audit
+trail. Confirmation has two modes: the default is forge-resistant — a
+single-use token or watcher approval issued out-of-band, so the model never
+sees it (``confirm_mode="token"``). An opt-in ``confirm_mode="chat"`` instead
+accepts the operator's in-chat "approved" (the model echoes the target back);
+it is convenient but not forge-resistant, and must never be used for
+destructive actions. This module is the single hard stop for all
+write/response actions.
 """
 from __future__ import annotations
 
@@ -218,12 +223,14 @@ class GatedAction:
         audit: AuditLog,
         token_store: TokenStore,
         approvals: ApprovalStore | None = None,
+        confirm_mode: str = "token",
     ) -> None:
         self.name = name
         self.enabled = enabled
         self.audit = audit
         self.token_store = token_store
         self.approvals = approvals if approvals is not None else ApprovalStore()
+        self.confirm_mode = confirm_mode
 
     def has_approval(self, target: str) -> bool:
         """Non-consuming peek — lets a tool decide intent vs execute."""
@@ -238,6 +245,10 @@ class GatedAction:
             raise GateDenied(
                 f"Action '{self.name}' is disabled. Set the platform write flag to enable it."
             )
+        if self.confirm_mode == "chat" and token and token == target and target:
+            # Chat-confirm: the operator replied "approved" and the model
+            # echoed the exact target back. Not forge-resistant (opt-in only).
+            return "chat-confirm"
         if token:
             if self.token_store.consume(self.name, target, token):
                 return "token"
@@ -253,7 +264,9 @@ class GatedAction:
 
     def _audit(self, target: str, actor: str, token: str | None, method: str) -> None:
         ref = (
-            ApprovalStore._key(self.name, target)[:16] if method == "approval" else None
+            ApprovalStore._key(self.name, target)[:16]
+            if method in ("approval", "chat-confirm")
+            else None
         )
         self.audit.record(self.name, target, actor, token or "", method=method, ref=ref)
 

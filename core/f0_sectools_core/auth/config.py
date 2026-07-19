@@ -82,6 +82,7 @@ class ProjectAchillesConfig:
     api_key: str
     verify_tls: bool = True
     allow_write: bool = False
+    confirm_mode: str = "token"
 
     @classmethod
     def from_env(
@@ -94,11 +95,17 @@ class ProjectAchillesConfig:
             raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
         verify = env.get(f"{prefix}_VERIFY_TLS", "true").strip().lower() in _TRUE
         allow_write = env.get(f"{prefix}_ALLOW_WRITE", "false").strip().lower() in _TRUE
+        confirm_mode = env.get(f"{prefix}_CONFIRM_MODE", "token").strip().lower()
+        if confirm_mode not in ("token", "chat"):
+            raise ValueError(
+                f"{prefix}_CONFIRM_MODE must be 'token' or 'chat', got '{confirm_mode}'"
+            )
         return cls(
             base_url=env[required["base_url"]].rstrip("/"),
             api_key=env[required["api_key"]],
             verify_tls=verify,
             allow_write=allow_write,
+            confirm_mode=confirm_mode,
         )
 
 

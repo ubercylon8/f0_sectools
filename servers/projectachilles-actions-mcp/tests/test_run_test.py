@@ -32,13 +32,14 @@ def _cfg() -> ProjectAchillesConfig:
     return ProjectAchillesConfig(base_url=BASE, api_key="pa_test", allow_write=True)
 
 
-def _gate(tmp_path, enabled: bool = True) -> GatedAction:
+def _gate(tmp_path, enabled: bool = True, confirm_mode: str = "token") -> GatedAction:
     return GatedAction(
         "projectachilles.run_test",
         enabled=enabled,
         audit=AuditLog(str(tmp_path / "audit.log")),
         token_store=TokenStore(str(tmp_path / "pending")),
         approvals=ApprovalStore(str(tmp_path / "gating")),
+        confirm_mode=confirm_mode,
     )
 
 
@@ -209,3 +210,45 @@ async def test_run_test_approval_for_other_host_still_intent(tmp_path):
             findings = await run_test(pa, gate, UUID, "web-01")
     assert post.called is False
     assert "Pending action" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_run_test_chat_mode_intent_text(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_reads(router)
+        router.post(f"{BASE}/api/agent/admin/tasks")
+        gate = _gate(tmp_path, confirm_mode="chat")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, gate, UUID, "web-01")
+    summary = findings[0].recommended_action.summary
+    assert "approved" in summary.lower()
+    assert TARGET in summary  # the model is told to echo this exact target
+
+
+@pytest.mark.asyncio
+async def test_run_test_chat_echo_executes(tmp_path):
+    with respx.mock() as router:
+        _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/tasks").mock(
+            return_value=httpx.Response(201, json={"data": {"task_ids": ["task-1"]}})
+        )
+        gate = _gate(tmp_path, confirm_mode="chat")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            # The model echoes the target string as the confirmation.
+            findings = await run_test(pa, gate, UUID, "web-01", TARGET)
+    assert post.call_count == 1
+    assert "Action completed" in findings[0].title
+    entry = json.loads((tmp_path / "audit.log").read_text().strip())
+    assert entry["method"] == "chat-confirm"
+
+
+@pytest.mark.asyncio
+async def test_run_test_chat_wrong_echo_still_denied(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/tasks")
+        gate = _gate(tmp_path, confirm_mode="chat")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, gate, UUID, "web-01", f"{UUID}@wrong-host")
+    assert post.called is False
+    assert "not taken" in findings[0].title

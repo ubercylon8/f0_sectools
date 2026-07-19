@@ -35,13 +35,22 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
 3. STOP and ask the operator to approve the action in their
    `confirm_action.py --watch` terminal (the pending request appears there
    automatically; the intent finding shows the exact target). If they prefer
-   tokens, the finding also carries the one-shot command.
+   tokens, the finding also carries the one-shot command. **If
+   `PROJECTACHILLES_CONFIRM_MODE=chat`** (opt-in, off by default — see the
+   operator's `.env.projectachilles`), skip the watcher/token step: just ask
+   the operator to reply "approved" in the chat.
 4. Once the operator says approved, call the SAME tool again with the SAME
    arguments (no token needed — the gate consumes the stored approval).
    Approvals are single-use, expire in 15 minutes, and are bound to the
    exact action + target shown in the intent. Schedule timing arguments
    (time/day/date) are NOT part of the binding — re-read the intent finding
    before confirming so you approve the exact schedule shown.
+   **In chat-confirm mode**, instead pass `confirmation_token` set to the
+   exact `confirmation_target` evidence value shown in the intent finding —
+   that echo, plus the operator's chat "approved", is the confirmation.
+   Chat-confirm is convenient for supervised, reversible runs like this one
+   but is not forge-resistant (the model itself can see and echo the
+   target), so it is never used for destructive actions.
 5. Verify: `get_task_status` for runs (then `list_test_executions` on the
    read server for the blocked/not-blocked outcome); `list_schedules` for
    schedules.
@@ -57,6 +66,10 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
   delete — that is admin-only in the platform.
 - If every write returns a permission finding, the pa_ key is read-only —
   the operator must issue a read-write-scope key.
+- In chat-confirm mode, the echoed target is NOT single-use or time-limited —
+  it authorizes every call while the write flag is on. Get a fresh operator
+  "approved" before each re-call, and never reuse the echo to retry a failed
+  execution.
 
 ## Verification
 

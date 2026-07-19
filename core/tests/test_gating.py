@@ -12,13 +12,14 @@ from f0_sectools_core.gating.actions import (
 )
 
 
-def _gate(tmp_path, enabled):
+def _gate(tmp_path, enabled, confirm_mode="token"):
     return GatedAction(
         "defender.isolate_host",
         enabled=enabled,
         audit=AuditLog(str(tmp_path / "a.log")),
         token_store=TokenStore(str(tmp_path / "pending")),
         approvals=ApprovalStore(str(tmp_path / "gating")),
+        confirm_mode=confirm_mode,
     )
 
 
@@ -324,3 +325,60 @@ def test_gate_helpers_delegate(tmp_path):
     assert g.approvals.list_pending()[0]["target"] == "web-01"
     g.approvals.approve("defender.isolate_host", "web-01")
     assert g.has_approval("web-01") is True
+
+
+# ── chat-confirm mode ─────────────────────────────────────────────────
+def test_chat_mode_target_echo_executes_and_audits(tmp_path):
+    g = _gate(tmp_path, enabled=True, confirm_mode="chat")
+    result = g.execute(
+        target="web-01", actor="james", token="web-01", run=lambda: "ok"
+    )
+    assert result == "ok"
+    entry = json.loads((tmp_path / "a.log").read_text().strip())
+    assert entry["method"] == "chat-confirm"
+    assert entry["token_ref"]  # action|target key prefix, non-empty
+
+
+def test_chat_mode_wrong_echo_denied(tmp_path):
+    g = _gate(tmp_path, enabled=True, confirm_mode="chat")
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token="web-99", run=lambda: "ok")
+
+
+def test_chat_mode_still_accepts_a_valid_token(tmp_path):
+    # chat-confirm is additive: the token path must still work in chat mode.
+    g = _gate(tmp_path, enabled=True, confirm_mode="chat")
+    tok = g.token_store.issue("defender.isolate_host", "web-01")
+    g.execute(target="web-01", actor="james", token=tok, run=lambda: "ok")
+    entry = json.loads((tmp_path / "a.log").read_text().strip())
+    assert entry["method"] == "token"
+
+
+def test_target_echo_rejected_in_token_mode(tmp_path):
+    # No cross-mode leak: passing the target as the "token" in token mode
+    # falls through to TokenStore.consume and denies.
+    g = _gate(tmp_path, enabled=True, confirm_mode="token")
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token="web-01", run=lambda: "ok")
+
+
+def test_chat_mode_flag_off_denies_even_with_echo(tmp_path):
+    g = _gate(tmp_path, enabled=False, confirm_mode="chat")
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token="web-01", run=lambda: "ok")
+
+
+def test_chat_mode_no_token_still_returns_intent_path(tmp_path):
+    # With neither token nor echo, chat mode denies exactly like token mode
+    # (the tool short-circuit returns intent before calling execute).
+    g = _gate(tmp_path, enabled=True, confirm_mode="chat")
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token=None, run=lambda: "ok")
+
+
+def test_chat_mode_empty_target_and_token_denied(tmp_path):
+    # Defense-in-depth: an empty target must never auto-authorize, even if a
+    # future caller wires an empty confirmation_token through unchanged.
+    g = _gate(tmp_path, enabled=True, confirm_mode="chat")
+    with pytest.raises(GateDenied):
+        g.execute(target="", actor="james", token="", run=lambda: "ok")

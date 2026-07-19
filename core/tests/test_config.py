@@ -115,3 +115,30 @@ def test_tenable_config_custom_base_url_strips_slash():
     cfg = TenableConfig.from_env(env=env)
     assert cfg.base_url == "https://cloud.tenable.eu"
     assert cfg.verify_tls is False
+
+
+def test_projectachilles_confirm_mode_defaults_token():
+    env = {
+        "PROJECTACHILLES_BASE_URL": "https://tpsgl.projectachilles.io",
+        "PROJECTACHILLES_API_KEY": "pa_x",
+    }
+    assert ProjectAchillesConfig.from_env(env=env).confirm_mode == "token"
+
+
+def test_projectachilles_confirm_mode_chat_parsed():
+    env = {
+        "PROJECTACHILLES_BASE_URL": "https://tpsgl.projectachilles.io",
+        "PROJECTACHILLES_API_KEY": "pa_x",
+        "PROJECTACHILLES_CONFIRM_MODE": "chat",
+    }
+    assert ProjectAchillesConfig.from_env(env=env).confirm_mode == "chat"
+
+
+def test_projectachilles_confirm_mode_invalid_raises():
+    env = {
+        "PROJECTACHILLES_BASE_URL": "https://tpsgl.projectachilles.io",
+        "PROJECTACHILLES_API_KEY": "pa_x",
+        "PROJECTACHILLES_CONFIRM_MODE": "yolo",
+    }
+    with pytest.raises(ValueError):
+        ProjectAchillesConfig.from_env(env=env)

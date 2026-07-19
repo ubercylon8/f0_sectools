@@ -25,7 +25,7 @@ This single constraint drives almost every design rule below. Small local models
 
 ## Critical Rules (NEVER VIOLATE)
 
-1. **Read-only by default.** Every tool that queries a platform is read-only. Any tool that *changes state* on a live platform (isolate host, disable user, quarantine file, close incident) is a **gated write action** — see [Gated Write Actions](#gated-write-actions). It MUST require both an explicit config flag AND a per-action human confirmation token.
+1. **Read-only by default.** Every tool that queries a platform is read-only. Any tool that *changes state* on a live platform (isolate host, disable user, quarantine file, close incident) is a **gated write action** — see [Gated Write Actions](#gated-write-actions). It MUST require an explicit config flag AND per-action human confirmation, in one of two modes: **(a) forge-resistant** — a single-use confirmation token or a watcher approval delivered out-of-band on a channel the model cannot read; this is the default and the **only** permitted mode for destructive or irreversible actions. **(b) chat-confirm** — an opt-in, per-platform mode (off by default) where the operator's in-chat "approved" is the confirmation; it is convenient for supervised, reversible actions but is **not** forge-resistant (a misaligned model could fabricate it), so it is never used for destructive actions.
 2. **Secrets never leave the host and never reach the model.** Credentials are loaded from per-platform `.env` files. They are **never logged, never included in tool output, never passed into a prompt or model context, never sent off-box.**
 3. **Redact before returning.** All tool output passes through the core redaction layer before it is returned to the agent. Strip API keys, tokens, raw PII, and secrets from every payload — including error messages and stack traces.
 4. **Every tool returns the structured findings schema.** No tool returns ad-hoc text. Output is normalized JSON (see [The Findings Schema](#the-findings-schema)) so agents — and small models especially — can parse and chain results predictably.
@@ -190,8 +190,12 @@ Any tool that changes state on a live platform is **read-only-by-default and gat
 
 1. **Disabled unless enabled.** The action is unavailable unless the operator sets the platform's write flag (e.g. `DEFENDER_ALLOW_WRITE=true` in `.env.defender`).
 2. **Dry-run / intent first.** When invoked, the tool returns the *intended* action as a finding (`finding_type: "action"`) describing exactly what it will do and to which target — it does **not** execute yet.
-3. **Human confirmation required.** Two equivalent modes, both single-use,
-   target-bound, TTL'd, and implemented in `core/gating/`:
+3. **Human confirmation required.** Three surfaces, implemented in
+   `core/gating/`. The first two are **forge-resistant** (single-use,
+   target-bound, TTL'd, and the confirmation never round-trips through model
+   context) and are the default and the **only** modes permitted for
+   destructive or irreversible actions; the third is **opt-in and
+   model-forgeable** — see the caveat below.
    - **Watcher (default):** the intent registers a pending request; the
      operator approves it in `python scripts/confirm_action.py --watch`
      (one keypress), and the agent repeats the *identical* tool call — the
@@ -199,12 +203,21 @@ Any tool that changes state on a live platform is **read-only-by-default and gat
    - **Token (headless/scripted):** `confirm_action.py <action> "<target>"`
      prints a single-use token passed as `confirmation_token` (used by e.g.
      the live-smoke `--execute` flows).
+   - **Chat-confirm (opt-in, off by default):** enabled per-platform via
+     `<PLATFORM>_CONFIRM_MODE=chat` (today: `PROJECTACHILLES_CONFIRM_MODE`,
+     the `projectachilles-actions` server only). The operator simply replies
+     "approved" in the chat; the agent re-calls the same tool passing
+     `confirmation_token` equal to the `confirmation_target` shown in the
+     intent finding. Execution is audited with `method=chat-confirm`, same
+     as any other gated action.
    Gating state lives under `$F0_GATING_DIR` (default `~/.f0sectools/gating/`),
    shared by servers and the CLI regardless of working directory. No
    confirmation → no execution.
-4. **Execute + audit.** On a valid token or consumed approval, the action runs and the result, target, actor, and token are written to the local audit trail.
+4. **Execute + audit.** On a valid token or consumed approval, the action runs and the result, target, actor, and token/method are written to the local audit trail.
 
 A small local model **must never be able to isolate a host or disable an account on its own.** The flag + human confirmation (watcher approval or token) is the hard stop.
+
+**Chat-confirm's honest caveat:** unlike the watcher and token surfaces, chat-confirm's "confirmation" is text the model itself can see and echo back — there is no out-of-band channel the model is locked out of. A misaligned or jailbroken model could, in principle, fabricate the operator's "approved" and confirm its own action. It exists only as a low-friction convenience for supervised, reversible operations (e.g. running a validation test) where the operator is watching every turn — it is off by default, must stay opt-in per platform, and **must never be wired to a destructive or irreversible action** (isolate host, disable user, quarantine file, close incident, delete anything). If in doubt, use the watcher or token surface instead. It is also **not single-use or time-limited**: `confirmation_token == target` authorizes *every* call while the write flag is on, including a silent re-execute if the model retries a failed run with the same arguments — the operator must give a fresh "approved" before each re-call, and the model must never reuse the echo to retry a failed execution. This is by design (making it single-use would reintroduce a token and defeat the point of chat mode), so chat-confirm suits supervised sessions only, never unattended operation.
 
 Note: the gate's guarantee holds only when confirm_action.py runs in a terminal the model cannot drive — in runtimes where the model has shell access, treat the approval CLI (especially --approve) as operator-only and keep write flags off.
 

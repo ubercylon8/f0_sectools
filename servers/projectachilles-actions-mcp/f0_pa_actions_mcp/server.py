@@ -36,6 +36,7 @@ def _gate(name: str, cfg: ProjectAchillesConfig) -> GatedAction:
         enabled=cfg.allow_write,
         audit=AuditLog(os.environ.get("PROJECTACHILLES_AUDIT_LOG_PATH") or None),
         token_store=TokenStore(),
+        confirm_mode=cfg.confirm_mode,
     )
 
 
