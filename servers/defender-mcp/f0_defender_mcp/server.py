@@ -124,10 +124,10 @@ async def isolate_host(
 ) -> list[dict[str, Any]]:
     """Isolate a device from the network (GATED WRITE).
 
-    Call WITHOUT confirmation_token first: returns the intended action only, no
-    change is made. To execute, an operator runs
-    `python scripts/confirm_action.py isolate_host <device_id>` and pastes the
-    printed token as confirmation_token. Requires DEFENDER_ALLOW_WRITE=true.
+    Call WITHOUT confirmation_token first: returns the intended action only. An
+    operator then approves it in `confirm_action.py --watch` and you call again
+    with the SAME arguments — or supplies a token from confirm_action.py as
+    confirmation_token. Requires DEFENDER_ALLOW_WRITE=true.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with _sec_client(cfg) as sec:
@@ -145,8 +145,10 @@ async def release_host(
 ) -> list[dict[str, Any]]:
     """Release a device from isolation (GATED WRITE).
 
-    Same two-step flow as isolate_host: call without a token to preview, then run
-    `python scripts/confirm_action.py release_host <device_id>` and supply the token.
+    Same two-step flow as isolate_host: call without confirmation_token to
+    preview, then either an operator approves it in `confirm_action.py --watch`
+    and you call again with the SAME arguments, or supply a token from
+    confirm_action.py as confirmation_token.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with _sec_client(cfg) as sec:

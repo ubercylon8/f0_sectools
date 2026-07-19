@@ -228,6 +228,21 @@ async def test_isolate_host_bad_token_refuses(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_isolate_host_bad_device_id_charset_rejected_no_call(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        gate = _gate(tmp_path, enabled=True)
+        bad_id = "dev\x1b[2K1"
+        tok = gate.token_store.issue("defender.isolate_host", bad_id)
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, bad_id, "c2", confirmation_token=tok)
+        assert len(findings) == 1
+        assert "unsupported characters" in findings[0].title.lower()
+        assert router.calls.call_count == 0  # no POST, not even the token exchange
+        assert gate.approvals.list_pending() == []  # no pending request recorded
+
+
+@pytest.mark.asyncio
 async def test_isolate_host_valid_token_executes_and_audits(tmp_path):
     with respx.mock as router:
         _token(router)

@@ -37,6 +37,11 @@ def resolve_action(action: str, platform: str) -> str:
     return action if "." in action else f"{platform}.{action}"
 
 
+def _display(s: str) -> str:
+    """Neutralize terminal escapes/control chars in model-influenced strings."""
+    return "".join(c if c.isprintable() else "?" for c in s)
+
+
 def issue_confirmation(
     action: str,
     target: str,
@@ -52,12 +57,16 @@ def approve_one(
     store: ApprovalStore, audit: AuditLog, action: str, target: str, ttl_s: int = 900
 ) -> None:
     store.approve(action, target, ttl_s=ttl_s)
-    audit.record(action, target, _ACTOR, "", method="approved")
+    audit.record(
+        action, target, _ACTOR, "", method="approved", ref=ApprovalStore._key(action, target)[:16]
+    )
 
 
 def deny_one(store: ApprovalStore, audit: AuditLog, action: str, target: str) -> None:
     store.deny(action, target)
-    audit.record(action, target, _ACTOR, "", method="denied")
+    audit.record(
+        action, target, _ACTOR, "", method="denied", ref=ApprovalStore._key(action, target)[:16]
+    )
 
 
 def _desktop_notify(message: str) -> None:
@@ -78,15 +87,16 @@ def watch_once(
     handled = 0
     for req in store.list_pending():
         action, target = str(req.get("action")), str(req.get("target"))
+        d_action, d_target = _display(action), _display(target)
         if notify:
-            notify(f"{action} -> {target}")
-        answer = ask(f"{action} -> {target} — approve? [y/N] ").strip().lower()
+            notify(f"{d_action} -> {d_target}")
+        answer = ask(f"{d_action} -> {d_target} — approve? [y/N] ").strip().lower()
         if answer == "y":
             approve_one(store, audit, action, target)
-            print(f"APPROVED {action} -> {target} (15 min, single use)")
+            print(f"APPROVED {d_action} -> {d_target} (15 min, single use)")
         else:
             deny_one(store, audit, action, target)
-            print(f"denied {action} -> {target}")
+            print(f"denied {d_action} -> {d_target}")
         handled += 1
     return handled
 
@@ -132,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         if not pending:
             print("no pending gated-action requests.")
         for req in pending:
-            print(f"{req.get('action')} -> {req.get('target')}")
+            print(f"{_display(str(req.get('action')))} -> {_display(str(req.get('target')))}")
         return 0
 
     if args.approve:

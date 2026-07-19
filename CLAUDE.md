@@ -202,9 +202,11 @@ Any tool that changes state on a live platform is **read-only-by-default and gat
    Gating state lives under `$F0_GATING_DIR` (default `~/.f0sectools/gating/`),
    shared by servers and the CLI regardless of working directory. No
    confirmation → no execution.
-4. **Execute + audit.** On a valid token, the action runs and the result, target, actor, and token are written to the local audit trail.
+4. **Execute + audit.** On a valid token or consumed approval, the action runs and the result, target, actor, and token are written to the local audit trail.
 
-A small local model **must never be able to isolate a host or disable an account on its own.** The flag + token gate is the hard stop.
+A small local model **must never be able to isolate a host or disable an account on its own.** The flag + human confirmation (watcher approval or token) is the hard stop.
+
+Note: the gate's guarantee holds only when confirm_action.py runs in a terminal the model cannot drive — in runtimes where the model has shell access, treat the approval CLI (especially --approve) as operator-only and keep write flags off.
 
 ---
 

@@ -22,7 +22,7 @@ def gating_dir() -> Path:
     """Fixed cross-process gating-state root — servers and the operator CLI
     must agree on it regardless of their working directories."""
     env = os.environ.get("F0_GATING_DIR")
-    return Path(env) if env else Path.home() / ".f0sectools" / "gating"
+    return Path(env).expanduser() if env else Path.home() / ".f0sectools" / "gating"
 
 
 class GateDenied(Exception):
@@ -107,7 +107,10 @@ class TokenStore:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return False
-        path.unlink(missing_ok=True)  # single-use: gone whether or not it matches
+        try:
+            path.unlink()  # atomic claim: exactly one concurrent caller wins
+        except FileNotFoundError:
+            return False
         if record.get("action") != action or record.get("target") != target:
             return False
         if float(record.get("expires_at", 0)) < time.time():
@@ -196,7 +199,10 @@ class ApprovalStore:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return False
-        path.unlink(missing_ok=True)  # single-use: gone whether or not it validates
+        try:
+            path.unlink()  # atomic claim: exactly one concurrent caller wins
+        except FileNotFoundError:
+            return False
         if record.get("action") != action or record.get("target") != target:
             return False
         if float(record.get("expires_at", 0)) < time.time():

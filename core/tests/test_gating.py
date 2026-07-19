@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from f0_sectools_core.gating.actions import (
@@ -65,6 +66,16 @@ def test_expired_records_are_swept(tmp_path):
     # Issuing again should sweep the expired record before writing the new one.
     store.issue("defender.isolate_host", "web-02")
     assert len(list(pending_dir.glob("*.json"))) == 1
+
+
+def test_token_consume_lost_claim_returns_false(tmp_path):
+    # Simulates a lost race: the record file vanishes (e.g. a concurrent
+    # claimant) between the is_file() check and the atomic unlink.
+    store = TokenStore(str(tmp_path / "pending"))
+    tok = store.issue("defender.isolate_host", "web-01")
+    record_path = store.dir / f"{store._hash(tok)}.json"
+    record_path.unlink()
+    assert store.consume("defender.isolate_host", "web-01", tok) is False
 
 
 def test_only_hash_persisted_never_plaintext(tmp_path):
@@ -155,6 +166,11 @@ def test_gating_dir_defaults_to_home(monkeypatch):
     assert gating_dir().parent.name == ".f0sectools"
 
 
+def test_gating_dir_expands_tilde(monkeypatch):
+    monkeypatch.setenv("F0_GATING_DIR", "~/x-gating-test")
+    assert gating_dir() == Path.home() / "x-gating-test"
+
+
 def test_default_stores_anchor_on_gating_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("F0_GATING_DIR", str(tmp_path / "g"))
     assert TokenStore().dir == tmp_path / "g" / "tokens"
@@ -228,6 +244,16 @@ def test_deny_removes_request_without_approving(tmp_path):
     s.deny("a.b", "t")
     assert s.list_pending() == []
     assert s.has_approval("a.b", "t") is False
+
+
+def test_approval_consume_lost_claim_returns_false(tmp_path):
+    # Simulates a lost race: the approval file vanishes (e.g. a concurrent
+    # claimant) between the is_file() check and the atomic unlink.
+    s = _approvals(tmp_path)
+    s.approve("a.b", "t")
+    record_path = s.approvals / f"{ApprovalStore._key('a.b', 't')}.json"
+    record_path.unlink()
+    assert s.consume("a.b", "t") is False
 
 
 def test_requests_are_not_authorization(tmp_path):

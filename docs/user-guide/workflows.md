@@ -226,8 +226,10 @@ split across the model and the operator:
 Writes are also disabled at the config level unless `DEFENDER_ALLOW_WRITE=true`
 is set in `.env.defender` — even with a valid token, the tool refuses if the
 flag is off. Every action that actually executes is recorded to the local
-audit trail at `audit-logs/actions.log`, which stores the actor, target,
-action name, and a truncated SHA-256 **fingerprint** of the token — never the
+audit trail at `$F0_GATING_DIR/audit.log` (default
+`~/.f0sectools/gating/audit.log`; override via `DEFENDER_AUDIT_LOG_PATH` /
+`PROJECTACHILLES_AUDIT_LOG_PATH`), which stores the actor, target, action
+name, and a truncated SHA-256 **fingerprint** of the token — never the
 plaintext token itself. (Refused attempts — flag off or an invalid token — are
 rejected before execution and are not written to the audit trail; they surface
 to the operator as a refusal finding instead.)
