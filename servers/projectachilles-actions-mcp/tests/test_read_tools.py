@@ -306,3 +306,51 @@ async def test_get_task_status_completed_non_bundle_failed_uses_exit_code():
     assert "Some Single Test" in f.title
     assert f.finding_type.value == "misconfig"
     assert f.severity == Severity.medium
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_empty_bundle_falls_through_to_exit_code():
+    # Edge case: bundle_results with empty controls and no signal should
+    # fall through to the exit_code verdict path, not report COMPLIANT.
+    empty_bundle_fail = {
+        "exit_code": 1,
+        "bundle_results": {
+            "bundle_name": "B",
+            "controls": [],
+        }
+    }
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-empty-fail").mock(
+            return_value=httpx.Response(200, json=_task_resp(
+                "completed", empty_bundle_fail, test_name="Identity Bundle"))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-empty-fail")
+    assert len(findings) == 1
+    f = findings[0]
+    assert "not passed" in f.title
+    assert "Identity Bundle" in f.title
+    assert "COMPLIANT" not in f.title
+    assert f.finding_type == FindingType.misconfig
+    assert f.severity == Severity.medium
+
+    # Companion: empty bundle with exit_code=0 should report passed
+    empty_bundle_pass = {
+        "exit_code": 0,
+        "bundle_results": {
+            "bundle_name": "B",
+            "controls": [],
+        }
+    }
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-empty-pass").mock(
+            return_value=httpx.Response(200, json=_task_resp(
+                "completed", empty_bundle_pass, test_name="Identity Bundle"))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-empty-pass")
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.title.endswith(": passed")
+    assert f.finding_type == FindingType.posture
+    assert f.severity == Severity.info

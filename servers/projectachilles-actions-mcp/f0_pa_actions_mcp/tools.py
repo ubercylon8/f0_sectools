@@ -588,6 +588,12 @@ def _bundle_rollup(host: str, result: dict[str, Any]) -> Finding | None:
         total = len(controls)
         failed = len(failing)
         passed = total - failed
+    # Guard: empty/signal-less bundle should fall through to exit_code path.
+    # A bundle with no controls and no evaluable signal (total/failed/exit_code all 0)
+    # must return None so get_task_status uses the exit_code verdict instead.
+    if not controls and total == 0 and failed == 0 and _safe_int(br.get("overall_exit_code")) == 0:
+        return None
+
     # A failing bundle must NEVER read COMPLIANT: fall back to the controls list
     # itself (not just the count fields) so a missing/non-numeric failed_controls
     # or overall_exit_code can't mask real failing controls in evidence.
