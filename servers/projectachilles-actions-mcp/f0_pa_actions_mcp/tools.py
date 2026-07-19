@@ -25,7 +25,14 @@ from f0_sectools_core.schema.findings import (
 
 from .client import ProjectAchillesError
 from .errors import map_pa_error
-from .resolve import ResolveFailed, guidance, resolve_agent, resolve_build, resolve_test
+from .resolve import (
+    ResolveFailed,
+    guidance,
+    resolve_agent,
+    resolve_build,
+    resolve_selection,
+    resolve_test,
+)
 
 _SOURCE = "projectachilles"
 _ID_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,64}$")
@@ -114,42 +121,62 @@ def _after_gate_error(
     ]
 
 
+_MAX_HOSTS_SHOWN = 15
+
+
+def _selection_evidence(sel: dict[str, Any]) -> list[Evidence]:
+    """Bounded host evidence for a selection (one host or a fleet)."""
+    ev: list[Evidence] = [Evidence(key="host_count", value=str(sel["count"]))]
+    for i, h in enumerate(sel["hostnames"][:_MAX_HOSTS_SHOWN]):
+        ev.append(Evidence(key=f"host_{i + 1}", value=str(h)))
+    extra = sel["count"] - _MAX_HOSTS_SHOWN
+    if extra > 0:
+        ev.append(Evidence(key="hosts_more", value=f"{extra} more not shown"))
+    return ev
+
+
 async def run_test(
     pa: Any,
     gate: GatedAction,
     test_id: str,
-    hostname: str,
+    hostname: str = "",
+    tag: str = "",
     confirmation_token: str = "",
     actor: str = "mcp-operator",
 ) -> list[Finding]:
-    """Run a validation test on ONE agent now (gated write). No token -> intent."""
+    """Run a validation test now on ONE host (hostname) or a FLEET (tag) — gated.
+
+    Set exactly one of hostname/tag. No token -> intent only."""
     try:
         test = await resolve_test(pa, test_id)
         binary = await resolve_build(pa, test["test_uuid"])
-        agent = await resolve_agent(pa, hostname)
+        sel = await resolve_selection(pa, hostname, tag)
     except ResolveFailed as e:
         return [e.finding]
-    target = f"{test['test_uuid']}@{agent['hostname']}"
-    entity = Entity(kind=EntityKind.host, id=agent["agent_id"], name=agent["hostname"])
+    target = f"{test['test_uuid']}@{sel['target_key']}"
+    entity = (
+        Entity(kind=EntityKind.host, id=sel["agent_ids"][0], name=sel["hostnames"][0])
+        if not sel["is_fleet"]
+        else Entity(kind=EntityKind.tenant, id=sel["target_key"], name=sel["label"])
+    )
     evidence = [
         Evidence(key="test_name", value=test["test_name"]),
         Evidence(key="test_uuid", value=test["test_uuid"]),
-        Evidence(key="hostname", value=agent["hostname"]),
         Evidence(key="binary_name", value=binary),
+        *_selection_evidence(sel),
     ]
     if not confirmation_token and not gate.has_approval(target):
         gate.record_request(target)
         return [
             _intent(
                 gate.name, target,
-                f"run test '{test['test_name']}' on {agent['hostname']}",
-                entity, evidence,
-                confirm_mode=gate.confirm_mode,
+                f"run test '{test['test_name']}' on {sel['label']}",
+                entity, evidence, gate.confirm_mode,
             )
         ]
     body = {
-        "org_id": agent["org_id"],
-        "agent_ids": [agent["agent_id"]],
+        "org_id": sel["org_id"],
+        "agent_ids": sel["agent_ids"],
         "test_uuid": test["test_uuid"],
         "test_name": test["test_name"],
         "binary_name": binary,
@@ -157,9 +184,7 @@ async def run_test(
     }
     try:
         result = await gate.execute_async(
-            target=target,
-            actor=actor,
-            token=confirmation_token,
+            target=target, actor=actor, token=confirmation_token,
             run=lambda: pa.post("/agent/admin/tasks", json=body),
         )
     except GateDenied as e:
@@ -172,18 +197,18 @@ async def run_test(
             source=_SOURCE,
             finding_type=FindingType.action,
             severity=Severity.info,
-            title=f"Action completed: run test '{test['test_name']}' "
-            f"on {agent['hostname']}",
+            title=f"Action completed: run test '{test['test_name']}' on "
+            f"{sel['label']} ({len(task_ids)} task"
+            f"{'s' if len(task_ids) != 1 else ''})",
             entity=entity,
             evidence=[
                 *evidence,
-                *[Evidence(key="task_id", value=str(t)) for t in task_ids[:5]],
+                *[Evidence(key="task_id", value=str(t)) for t in task_ids[:10]],
             ],
             recommended_action=RecommendedAction(
-                summary="Submitted as task "
-                f"{task_ids[0] if task_ids else '(id pending)'}; it runs "
-                "asynchronously (often minutes). Ask me later and I'll check once "
-                "with get_task_status.",
+                summary=f"Submitted {len(task_ids)} task(s) on {sel['label']}; they "
+                "run asynchronously. Ask me later and I'll check with get_task_status "
+                "(or list_test_executions on the read server for per-host results).",
                 gated_action=gate.name,
                 confidence="high",
             ),
