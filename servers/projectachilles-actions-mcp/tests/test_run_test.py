@@ -340,6 +340,7 @@ async def test_run_test_tag_valid_token_posts_all_agent_ids(tmp_path):
 @pytest.mark.asyncio
 async def test_run_test_tag_drift_in_count_refuses(tmp_path):
     # Token issued for N=2; the tag now resolves to N=3 -> target mismatch -> refusal.
+    # Drift -> refusal + no write; the stale token is spent, forcing fresh approval for N=3.
     grown = {"data": {"agents": [
         {"id": "ag-1", "hostname": "web-01"}, {"id": "ag-2", "hostname": "web-02"},
         {"id": "ag-3", "hostname": "web-03"},
@@ -361,9 +362,10 @@ async def test_run_test_tag_drift_in_count_refuses(tmp_path):
                                       confirmation_token=token)
     assert post.called is False
     assert "not taken" in findings[0].title
-    # token for the N=2 target survives (a new N=3 approval is required)
+    # The drift attempt burned the token (single-use, unlink-before-validate);
+    # the operator must re-preview and re-approve for the new fleet size.
     assert TokenStore(str(tmp_path / "pending")).consume(
-        "projectachilles.run_test", TAG_TARGET, token)
+        "projectachilles.run_test", TAG_TARGET, token) is False
 
 
 @pytest.mark.asyncio
