@@ -36,6 +36,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Post + maintain a managed PR comment with the review (the switch that makes
+          # this behave like the working @claude responder). Without it the PR-review
+          # path relies on the agent explicitly calling a post tool and stays silent.
+          track_progress: true
           # Direct review prompt (no code-review plugin). The plugin's slash-command
           # run was sandboxed in CI (heavy tool-permission denials, no comments posted);
           # the plain-prompt mode — the same one the @claude responder uses successfully —
