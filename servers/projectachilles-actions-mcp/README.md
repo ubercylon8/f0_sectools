@@ -10,9 +10,10 @@ the **write** side of the validation loop, every write gated by
 | `run_test(test_id, hostname, tag)` | GATED — execute a validation test now, on ONE host (`hostname`) or a FLEET (`tag` — every agent carrying it) |
 | `schedule_test(test_id, hostname, schedule, run_time, …, tag)` | GATED — recurring/once schedule (UTC), on ONE host or a FLEET (`tag`) |
 | `set_schedule_status(schedule_id, status)` | GATED — pause/resume |
-| `cancel_task(task_id)` | GATED — cancel a pending run |
+| `cancel_tasks(task_id \| status, search)` | GATED — cancel ONE task (`task_id`) or a BULK sweep of matching tasks (`status`/`search` filter, count-bound confirmation) |
 | `list_schedules(status)` | read |
 | `get_task_status(task_id)` | read — one-shot; returns the run outcome (bundle rollup or single-test pass/not-passed) on completion |
+| `list_tasks(status, search)` | read — admin task list with lifecycle status; one call, N per-host rows — the fleet-aware alternative to N `get_task_status` calls |
 
 `run_test`/`schedule_test` take **exactly one** of `hostname` (single exact
 agent) or `tag` (fleet — every agent currently carrying that tag, fanned out
@@ -25,6 +26,20 @@ refused — narrow it.
 Per-host results after a fleet run: `list_test_executions` on the read
 server, which groups a bundle run into one COMPLIANT/NON-COMPLIANT finding
 per host (`get_task_status` here is one task id at a time).
+
+`cancel_tasks` takes **either** `task_id` (cancel one task) **or** a bulk
+`status`/`search` filter — never both. Bulk mode resolves the filter against
+`GET /agent/admin/tasks` first (PA has no batch-cancel endpoint, so the tool
+loops per-task under one gated action) and binds confirmation to the match
+**count**, encoded in the confirmation target as `cancel:<status>:<search>:<N>`
+(e.g. `cancel:pending:*:42`). A filter matching more than 200 tasks is refused
+outright — narrow it with `search`. As with fleet `run_test`/`schedule_test`,
+a same-size membership swap between preview and approval (one task finishes,
+another becomes pending) is not caught — deliberate, for lower friction; if
+you suspect drift, re-preview. `list_tasks` is the read-only way to check
+what a filter would match before cancelling. `cancel_tasks` allows
+chat-confirm like the other gated actions here — the same not-single-use /
+no-TTL caveat in the Confirmation modes section below applies.
 
 ## Setup
 

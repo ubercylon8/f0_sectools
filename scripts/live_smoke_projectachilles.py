@@ -5,6 +5,8 @@ Usage (from the repo root):
        ./.env.projectachilles and fill in PROJECTACHILLES_BASE_URL and a read-scope
        PROJECTACHILLES_API_KEY (pa_...).
     2. uv run python scripts/live_smoke_projectachilles.py
+       # pass --test <name-or-uuid> to also probe the scoped list_test_executions
+       # path (confirms the live ?tests= filter semantics — name or uuid).
 
 Calls each read tool against live ProjectAchilles and prints REDACTED findings.
 Secrets are never printed. Auth / permission / rate-limit issues show up as
@@ -12,6 +14,7 @@ posture findings (graceful degradation), not crashes.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 
@@ -33,6 +36,14 @@ def _show(label: str, findings) -> None:
 
 
 async def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--test", default="",
+        help="test name or uuid to scope the list_test_executions probe to "
+             "(confirms live ?tests= filter semantics); omitted -> probe skipped",
+    )
+    args = ap.parse_args()
+
     cfg = ProjectAchillesConfig.from_env()  # raises clearly if creds missing
     print(f"Instance {cfg.base_url}  (api key not shown)")
     async with ProjectAchillesClient(cfg) as pa:
@@ -56,6 +67,17 @@ async def main() -> None:
                 _show(label, await coro)
             except Exception as e:  # noqa: BLE001 — smoke test: report and continue
                 print(f"\n=== {label}: ERROR ===\n{type(e).__name__}: {e}")
+
+        if args.test:
+            try:
+                _show(
+                    f"list_test_executions(test={args.test})",
+                    await tools.list_test_executions(pa, days=30, limit=10, test=args.test),
+                )
+            except Exception as e:  # noqa: BLE001 — smoke test: report and continue
+                print(f"\n=== list_test_executions(test=...): ERROR ===\n{type(e).__name__}: {e}")
+        else:
+            print("\n(skipping scoped list_test_executions probe — pass --test <name-or-uuid>)")
 
 
 if __name__ == "__main__":

@@ -52,14 +52,17 @@ async def get_weak_techniques(days: int = 30, limit: int = 10) -> list[dict[str,
 
 
 @mcp.tool()
-async def list_test_executions(days: int = 7, limit: int = 25) -> list[dict[str, Any]]:
+async def list_test_executions(
+    days: int = 7, limit: int = 25,
+    test: str = "", tag: str = "", hostname: str = "",
+) -> list[dict[str, Any]]:
     """Recent test executions per host. Two kinds (see the `check_kind` evidence):
     attack simulations — blocked vs NOT blocked; and cyber-hygiene control checks —
-    passed vs not passed (a config/hardening check, not an attack). Bundle runs are
-    rolled up into one per-run COMPLIANT/NON-COMPLIANT finding (X/Y controls), not
-    one finding per control."""
+    passed vs not passed. Bundle runs roll up into one per-run COMPLIANT/NON-COMPLIANT
+    finding (X/Y controls). Pass `test` (and/or `tag`/`hostname`) to scope results to
+    ONE run instead of a raw time window (avoids unrelated hosts appearing)."""
     async with _client() as pa:
-        return _render(await tools.list_test_executions(pa, days, limit))
+        return _render(await tools.list_test_executions(pa, days, limit, test, tag, hostname))
 
 
 @mcp.tool()

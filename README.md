@@ -20,7 +20,7 @@ Seven MCP servers — six **live-validated against a real tenant**, one built wi
 | `f0-projectachilles-mcp` | ✅ live-validated | 8 | defense score, weak techniques, test executions, risk acceptances, agents, fleet health, test-catalog search, test detail |
 | `f0-intune-mcp` | ✅ live-validated | 6 | managed devices, compliance, stale devices, policies, config profiles |
 | `f0-tenable-mcp` | ✅ live-validated | 7 | vuln summary, top vulns, assets, per-asset vulns, plugin info, scans, plugin affected-hosts |
-| `f0-projectachilles-actions-mcp` | 🔧 built — live-validation pending | 6 (2 read + 4 gated) | list schedules, task status; gated `run_test` / `schedule_test` / `set_schedule_status` / `cancel_task` |
+| `f0-projectachilles-actions-mcp` | 🔧 built — live-validation pending | 7 (3 read + 4 gated) | list schedules, task status, list tasks; gated `run_test` / `schedule_test` / `set_schedule_status` / `cancel_tasks` |
 
 **44 registered tools.** Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 22 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
 

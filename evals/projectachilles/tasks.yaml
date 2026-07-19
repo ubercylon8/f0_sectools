@@ -41,3 +41,7 @@
 
 - prompt: "What does the Kerberoast test cover?"
   expect_tool: get_test
+
+- prompt: "show the results for the Kerberoast test on the windows fleet"
+  expect_tool: list_test_executions
+  origin: projectachilles

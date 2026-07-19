@@ -73,6 +73,11 @@ _UUID_RE = re.compile(
     r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", re.IGNORECASE
 )
 
+# Scoping values (test name/uuid, tag, hostname) — bounded, printable, no
+# control chars. Permissive enough for test names with spaces; strict enough
+# to reject newlines/garbage before they hit the query string.
+_SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
+
 # PA supports these filters server-side on GET /api/browser/tests; the rest
 # (actor/tactic/tag) are filtered client-side over the returned list.
 _SERVER_SIDE = {"technique": "technique", "category": "category", "keyword": "search"}
@@ -388,8 +393,40 @@ async def get_weak_techniques(pa: Any, days: int = 30, limit: int = 10) -> list[
     return out
 
 
-async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[Finding]:
+def _scope_guidance(field: str, value: str) -> Finding:
+    return Finding(
+        source="projectachilles",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=f"Invalid scope: {field} contains unsupported characters",
+        evidence=[Evidence(key=field, value=value[:64])],
+        recommended_action=RecommendedAction(
+            summary=f"Pass a plain {field} (letters, digits, spaces, . _ - : @ /).",
+        ),
+    )
+
+
+async def list_test_executions(
+    pa: Any, days: int = 7, limit: int = 25,
+    test: str = "", tag: str = "", hostname: str = "",
+) -> list[Finding]:
     frm, to = _window(days)
+    for field, value in (("test", test), ("tag", tag), ("hostname", hostname)):
+        if value and not _SCOPE_RE.match(value):
+            return [_scope_guidance(field, value)]
+    params: dict[str, Any] = {
+        "from": frm,
+        "to": to,
+        "pageSize": limit,
+        "sortField": "routing.event_time",
+        "sortOrder": "desc",
+    }
+    if test:
+        params["tests"] = test          # ?tests= — name or UUID (live-validate)
+    if tag:
+        params["tags"] = tag
+    if hostname:
+        params["hostnames"] = hostname
     try:
         # Use the ENRICHED paginated endpoint. The plain /analytics/executions
         # strips category/defender_detected/severity/techniques, which starves the
@@ -400,13 +437,7 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         # the endpoint default) so "recent" is guaranteed most-recent-first.
         d = await pa.get(
             "/analytics/executions/paginated",
-            params={
-                "from": frm,
-                "to": to,
-                "pageSize": limit,
-                "sortField": "routing.event_time",
-                "sortOrder": "desc",
-            },
+            params=params,
         )
     except Exception as e:
         finding = map_pa_error(e, "ProjectAchilles test executions")

@@ -1,4 +1,4 @@
-"""ProjectAchilles actions MCP server (stdio). Gated writes + 2 reads.
+"""ProjectAchilles actions MCP server (stdio). Gated writes + 3 reads.
 
 Companion to the read-only projectachilles-mcp server. Every write is gated:
 PROJECTACHILLES_ALLOW_WRITE=true AND a fresh single-use confirmation token
@@ -124,20 +124,23 @@ async def set_schedule_status(
 
 
 @mcp.tool()
-async def cancel_task(
-    task_id: str, confirmation_token: str = ""
+async def cancel_tasks(
+    task_id: str = "",
+    status: Literal["pending", "assigned", "running", "completed", "failed", "expired"] = "pending",
+    search: str = "",
+    confirmation_token: str = "",
 ) -> list[dict[str, Any]]:
-    """Cancel a pending/running ProjectAchilles test task (GATED WRITE).
-
-    task_id comes from run_test's result or get_task_status. Same two-step
-    confirmation flow as run_test.
-    """
+    """Cancel ProjectAchilles test tasks (GATED WRITE). Pass EITHER task_id (one
+    task) OR a status/search filter to bulk-cancel a run's tasks in one action
+    (e.g. status=pending cancels all pending). Bulk confirmation is bound to the
+    matched task COUNT; >200 matches is refused. Same two-step confirmation as
+    run_test."""
     cfg = ProjectAchillesConfig.from_env()
     async with ProjectAchillesClient(cfg) as pa:
         return _render(
-            await tools.cancel_task(
-                pa, _gate("projectachilles.cancel_task", cfg),
-                task_id, confirmation_token, _ACTOR,
+            await tools.cancel_tasks(
+                pa, _gate("projectachilles.cancel_tasks", cfg),
+                task_id, status, search, confirmation_token, _ACTOR,
             )
         )
 
@@ -168,6 +171,22 @@ async def get_task_status(task_id: str) -> list[dict[str, Any]]:
     cfg = ProjectAchillesConfig.from_env()
     async with ProjectAchillesClient(cfg) as pa:
         return _render(await tools.get_task_status(pa, task_id))
+
+
+@mcp.tool()
+async def list_tasks(
+    status: Literal["", "pending", "assigned", "running", "completed", "failed", "expired"] = "",
+    search: str = "",
+    limit: int = 25,
+) -> list[dict[str, Any]]:
+    """List ProjectAchilles test tasks and their lifecycle status (read).
+
+    status filters by task state; search matches test name or hostname. One call
+    returns all matching tasks (N per-host rows) — use instead of calling
+    get_task_status once per task."""
+    cfg = ProjectAchillesConfig.from_env()
+    async with ProjectAchillesClient(cfg) as pa:
+        return _render(await tools.list_tasks(pa, status, search, limit))
 
 
 def main() -> None:

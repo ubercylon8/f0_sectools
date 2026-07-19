@@ -22,8 +22,10 @@ list_test_executions).
 ## Tools
 
 Base tool names (runtime may prefix): `run_test`, `schedule_test`,
-`set_schedule_status`, `cancel_task` (all GATED), `list_schedules`,
-`get_task_status` (reads).
+`set_schedule_status`, `cancel_tasks` (all GATED), `list_schedules`,
+`get_task_status`, `list_tasks` (reads). `list_test_executions` (read
+server) rounds out result-checking — see "Checking & cancelling a run"
+below.
 
 ## Procedure
 
@@ -70,6 +72,26 @@ re-preview and re-approve against the new count. A tag matching more than
 200 hosts is refused outright — narrow the tag and retry. After a fleet run,
 get per-host results from `list_test_executions` on the read server
 (`get_task_status` only covers one task id at a time, not the whole fleet).
+
+### Checking & cancelling a run
+
+- **Scope results to one run.** `list_test_executions` (read server) takes
+  optional `test` (name or uuid), `tag` (fleet), and `hostname` — pass the
+  same test/tag you ran to see only that run's per-host outcomes instead of
+  scrolling an unfiltered page.
+- **Sweep lifecycle status.** `list_tasks(status="pending")` (actions
+  server, read) lists in-flight/queued tasks in one call — the fleet-aware
+  alternative to polling `get_task_status` once per task id. Add `search` to
+  narrow to one test name or hostname substring.
+- **Bulk-cancel with the same confirm flow.** `cancel_tasks(status="pending")`
+  cancels every matching task under one gated action — same two-step
+  confirm as `run_test`/`schedule_test` (watcher/token by default, chat if
+  opted in). The no-token preview resolves the filter live and binds
+  confirmation to the match **count** (e.g. `cancel:pending:*:12`); if the
+  count changes before approval (a task finishes or a new one queues),
+  re-preview and re-confirm. A filter matching more than 200 tasks is
+  refused — narrow with `search` first. To cancel a single task, pass
+  `task_id` instead of `status`/`search`.
 
 ## Pitfalls
 

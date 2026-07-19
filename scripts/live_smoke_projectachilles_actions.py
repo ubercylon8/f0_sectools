@@ -56,6 +56,16 @@ async def main() -> None:
     print(f"Instance {cfg.base_url}  allow_write={cfg.allow_write}")
     async with ProjectAchillesClient(cfg) as pa:
         _show("list_schedules", await tools.list_schedules(pa))
+        _show("list_tasks(status=pending)", await tools.list_tasks(pa, status="pending"))
+        # Dry-run intent preview only: no confirmation_token is passed, so the
+        # gate returns the count-bound target (cancel:pending:*:<N>) and never
+        # executes. Mirrors the run_test/schedule_test INTENT calls below.
+        _show(
+            "cancel_tasks(status=pending) INTENT",
+            await tools.cancel_tasks(
+                pa, _gate("projectachilles.cancel_tasks", cfg), status="pending",
+            ),
+        )
         # Intent-only gated calls: no token -> no state change, verifies the
         # resolution chain (test lookup, build lookup, agent match) live.
         if args.test_uuid and args.hostname:

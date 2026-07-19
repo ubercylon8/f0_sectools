@@ -550,3 +550,44 @@ async def test_list_test_executions_mixes_bundle_and_single_rows():
     assert "Brute Force SSH" in titles                                  # single row kept
     # one rollup + one single = 2 findings
     assert len(findings) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_scoping_params_passed_through():
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": []}})
+    await tools.list_test_executions(pa, test="Kerberoast", tag="windows", hostname="dc-01")
+    _, params = pa.calls[0]
+    assert params.get("tests") == "Kerberoast"
+    assert params.get("tags") == "windows"
+    assert params.get("hostnames") == "dc-01"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_no_scope_is_unchanged():
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": []}})
+    await tools.list_test_executions(pa)
+    _, params = pa.calls[0]
+    for k in ("tests", "tags", "hostnames"):
+        assert k not in params  # empty params omitted -> byte-identical to today
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_scope_excludes_other_hosts():
+    # Phantom-host repro: caller scopes to test X; the endpoint (filtered) returns
+    # only X's host. The tool must not invent or leak an unrelated host.
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
+        {"test_name": "Kerberoast", "hostname": "dc-01", "is_protected": False,
+         "severity": "high", "techniques": ["T1558.003"]},
+    ], "pagination": {"totalItems": 1}}})
+    findings = await tools.list_test_executions(pa, test="Kerberoast")
+    hosts = {f.entity.name for f in findings if f.entity}
+    assert hosts == {"dc-01"}
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_rejects_bad_scope_charset():
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": []}})
+    findings = await tools.list_test_executions(pa, test="bad\nvalue")
+    assert findings[0].finding_type.value == "posture"
+    assert "scope" in findings[0].title.lower() or "character" in findings[0].title.lower()
+    assert pa.calls == []  # rejected pre-request
