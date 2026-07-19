@@ -33,10 +33,27 @@ class AuditLog:
     def __init__(self, path: str | None = None) -> None:
         self.path = Path(path) if path else gating_dir() / "audit.log"
 
-    def record(self, action: str, target: str, actor: str, token: str) -> None:
+    def record(
+        self,
+        action: str,
+        target: str,
+        actor: str,
+        token: str,
+        method: str = "token",
+        ref: str | None = None,
+    ) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        token_ref = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16] if token else ""
-        entry = {"action": action, "target": target, "actor": actor, "token_ref": token_ref}
+        if ref is not None:
+            token_ref = ref
+        else:
+            token_ref = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16] if token else ""
+        entry = {
+            "action": action,
+            "target": target,
+            "actor": actor,
+            "method": method,
+            "token_ref": token_ref,
+        }
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
 
@@ -189,29 +206,57 @@ class ApprovalStore:
 
 class GatedAction:
     def __init__(
-        self, name: str, enabled: bool, audit: AuditLog, token_store: TokenStore
+        self,
+        name: str,
+        enabled: bool,
+        audit: AuditLog,
+        token_store: TokenStore,
+        approvals: ApprovalStore | None = None,
     ) -> None:
         self.name = name
         self.enabled = enabled
         self.audit = audit
         self.token_store = token_store
+        self.approvals = approvals if approvals is not None else ApprovalStore()
 
-    def _authorize(self, target: str, token: str | None) -> None:
+    def has_approval(self, target: str) -> bool:
+        """Non-consuming peek — lets a tool decide intent vs execute."""
+        return self.approvals.has_approval(self.name, target)
+
+    def record_request(self, target: str) -> None:
+        """Publish a pending request for the operator watcher (display only)."""
+        self.approvals.record_request(self.name, target)
+
+    def _authorize(self, target: str, token: str | None) -> str:
         if not self.enabled:
             raise GateDenied(
                 f"Action '{self.name}' is disabled. Set the platform write flag to enable it."
             )
-        if not token or not self.token_store.consume(self.name, target, token):
+        if token:
+            if self.token_store.consume(self.name, target, token):
+                return "token"
             raise GateDenied(
                 f"Action '{self.name}' requires a fresh, valid confirmation token."
             )
+        if self.approvals.consume(self.name, target):
+            return "approval"
+        raise GateDenied(
+            f"Action '{self.name}' requires a watcher approval "
+            f"(confirm_action.py --watch) or a confirmation token."
+        )
+
+    def _audit(self, target: str, actor: str, token: str | None, method: str) -> None:
+        ref = (
+            ApprovalStore._key(self.name, target)[:16] if method == "approval" else None
+        )
+        self.audit.record(self.name, target, actor, token or "", method=method, ref=ref)
 
     def execute(
         self, *, target: str, actor: str, token: str | None, run: Callable[[], Any]
     ) -> Any:
-        self._authorize(target, token)
+        method = self._authorize(target, token)
         result = run()
-        self.audit.record(self.name, target, actor, token or "")
+        self._audit(target, actor, token, method)
         return result
 
     async def execute_async(
@@ -222,7 +267,7 @@ class GatedAction:
         token: str | None,
         run: Callable[[], Awaitable[Any]],
     ) -> Any:
-        self._authorize(target, token)
+        method = self._authorize(target, token)
         result = await run()
-        self.audit.record(self.name, target, actor, token or "")
+        self._audit(target, actor, token, method)
         return result

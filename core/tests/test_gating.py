@@ -17,6 +17,7 @@ def _gate(tmp_path, enabled):
         enabled=enabled,
         audit=AuditLog(str(tmp_path / "a.log")),
         token_store=TokenStore(str(tmp_path / "pending")),
+        approvals=ApprovalStore(str(tmp_path / "gating")),
     )
 
 
@@ -234,3 +235,60 @@ def test_requests_are_not_authorization(tmp_path):
     s.record_request("a.b", "t")
     assert s.has_approval("a.b", "t") is False
     assert s.consume("a.b", "t") is False
+
+
+# ── GatedAction approval path ────────────────────────────────────────
+def test_no_token_with_approval_executes_and_audits_method(tmp_path):
+    g = _gate(tmp_path, enabled=True)
+    g.approvals.approve("defender.isolate_host", "web-01")
+    result = g.execute(target="web-01", actor="james", token=None, run=lambda: "ok")
+    assert result == "ok"
+    entry = json.loads((tmp_path / "a.log").read_text().strip())
+    assert entry["method"] == "approval"
+    assert entry["token_ref"]  # approval key prefix, non-empty
+    # single-use: same call again is denied
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token=None, run=lambda: "ok")
+
+
+def test_approval_cannot_bypass_disabled_flag(tmp_path):
+    g = _gate(tmp_path, enabled=False)
+    g.approvals.approve("defender.isolate_host", "web-01")
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token=None, run=lambda: "ok")
+    # flag check is OUTERMOST: the approval must not have been consumed
+    assert g.approvals.has_approval("defender.isolate_host", "web-01") is True
+
+
+def test_approval_for_other_target_denied(tmp_path):
+    g = _gate(tmp_path, enabled=True)
+    g.approvals.approve("defender.isolate_host", "web-02")
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token=None, run=lambda: "ok")
+
+
+def test_token_path_still_audits_method_token(tmp_path):
+    g = _gate(tmp_path, enabled=True)
+    tok = g.token_store.issue("defender.isolate_host", "web-01")
+    g.execute(target="web-01", actor="james", token=tok, run=lambda: "ok")
+    entry = json.loads((tmp_path / "a.log").read_text().strip())
+    assert entry["method"] == "token"
+
+
+def test_supplied_token_takes_precedence_and_bad_token_denies(tmp_path):
+    # A bad token must deny even when an approval exists — no silent fallback
+    # from an explicitly-supplied (wrong) credential.
+    g = _gate(tmp_path, enabled=True)
+    g.approvals.approve("defender.isolate_host", "web-01")
+    with pytest.raises(GateDenied):
+        g.execute(target="web-01", actor="james", token="nope", run=lambda: "ok")
+    assert g.approvals.has_approval("defender.isolate_host", "web-01") is True
+
+
+def test_gate_helpers_delegate(tmp_path):
+    g = _gate(tmp_path, enabled=True)
+    assert g.has_approval("web-01") is False
+    g.record_request("web-01")
+    assert g.approvals.list_pending()[0]["target"] == "web-01"
+    g.approvals.approve("defender.isolate_host", "web-01")
+    assert g.has_approval("web-01") is True
