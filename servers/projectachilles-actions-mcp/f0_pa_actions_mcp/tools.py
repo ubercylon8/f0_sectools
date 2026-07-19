@@ -480,6 +480,11 @@ async def cancel_tasks(
                 "pass either task_id or a status/search filter, not both",
                 "Give task_id for one task, or status/search for a bulk cancel.",
             )]
+        if tid.startswith("cancel:"):
+            return [guidance(
+                "task_id must be a task id, not a bulk target",
+                "Pass the id exactly as shown by run_test/list_tasks.",
+            )]
         if not _ID_RE.match(tid):
             return [guidance(
                 f"task_id '{tid}' contains unsupported characters",
@@ -513,18 +518,27 @@ async def cancel_tasks(
                 return [finding]
             raise
         data = _as_dict(resp.get("data") if isinstance(resp, dict) else None)
-        rows = [t for t in (data.get("tasks") or []) if isinstance(t, dict) and t.get("id")]
+        raw = data.get("tasks") or []
+        rows = [t for t in raw if isinstance(t, dict) and t.get("id")]
         total = data.get("total")
         usable_total = total if isinstance(total, int) and not isinstance(total, bool) else None
-        if (usable_total is not None and usable_total > _MAX_CANCEL) or (
-            usable_total is None and len(rows) >= _MAX_CANCEL
-        ):
+        # Cap on the ACTUAL returned page, unconditionally — an int-but-wrong
+        # total must not bypass it.
+        if len(raw) > _MAX_CANCEL:
             return [guidance(
                 f"filter matches more than {_MAX_CANCEL} tasks",
                 "Narrow with search=<test name or hostname>.",
             )]
+        # A usable total disagreeing with the returned page means the server
+        # truncated the page (we'd under-cancel) or is inconsistent — refuse
+        # rather than bind the confirmation to a count we didn't fetch.
+        if usable_total is not None and usable_total != len(raw):
+            return [guidance(
+                "the task list came back truncated or inconsistent with its reported total",
+                "Retry, or narrow with search= so the full matching set fits one page.",
+            )]
         ids = [str(t["id"]) for t in rows]
-        n = usable_total if usable_total is not None else len(ids)
+        n = len(ids)  # bind cap/count/title to the set actually fetched and acted on
         target = f"cancel:{st}:{srch or '*'}:{n}"
         label = f"{n} {st} task(s)" + (f" matching '{srch}'" if srch else "")
         entity = Entity(kind=EntityKind.rule, id=target)
@@ -560,10 +574,20 @@ async def cancel_tasks(
                     # execute_async only audits after run() returns).
                     interrupted = f"permission error (HTTP {e.status})"
                     break
-                if e.status in (400, 404, 409, 422):
+                if e.status == 429:
+                    # Don't keep hammering a throttling server.
+                    interrupted = "rate limited (HTTP 429)"
+                    break
+                if e.status in (404, 409):
                     terminal += 1  # already-terminal / gone -> skip, don't fail batch
                 else:
-                    failed += 1
+                    failed += 1  # malformed request (400/422) or other -> not benign
+            except Exception as e:
+                # Transport/unexpected error: never let it escape as an
+                # exception past execute_async — that would skip the audit
+                # write (Rule 8) just like a raised ProjectAchillesError would.
+                interrupted = f"network error ({type(e).__name__})"
+                break
         return {
             "cancelled": cancelled, "terminal": terminal, "failed": failed,
             "interrupted": interrupted,

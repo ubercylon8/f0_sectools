@@ -58,7 +58,7 @@ async def main() -> None:
         _show("list_schedules", await tools.list_schedules(pa))
         _show("list_tasks(status=pending)", await tools.list_tasks(pa, status="pending"))
         # Dry-run intent preview only: no confirmation_token is passed, so the
-        # gate returns the count-bound target (cancel:pending::<N>) and never
+        # gate returns the count-bound target (cancel:pending:*:<N>) and never
         # executes. Mirrors the run_test/schedule_test INTENT calls below.
         _show(
             "cancel_tasks(status=pending) INTENT",

@@ -31,7 +31,7 @@ server (`get_task_status` here is one task id at a time).
 `GET /agent/admin/tasks` first (PA has no batch-cancel endpoint, so the tool
 loops per-task under one gated action) and binds confirmation to the match
 **count**, encoded in the confirmation target as `cancel:<status>:<search>:<N>`
-(e.g. `cancel:pending::42`). A filter matching more than 200 tasks is refused
+(e.g. `cancel:pending:*:42`). A filter matching more than 200 tasks is refused
 outright — narrow it with `search`. As with fleet `run_test`/`schedule_test`,
 a same-size membership swap between preview and approval (one task finishes,
 another becomes pending) is not caught — deliberate, for lower friction; if

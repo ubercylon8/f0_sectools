@@ -87,7 +87,7 @@ get per-host results from `list_test_executions` on the read server
   cancels every matching task under one gated action — same two-step
   confirm as `run_test`/`schedule_test` (watcher/token by default, chat if
   opted in). The no-token preview resolves the filter live and binds
-  confirmation to the match **count** (e.g. `cancel:pending::12`); if the
+  confirmation to the match **count** (e.g. `cancel:pending:*:12`); if the
   count changes before approval (a task finishes or a new one queues),
   re-preview and re-confirm. A filter matching more than 200 tasks is
   refused — narrow with `search` first. To cancel a single task, pass

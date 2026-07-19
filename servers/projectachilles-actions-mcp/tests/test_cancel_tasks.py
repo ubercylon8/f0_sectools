@@ -118,15 +118,46 @@ async def test_bulk_over_cap_refuses(tmp_path):
 
 @pytest.mark.asyncio
 async def test_bulk_over_cap_non_int_total(tmp_path):
-    # Non-int total must NOT bypass the cap: fall back to len>=200.
+    # Non-int total must NOT bypass the cap: the cap triggers on the actual
+    # returned row count (201, over the 200 max) regardless of total's type.
     over = httpx.Response(200, json={"success": True, "data": {
-        "tasks": [{"id": f"t{i}", "status": "pending"} for i in range(200)], "total": "lots"}})
+        "tasks": [{"id": f"t{i}", "status": "pending"} for i in range(201)], "total": "lots"}})
     with respx.mock(assert_all_called=False) as router:
         router.get(f"{BASE}/api/agent/admin/tasks").mock(return_value=over)
         cancel = router.post(url__regex=rf"{BASE}/api/agent/admin/tasks/.+/cancel")
         async with ProjectAchillesClient(_cfg()) as pa:
             await cancel_tasks(pa, _gate(tmp_path), status="pending")
     assert cancel.called is False
+
+
+@pytest.mark.asyncio
+async def test_bulk_int_undercount_total_still_capped(tmp_path):
+    # An int-but-wrong total (5) must not let 201 real rows sneak under the cap.
+    over = httpx.Response(200, json={"success": True, "data": {
+        "tasks": [{"id": f"t{i}", "status": "pending"} for i in range(201)], "total": 5}})
+    with respx.mock(assert_all_called=False) as router:
+        router.get(f"{BASE}/api/agent/admin/tasks").mock(return_value=over)
+        cancel = router.post(url__regex=rf"{BASE}/api/agent/admin/tasks/.+/cancel")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await cancel_tasks(pa, _gate(tmp_path), status="pending")
+    assert cancel.called is False
+    assert "200" in (findings[0].title + findings[0].recommended_action.summary)
+
+
+@pytest.mark.asyncio
+async def test_bulk_truncated_page_refused(tmp_path):
+    # total (150) disagrees with the returned page (100 rows) -> the server
+    # truncated; binding the confirmation to 150 while only fetching 100 would
+    # under-cancel silently, so refuse instead.
+    truncated = httpx.Response(200, json={"success": True, "data": {
+        "tasks": [{"id": f"t{i}", "status": "pending"} for i in range(100)], "total": 150}})
+    with respx.mock(assert_all_called=False) as router:
+        router.get(f"{BASE}/api/agent/admin/tasks").mock(return_value=truncated)
+        cancel = router.post(url__regex=rf"{BASE}/api/agent/admin/tasks/.+/cancel")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await cancel_tasks(pa, _gate(tmp_path), status="pending")
+    assert cancel.called is False
+    assert "truncated" in findings[0].title.lower() or "inconsistent" in findings[0].title.lower()
 
 
 @pytest.mark.asyncio
@@ -179,6 +210,31 @@ async def test_bulk_mid_batch_403_is_audited_and_reported_as_interrupted(tmp_pat
     audit_text = audit_path.read_text()
     assert audit_text.strip() != ""
     assert "cancel:pending:*:3" in audit_text
+
+
+@pytest.mark.asyncio
+async def test_bulk_mid_batch_transport_error_interrupted(tmp_path):
+    # t1 cancels fine, t2 raises a transport error -> must not escape as an
+    # exception; the audited interrupted path is used instead (Rule 8).
+    gate = _gate(tmp_path)
+    store = TokenStore(str(tmp_path / "pending"))
+    token = store.issue("projectachilles.cancel_tasks", "cancel:pending:*:2")
+    with respx.mock as router:
+        router.get(f"{BASE}/api/agent/admin/tasks").mock(return_value=_tasks(["t1", "t2"]))
+        c1 = router.post(f"{BASE}/api/agent/admin/tasks/t1/cancel").mock(
+            return_value=httpx.Response(200, json={"success": True, "data": {}}))
+        c2 = router.post(f"{BASE}/api/agent/admin/tasks/t2/cancel").mock(
+            side_effect=httpx.ConnectError("boom"))
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await cancel_tasks(pa, gate, status="pending", confirmation_token=token)
+    assert c1.called and c2.called
+    finding = findings[0]
+    assert len(findings) == 1
+    assert any(ev.key == "cancelled" and ev.value == "1" for ev in finding.evidence)
+    assert any(ev.key == "interrupted" for ev in finding.evidence)
+    audit_path = tmp_path / "audit.log"
+    assert audit_path.is_file()
+    assert audit_path.read_text().strip() != ""
 
 
 @pytest.mark.asyncio
