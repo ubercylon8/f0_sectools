@@ -36,6 +36,20 @@ string), then get human confirmation. Two equivalent ways:
 Both are single-use, expire in 15 minutes, and are bound to (action, target).
 Gating state lives under `$F0_GATING_DIR` (default `~/.f0sectools/gating/`).
 
+**Confirmation modes.** By default (`PROJECTACHILLES_CONFIRM_MODE=token`,
+also the value when unset) this server only accepts the watcher/token
+confirmations above — both **forge-resistant**, since the approval never
+enters model context. Set `PROJECTACHILLES_CONFIRM_MODE=chat` to opt into
+**chat-confirm**: the operator just replies "approved" in the chat, and the
+agent re-calls the same tool with `confirmation_token` set to the
+`confirmation_target` shown in the intent finding; execution is audited with
+`method=chat-confirm`. This is low-friction and convenient for supervised,
+reversible runs (e.g. `run_test`), but it is **not forge-resistant** — the
+model can see and echo the target itself, so a misaligned model could in
+principle fabricate the confirmation. It is opt-in, off by default, and
+**must never be enabled for a destructive or irreversible action**; use the
+watcher or token surface for those.
+
 ## Run
 
     uv run f0-projectachilles-actions-mcp
