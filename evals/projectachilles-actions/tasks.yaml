@@ -26,13 +26,21 @@
   expect_args: { status: active }
 
 - prompt: "Cancel the pending ProjectAchilles test task task-99."
-  expect_tool: cancel_task
+  expect_tool: cancel_tasks
 
 - prompt: "What recurring ProjectAchilles test schedules do we have?"
   expect_tool: list_schedules
 
 - prompt: "Did ProjectAchilles task task-99 finish yet?"
   expect_tool: get_task_status
+
+- prompt: "show me what's still pending for the acme ransomware run"
+  expect_tool: list_tasks
+  origin: projectachilles-actions
+
+- prompt: "cancel all the pending tests"
+  expect_tool: cancel_tasks
+  origin: projectachilles-actions
 
 - prompt: "Run the ProjectAchilles test 3f2a9c10-1111-4222-8333-444455556666 on every host tagged windows-endpoints."
   expect_tool: run_test
