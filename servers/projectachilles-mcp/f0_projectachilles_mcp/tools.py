@@ -413,8 +413,56 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         if finding:
             return [finding]
         raise
+    rows = _rows(d)[:limit]
+    bundle_rows = [r for r in rows if r.get("is_bundle_control")]
+    single_rows = [r for r in rows if not r.get("is_bundle_control")]
     out: list[Finding] = []
-    for x in _rows(d)[:limit]:
+
+    # Roll up bundle-control rows: one finding per (bundle, host) run.
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for r in bundle_rows:
+        key = (str(r.get("bundle_name") or r.get("test_name") or "bundle"),
+               str(r.get("hostname") or ""))
+        groups.setdefault(key, []).append(r)
+    for (bname, host), ctrls in groups.items():
+        total = len(ctrls)
+        failing = [c for c in ctrls if not c.get("is_protected")]
+        passed = total - len(failing)
+        non_compliant = bool(failing)
+        sev = (
+            _SEV.get("high", Severity.high) if non_compliant else Severity.info
+        )
+        ftype = FindingType.misconfig if non_compliant else FindingType.posture
+        verdict = "NON-COMPLIANT" if non_compliant else "COMPLIANT"
+        ev = [
+            Evidence(key="verdict", value=verdict),
+            Evidence(key="passed", value=str(passed)),
+            Evidence(key="failed", value=str(len(failing))),
+            Evidence(key="total", value=str(total)),
+        ]
+        for i, c in enumerate(failing[:15]):
+            ev.append(Evidence(
+                key=f"failing_control_{i + 1}",
+                value=f"{c.get('test_name', '?')} ({c.get('control_validator', '?')})",
+            ))
+        if len(failing) > 15:
+            ev.append(Evidence(key="failing_controls_more",
+                               value=f"{len(failing) - 15} more not shown"))
+        techniques = {str(t) for c in failing for t in (c.get("techniques") or []) if t}
+        ent = Entity(kind=EntityKind.host, id=host, name=host) if host else None
+        out.append(Finding(
+            source="projectachilles",
+            finding_type=ftype,
+            severity=sev,
+            title=f"{bname} on {host}: {verdict} ({passed}/{total} controls passed)",
+            entity=ent,
+            evidence=ev,
+            references=[Reference(type="mitre", id=t) for t in sorted(techniques)],
+            observed_at=ctrls[0].get("timestamp"),
+        ))
+
+    # Non-bundle rows keep the existing per-row security/hygiene vocabulary.
+    for x in single_rows:
         host = x.get("hostname", "")
         name = x.get("test_name", "test")
         # PA runs two kinds of check (the `category` field). Cyber-hygiene rows are

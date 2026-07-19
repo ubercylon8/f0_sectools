@@ -444,3 +444,51 @@ async def test_get_test_by_name_not_found():
     pa = FakeClient(responses={"/browser/tests": {"tests": []}})
     findings = await tools.get_test(pa, "Nonexistent")
     assert "no test found" in findings[0].title.lower()
+
+
+def _exec_rows(rows):
+    return {"data": rows, "pagination": {"totalItems": len(rows)}}
+
+
+def _bundle_row(cid, name, validator, protected):
+    return {
+        "is_bundle_control": True, "bundle_name": "Identity Endpoint Posture Bundle",
+        "control_id": cid, "control_validator": validator, "test_name": name,
+        "is_protected": protected, "hostname": "LT-TPL-L50", "severity": "high",
+        "techniques": ["T1078.004"] if not protected else [],
+        "timestamp": "2026-07-19T03:00:10Z", "category": "cyber-hygiene",
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_rolls_up_a_bundle_run():
+    rows = [_bundle_row(f"CH-{i}", f"ctl{i}", "Cloud Credential Protection",
+                        protected=(i > 6)) for i in range(22)]  # 7 failing (i=0..6)
+    pa = FakeClient(responses={"/analytics/executions/paginated": _exec_rows(rows)})
+    findings = await tools.list_test_executions(pa, days=7, limit=25)
+    # exactly ONE rollup finding for the bundle run, not 22 flat rows
+    bundle_findings = [f for f in findings if "Identity Endpoint Posture Bundle" in f.title]
+    assert len(bundle_findings) == 1
+    f = bundle_findings[0]
+    assert "15/22" in f.title and "LT-TPL-L50" in f.title
+    ev = {e.key: e.value for e in f.evidence}
+    assert ev.get("failed") == "7"
+
+
+@pytest.mark.asyncio
+async def test_list_test_executions_mixes_bundle_and_single_rows():
+    single = {
+        "is_bundle_control": False, "test_name": "Brute Force SSH",
+        "is_protected": False, "hostname": "web-01", "severity": "high",
+        "techniques": ["T1110"], "timestamp": "2026-07-19T01:00:00Z",
+        "category": "security",
+    }
+    rows = [_bundle_row("CH-1", "ctl1", "V", protected=True),
+            _bundle_row("CH-2", "ctl2", "V", protected=False), single]
+    pa = FakeClient(responses={"/analytics/executions/paginated": _exec_rows(rows)})
+    findings = await tools.list_test_executions(pa, days=7, limit=25)
+    titles = " || ".join(f.title for f in findings)
+    assert "Identity Endpoint Posture Bundle on LT-TPL-L50" in titles  # rollup
+    assert "Brute Force SSH" in titles                                  # single row kept
+    # one rollup + one single = 2 findings
+    assert len(findings) == 2
