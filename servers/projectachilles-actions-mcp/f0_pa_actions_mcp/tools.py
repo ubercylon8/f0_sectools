@@ -7,6 +7,7 @@ Every failure is a finding, never an exception.
 from __future__ import annotations
 
 import datetime
+import json
 import re
 from typing import Any
 
@@ -18,6 +19,7 @@ from f0_sectools_core.schema.findings import (
     Finding,
     FindingType,
     RecommendedAction,
+    Reference,
     Severity,
 )
 
@@ -532,6 +534,75 @@ async def list_schedules(pa: Any, status: str = "") -> list[Finding]:
 
 
 _TASK_DONE_BAD = ("failed", "expired")
+_HIGH_SEV = ("critical", "high")
+_MAX_FAILING = 15
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    """Accept a dict or a JSON string; return {} on anything else/malformed."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except (ValueError, TypeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _bundle_rollup(tid: str, host: str, result: dict[str, Any]) -> Finding | None:
+    """One rollup Finding from a completed task's pre-aggregated bundle_results,
+    or None when the result is not a bundle (caller falls back to exit_code)."""
+    # Try the "bundle_results" key first, then fall back to checking if result itself is a bundle
+    br = _as_dict(result.get("bundle_results"))
+    if not br and "bundle_name" in result and "total_controls" in result:
+        # Result is the bundle data directly
+        br = result
+    if not br:
+        return None
+    name = str(br.get("bundle_name") or "bundle")
+    total = int(br.get("total_controls") or 0)
+    passed = int(br.get("passed_controls") or 0)
+    failed = int(br.get("failed_controls") or 0)
+    controls_raw = br.get("controls")
+    controls = controls_raw if isinstance(controls_raw, list) else []
+    failing = [c for c in controls if isinstance(c, dict) and not c.get("compliant")]
+    non_compliant = failed > 0 or int(br.get("overall_exit_code") or 0) != 0
+    if non_compliant:
+        any_high = any(str(c.get("severity", "")).lower() in _HIGH_SEV for c in failing)
+        sev = Severity.high if any_high else Severity.medium
+        ftype = FindingType.misconfig
+        verdict = "NON-COMPLIANT"
+    else:
+        sev, ftype, verdict = Severity.info, FindingType.posture, "COMPLIANT"
+    ev = [
+        Evidence(key="verdict", value=verdict),
+        Evidence(key="passed", value=str(passed)),
+        Evidence(key="failed", value=str(failed)),
+        Evidence(key="total", value=str(total)),
+    ]
+    for i, c in enumerate(failing[:_MAX_FAILING]):
+        ev.append(Evidence(
+            key=f"failing_control_{i + 1}",
+            value=f"{c.get('control_name', '?')} ({c.get('validator', '?')}) "
+            f"— {c.get('severity', '?')}",
+        ))
+    if len(failing) > _MAX_FAILING:
+        ev.append(Evidence(key="more_not_shown",
+                           value=f"{len(failing) - _MAX_FAILING} more not shown"))
+    techniques = {
+        str(t) for c in failing for t in (c.get("techniques") or []) if t
+    }
+    return Finding(
+        source=_SOURCE,
+        finding_type=ftype,
+        severity=sev,
+        title=f"{name} on {host}: {verdict} ({passed}/{total} controls passed)",
+        entity=Entity(kind=EntityKind.host, id=host, name=host) if host else None,
+        evidence=ev,
+        references=[Reference(type="mitre", id=t) for t in sorted(techniques)],
+    )
 
 
 async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
@@ -554,27 +625,66 @@ async def get_task_status(pa: Any, task_id: str) -> list[Finding]:
     status = str(t.get("status", "unknown"))
     payload_obj = t.get("payload")
     payload = payload_obj if isinstance(payload_obj, dict) else {}
+    host = str(t.get("agent_hostname") or "")
+    test_name = str(payload.get("test_name") or "test")
+
+    if status == "completed":
+        result = _as_dict(t.get("result"))
+        rollup = _bundle_rollup(tid, host, result)
+        if rollup is not None:
+            return [rollup]
+        # Non-bundle single test: use the exit code.
+        exit_code = result.get("exit_code")
+        if exit_code == 0 or exit_code == "0":
+            return [Finding(
+                source=_SOURCE, finding_type=FindingType.posture, severity=Severity.info,
+                title=f"{test_name} on {host}: passed",
+                entity=Entity(kind=EntityKind.host, id=host, name=host) if host else None,
+                evidence=[Evidence(key="status", value="completed"),
+                          Evidence(key="exit_code", value=str(exit_code))],
+            )]
+        if exit_code is not None:
+            return [Finding(
+                source=_SOURCE, finding_type=FindingType.misconfig, severity=Severity.medium,
+                title=f"{test_name} on {host}: not passed",
+                entity=Entity(kind=EntityKind.host, id=host, name=host) if host else None,
+                evidence=[Evidence(key="status", value="completed"),
+                          Evidence(key="exit_code", value=str(exit_code))],
+            )]
+        # Completed but no parsable outcome — graceful, never a crash.
+        return [Finding(
+            source=_SOURCE, finding_type=FindingType.posture, severity=Severity.info,
+            title=f"Task {tid} on {host}: completed (outcome unavailable)",
+            entity=Entity(kind=EntityKind.rule, id=tid),
+            evidence=[Evidence(key="status", value="completed"),
+                      Evidence(key="test_name", value=test_name)],
+            recommended_action=RecommendedAction(
+                summary="The task finished but returned no parsable result payload.",
+                confidence="medium"),
+        )]
+
+    # Not completed (pending/assigned/.../failed/expired): status only.
     sev = Severity.medium if status in _TASK_DONE_BAD else Severity.info
     evidence = [
         Evidence(key="status", value=status),
-        Evidence(key="test_name", value=str(payload.get("test_name") or "?")),
+        Evidence(key="test_name", value=test_name),
         Evidence(key="agent_id", value=str(t.get("agent_id") or "?")),
     ]
     if t.get("error"):
         evidence.append(Evidence(key="error", value=str(t["error"])))
-    summary = (
-        "See the outcome with list_test_executions on the ProjectAchilles read server."
-        if status == "completed"
-        else "Poll again later; cancel with cancel_task if it should not run."
-    )
-    return [
-        Finding(
-            source=_SOURCE,
-            finding_type=FindingType.posture,
-            severity=sev,
-            title=f"Task {tid}: {status}",
-            entity=Entity(kind=EntityKind.rule, id=tid),
-            evidence=evidence,
-            recommended_action=RecommendedAction(summary=summary, confidence="high"),
-        )
-    ]
+    return [Finding(
+        source=_SOURCE,
+        finding_type=FindingType.posture,
+        severity=sev,
+        title=f"Task {tid}: {status}",
+        entity=Entity(kind=EntityKind.rule, id=tid),
+        evidence=evidence,
+        recommended_action=RecommendedAction(
+            summary=(
+                "Still running (async, often minutes). I will not check again until "
+                "you ask — say 'check the test' later."
+            ) if status not in _TASK_DONE_BAD else
+            "This task did not complete; run_test again if you still need the result.",
+            confidence="high",
+        ),
+    )]

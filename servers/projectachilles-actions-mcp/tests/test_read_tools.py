@@ -1,6 +1,8 @@
 """Ungated reads: list_schedules and get_task_status."""
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -102,3 +104,135 @@ async def test_get_task_status_empty_id_guides():
     async with ProjectAchillesClient(_cfg()) as pa:
         findings = await get_task_status(pa, " ")
     assert "task_id" in findings[0].title
+
+
+def _task_resp(
+    status,
+    result=None,
+    host="LT-TPL-L50",
+    test_name="Identity Endpoint Posture Bundle",
+):
+    t = {
+        "id": "task-1",
+        "status": status,
+        "agent_id": "ag-1",
+        "agent_hostname": host,
+        "payload": {"test_name": test_name},
+    }
+    if result is not None:
+        t["result"] = result
+    return {"data": t}
+
+
+_BUNDLE_RESULT = {
+    "bundle_name": "Identity Endpoint Posture Bundle",
+    "bundle_category": "cyber-hygiene",
+    "total_controls": 22, "passed_controls": 15, "failed_controls": 7,
+    "overall_exit_code": 101,
+    "controls": [
+        {"control_id": "CH-IEP-001", "control_name": "Azure AD Joined",
+         "validator": "Device Join Status", "compliant": True,
+         "severity": "critical", "techniques": ["T1078.004"]},
+        {"control_id": "CH-IEP-015", "control_name": "PRT Status",
+         "validator": "Cloud Credential Protection", "compliant": False,
+         "severity": "high", "techniques": ["T1550"]},
+        {"control_id": "CH-IEP-017", "control_name": "Cloud Kerberos Trust",
+         "validator": "Cloud Credential Protection", "compliant": False,
+         "severity": "high", "techniques": ["T1558"]},
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_completed_bundle_rolls_up_verdict():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-1").mock(
+            return_value=httpx.Response(200, json=_task_resp("completed", _BUNDLE_RESULT))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-1")
+    assert len(findings) == 1
+    f = findings[0]
+    assert "NON-COMPLIANT" in f.title
+    assert "15/22" in f.title
+    assert "LT-TPL-L50" in f.title
+    assert f.severity in (Severity.medium, Severity.high)
+    ev = {e.key: e.value for e in f.evidence}
+    assert ev.get("passed") == "15" and ev.get("failed") == "7"
+    # failing controls are surfaced; passing ones are not the focus
+    joined = " ".join(e.value for e in f.evidence)
+    assert "PRT Status" in joined and "Cloud Kerberos Trust" in joined
+    assert "Azure AD Joined" not in joined  # a PASSING control is not listed
+    assert {r.id for r in f.references} >= {"T1550", "T1558"}
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_completed_bundle_result_as_json_string():
+    # PA sometimes returns result / bundle_results as a JSON STRING.
+    result_str = json.dumps({"exit_code": 101, "bundle_results": json.dumps(_BUNDLE_RESULT)})
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-1").mock(
+            return_value=httpx.Response(200, json=_task_resp("completed", result_str))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-1")
+    assert "NON-COMPLIANT" in findings[0].title and "15/22" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_completed_compliant_bundle_is_info():
+    clean = {**_BUNDLE_RESULT, "passed_controls": 22, "failed_controls": 0,
+             "overall_exit_code": 0,
+             "controls": [{"control_id": "c", "control_name": "x", "validator": "v",
+                           "compliant": True, "severity": "info", "techniques": []}]}
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-1").mock(
+            return_value=httpx.Response(200, json=_task_resp("completed", clean))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-1")
+    assert "COMPLIANT" in findings[0].title and "NON-COMPLIANT" not in findings[0].title
+    assert findings[0].severity == Severity.info
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_completed_non_bundle_uses_exit_code():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-2").mock(
+            return_value=httpx.Response(200, json=_task_resp(
+                "completed", {"exit_code": 0}, test_name="Some Single Test"))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-2")
+    assert len(findings) == 1
+    assert "Some Single Test" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_completed_malformed_result_is_graceful():
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-3").mock(
+            return_value=httpx.Response(200, json=_task_resp("completed", "not-json{"))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-3")
+    assert len(findings) == 1
+    assert "completed" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_bounds_failing_controls_to_15():
+    many = {**_BUNDLE_RESULT, "total_controls": 40, "passed_controls": 0, "failed_controls": 40,
+            "overall_exit_code": 1,
+            "controls": [{"control_id": f"c{i}", "control_name": f"ctl{i}",
+                          "validator": "V", "compliant": False, "severity": "high",
+                          "techniques": []} for i in range(40)]}
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/tasks/task-4").mock(
+            return_value=httpx.Response(200, json=_task_resp("completed", many))
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await get_task_status(pa, "task-4")
+    control_ev = [e for e in findings[0].evidence if e.key.startswith("failing_control")]
+    assert len(control_ev) <= 15
+    assert any("more" in e.value.lower() for e in findings[0].evidence)
