@@ -374,3 +374,11 @@ def test_chat_mode_no_token_still_returns_intent_path(tmp_path):
     g = _gate(tmp_path, enabled=True, confirm_mode="chat")
     with pytest.raises(GateDenied):
         g.execute(target="web-01", actor="james", token=None, run=lambda: "ok")
+
+
+def test_chat_mode_empty_target_and_token_denied(tmp_path):
+    # Defense-in-depth: an empty target must never auto-authorize, even if a
+    # future caller wires an empty confirmation_token through unchanged.
+    g = _gate(tmp_path, enabled=True, confirm_mode="chat")
+    with pytest.raises(GateDenied):
+        g.execute(target="", actor="james", token="", run=lambda: "ok")

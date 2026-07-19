@@ -66,6 +66,10 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
   delete — that is admin-only in the platform.
 - If every write returns a permission finding, the pa_ key is read-only —
   the operator must issue a read-write-scope key.
+- In chat-confirm mode, the echoed target is NOT single-use or time-limited —
+  it authorizes every call while the write flag is on. Get a fresh operator
+  "approved" before each re-call, and never reuse the echo to retry a failed
+  execution.
 
 ## Verification
 
