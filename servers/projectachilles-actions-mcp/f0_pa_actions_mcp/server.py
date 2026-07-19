@@ -94,7 +94,7 @@ async def schedule_test(
             await tools.schedule_test(
                 pa, _gate("projectachilles.schedule_test", cfg),
                 test_id, hostname, schedule, run_time, run_date, day,
-                day_of_month, confirmation_token, _ACTOR,
+                day_of_month, confirmation_token=confirmation_token, actor=_ACTOR,
             )
         )
 

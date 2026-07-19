@@ -28,7 +28,6 @@ from .errors import map_pa_error
 from .resolve import (
     ResolveFailed,
     guidance,
-    resolve_agent,
     resolve_build,
     resolve_selection,
     resolve_test,
@@ -302,45 +301,51 @@ async def schedule_test(
     pa: Any,
     gate: GatedAction,
     test_id: str,
-    hostname: str,
-    schedule: str,
-    run_time: str,
+    hostname: str = "",
+    schedule: str = "",
+    run_time: str = "",
     run_date: str = "",
     day: str = "",
     day_of_month: int = 0,
+    tag: str = "",
     confirmation_token: str = "",
     actor: str = "mcp-operator",
 ) -> list[Finding]:
-    """Schedule a validation test on ONE agent (gated write). No token -> intent."""
+    """Schedule a validation test on ONE host (hostname) or a FLEET (tag) — gated.
+
+    Set exactly one of hostname/tag. No token -> intent only."""
     try:
         cfg = _schedule_config(schedule, run_time, run_date, day, day_of_month)
         test = await resolve_test(pa, test_id)
         binary = await resolve_build(pa, test["test_uuid"])
-        agent = await resolve_agent(pa, hostname)
+        sel = await resolve_selection(pa, hostname, tag)
     except ResolveFailed as e:
         return [e.finding]
-    target = f"{test['test_uuid']}@{agent['hostname']}"
+    target = f"{test['test_uuid']}@{sel['target_key']}"
     desc = _describe_schedule(schedule, run_time, run_date, day, day_of_month)
-    entity = Entity(kind=EntityKind.host, id=agent["agent_id"], name=agent["hostname"])
+    entity = (
+        Entity(kind=EntityKind.host, id=sel["agent_ids"][0], name=sel["hostnames"][0])
+        if not sel["is_fleet"]
+        else Entity(kind=EntityKind.tenant, id=sel["target_key"], name=sel["label"])
+    )
     evidence = [
         Evidence(key="test_name", value=test["test_name"]),
         Evidence(key="test_uuid", value=test["test_uuid"]),
-        Evidence(key="hostname", value=agent["hostname"]),
         Evidence(key="schedule", value=desc),
+        *_selection_evidence(sel),
     ]
     if not confirmation_token and not gate.has_approval(target):
         gate.record_request(target)
         return [
             _intent(
                 gate.name, target,
-                f"schedule test '{test['test_name']}' on {agent['hostname']} ({desc})",
-                entity, evidence,
-                confirm_mode=gate.confirm_mode,
+                f"schedule test '{test['test_name']}' on {sel['label']} ({desc})",
+                entity, evidence, gate.confirm_mode,
             )
         ]
     body = {
-        "org_id": agent["org_id"],
-        "agent_ids": [agent["agent_id"]],
+        "org_id": sel["org_id"],
+        "agent_ids": sel["agent_ids"],
         "test_uuid": test["test_uuid"],
         "test_name": test["test_name"],
         "binary_name": binary,
@@ -348,13 +353,11 @@ async def schedule_test(
         "schedule_type": schedule,
         "schedule_config": cfg,
         "timezone": "UTC",
-        "name": f"{test['test_name']} @ {agent['hostname']}",
+        "name": f"{test['test_name']} @ {sel['label']}",
     }
     try:
         result = await gate.execute_async(
-            target=target,
-            actor=actor,
-            token=confirmation_token,
+            target=target, actor=actor, token=confirmation_token,
             run=lambda: pa.post("/agent/admin/schedules", json=body),
         )
     except GateDenied as e:
@@ -367,8 +370,8 @@ async def schedule_test(
             source=_SOURCE,
             finding_type=FindingType.action,
             severity=Severity.info,
-            title=f"Action completed: scheduled '{test['test_name']}' "
-            f"on {agent['hostname']} ({desc})",
+            title=f"Action completed: scheduled '{test['test_name']}' on "
+            f"{sel['label']} ({desc})",
             entity=entity,
             evidence=[
                 *evidence,
