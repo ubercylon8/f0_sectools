@@ -321,9 +321,12 @@ def _intent_finding(action_name: str, verb: str, device_id: str, comment: str,
         evidence=[Evidence(key="comment", value=comment), *extra],
         recommended_action=RecommendedAction(
             summary=(
-                f"To execute, an operator must run: python scripts/confirm_action.py "
-                f"{action_name.split('.')[-1]} {device_id} — then call this tool again "
-                f"with the printed confirmation_token."
+                "To execute: an operator approves this action in their "
+                "confirm_action.py --watch terminal, then you call this tool again "
+                "with the SAME arguments.\n"
+                "Token fallback: python scripts/confirm_action.py "
+                f"{action_name.split('.')[-1]} {device_id}\n"
+                "then pass the printed confirmation_token."
             ),
             gated_action=action_name,
             confidence="high",
@@ -353,7 +356,8 @@ async def _run_machine_action(
     sec: Any, gate: GatedAction, device_id: str, comment: str, confirmation_token: str,
     actor: str, path: str, body: dict[str, Any], verb: str, intent_extra: list[Evidence],
 ) -> list[Finding]:
-    if not confirmation_token:
+    if not confirmation_token and not gate.has_approval(device_id):
+        gate.record_request(device_id)
         return [_intent_finding(gate.name, verb, device_id, comment, intent_extra)]
     try:
         result = await gate.execute_async(
