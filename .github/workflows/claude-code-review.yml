@@ -36,9 +36,24 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # Direct review prompt (no code-review plugin). The plugin's slash-command
+          # run was sandboxed in CI (heavy tool-permission denials, no comments posted);
+          # the plain-prompt mode — the same one the @claude responder uses successfully —
+          # gets the tool access it needs to read the diff and post findings.
+          prompt: |
+            Do a security-focused code review of PR #${{ github.event.pull_request.number }}
+            in ${{ github.repository }}. This is f0_sectools: thin MCP servers + agentskills.io
+            skills that connect AI agents (esp. small local models) to security platforms.
+            Ground the review in the repo's CLAUDE.md Critical Rules:
+            - read-only by default; any state-changing (write) action must be gated
+              (config flag + per-action human confirmation + audit) and live in core/gating;
+            - secrets never leave the host or reach the model; redact before returning,
+              including error/exception paths;
+            - every tool returns the structured findings schema;
+            - tools must be small-model-safe (flat scalar args, short closed enums,
+              bounded/paginated output);
+            - correctness and test coverage of the changed logic.
+            Post findings as PR comments — a concise top-level summary plus inline comments
+            where a specific line is at fault. If nothing significant, say so briefly.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
 
