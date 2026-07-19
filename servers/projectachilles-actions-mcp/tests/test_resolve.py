@@ -243,6 +243,44 @@ async def test_resolve_agents_by_tag_over_200_hard_refusal():
 
 
 @pytest.mark.asyncio
+async def test_resolve_agents_by_tag_non_int_total_still_refuses_at_limit():
+    # When total is a non-int (string or float), the guard must fall back to
+    # the len(agents) >= _MAX_FLEET check and refuse. This verifies the safety:
+    # if the backend ever returns total as a non-int, we don't silently proceed
+    # on the limit-capped agents list.
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json={"data": {
+                "agents": [{"id": f"a{i}", "hostname": f"h{i}"} for i in range(200)],
+                "total": "512",  # string, not int
+            }})
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            with pytest.raises(ResolveFailed) as ei:
+                await resolve_agents_by_tag(pa, "everything")
+    assert "narrow" in ei.value.finding.title.lower() or "narrow" in \
+        ei.value.finding.recommended_action.summary.lower()
+
+
+@pytest.mark.asyncio
+async def test_resolve_agents_by_tag_non_int_total_float_refuses_at_limit():
+    # Same test: if total is a float (e.g. 512.0), the guard must fall back to
+    # the len(agents) >= _MAX_FLEET check and refuse.
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json={"data": {
+                "agents": [{"id": f"a{i}", "hostname": f"h{i}"} for i in range(200)],
+                "total": 512.0,  # float, not int
+            }})
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            with pytest.raises(ResolveFailed) as ei:
+                await resolve_agents_by_tag(pa, "everything")
+    assert "narrow" in ei.value.finding.title.lower() or "narrow" in \
+        ei.value.finding.recommended_action.summary.lower()
+
+
+@pytest.mark.asyncio
 async def test_resolve_agents_by_tag_id_and_host_lists_stay_aligned():
     # When tag response includes a record with no id, both agent_ids and hostnames
     # must drop it to stay aligned (no index mismatch).

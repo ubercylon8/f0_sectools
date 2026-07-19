@@ -218,8 +218,9 @@ async def resolve_agents_by_tag(pa: Any, tag: str) -> dict[str, Any]:
     agents_raw = data.get("agents")
     agents = agents_raw if isinstance(agents_raw, list) else []
     total = data.get("total")
-    if (isinstance(total, int) and not isinstance(total, bool) and total > _MAX_FLEET) or (
-        total is None and len(agents) >= _MAX_FLEET
+    usable_total = total if (isinstance(total, int) and not isinstance(total, bool)) else None
+    if (usable_total is not None and usable_total > _MAX_FLEET) or (
+        usable_total is None and len(agents) >= _MAX_FLEET
     ):
         raise ResolveFailed(
             guidance(
