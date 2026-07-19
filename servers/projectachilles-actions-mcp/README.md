@@ -12,7 +12,7 @@ the **write** side of the validation loop, every write gated by
 | `set_schedule_status(schedule_id, status)` | GATED — pause/resume |
 | `cancel_task(task_id)` | GATED — cancel a pending run |
 | `list_schedules(status)` | read |
-| `get_task_status(task_id)` | read |
+| `get_task_status(task_id)` | read — one-shot; returns the run outcome (bundle rollup or single-test pass/not-passed) on completion |
 
 ## Setup
 

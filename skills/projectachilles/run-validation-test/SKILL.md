@@ -51,9 +51,12 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
    Chat-confirm is convenient for supervised, reversible runs like this one
    but is not forge-resistant (the model itself can see and echo the
    target), so it is never used for destructive actions.
-5. Verify: `get_task_status` for runs (then `list_test_executions` on the
-   read server for the blocked/not-blocked outcome); `list_schedules` for
-   schedules.
+5. Verify: launching a test is **fire-and-report** — the run is async and
+   takes minutes to finish. Do NOT poll: make at most one `get_task_status`
+   call per user request. `get_task_status` returns the run's **outcome on
+   completion** (bundle verdict COMPLIANT/NON-COMPLIANT with X/Y controls, or
+   single-test pass/not-passed) directly — there's no need to also call the
+   read server for the result. Use `list_schedules` to verify schedules.
 
 ## Pitfalls
 
@@ -70,6 +73,8 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
   it authorizes every call while the write flag is on. Get a fresh operator
   "approved" before each re-call, and never reuse the echo to retry a failed
   execution.
+- Never loop `get_task_status` waiting for completion — tell the user you'll
+  check when they ask.
 
 ## Verification
 

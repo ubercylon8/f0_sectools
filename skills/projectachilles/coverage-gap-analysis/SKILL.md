@@ -30,6 +30,8 @@ Base tool names (runtime may prefix — see the ProjectAchilles server README):
    **attack simulations** — failures are **NOT blocked** / "detected, not blocked";
    and **cyber-hygiene control checks** — failures are **not passed** (a missing
    config/hardening control). Focus on both, but describe each in its own terms.
+   Bundle runs roll up into a single per-run COMPLIANT/NON-COMPLIANT finding
+   (X/Y controls) rather than one finding per control.
 3. Correlate: which weak techniques show up as actual unblocked executions, and
    on which endpoints?
 4. Prioritize by severity and technique impact, then recommend specific control
