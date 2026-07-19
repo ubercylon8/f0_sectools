@@ -314,11 +314,11 @@ Every push/PR runs (`.github/workflows/`):
 
 - **ci** — `uv run pytest` (offline contract + harness-logic tests) + `uv run ruff check .` + `uv run mypy .` (strict) — all **hard gates**. mypy is scoped to shipped source (`core/` + each server's package); tests, `evals/`, `scripts/`, and `skills/` are excluded (strict-typing mocks/fixtures/tooling is high-noise, low-value).
 - **secret-scan** (gitleaks) and **semgrep** (SAST, gate on `p/python`; `p/security-audit` advisory) — **hard gates**.
-- **deps** (pip-audit), **links** (lychee), **codeql** (dormant until the repo is public), **claude-review** (comment-only) — advisory, not required checks.
+- **deps** (pip-audit), **links** (lychee), **codeql** (dormant until the repo is public) — advisory, not required checks.
 
 Live-model evals and live-platform smoke scripts are **never** run in CI (no creds/GPU) — they stay local. Mark only `ci`, `secret-scan`, and `semgrep` as required status checks in branch protection.
 
-**To enable Claude PR review:** add an `ANTHROPIC_API_KEY` repository secret and set the repository variable `ENABLE_CLAUDE_REVIEW=true`. It posts advisory comments; it does not block merge and does not run on fork PRs (no secret access).
+**Claude PR review** is provided by the **Claude Code GitHub App** (installed on the repo), which ships two workflows: `claude-code-review.yml` (auto-reviews every PR via the `code-review` plugin — it reads this CLAUDE.md, so the Critical Rules stay in scope) and `claude.yml` (responds to `@claude` mentions in issues/PR comments). Both authenticate with the `CLAUDE_CODE_OAUTH_TOKEN` secret; they post advisory comments and do not block merge. The earlier self-hosted `claude-review.yml` action (var-gated on `ENABLE_CLAUDE_REVIEW` + `ANTHROPIC_API_KEY`) was removed in favour of the app — the `ENABLE_CLAUDE_REVIEW` variable and the now-unused `ANTHROPIC_API_KEY` secret can be deleted from repo settings.
 
 ---
 
