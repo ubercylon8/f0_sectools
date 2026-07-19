@@ -2,10 +2,12 @@ import json
 
 import pytest
 from f0_sectools_core.gating.actions import (
+    ApprovalStore,
     AuditLog,
     GatedAction,
     GateDenied,
     TokenStore,
+    gating_dir,
 )
 
 
@@ -138,3 +140,97 @@ async def test_execute_async_denied_without_token(tmp_path):
 
     with pytest.raises(GateDenied):
         await g.execute_async(target="web-01", actor="james", token="", run=_run)
+
+
+# ── gating_dir resolution ─────────────────────────────────────────────
+def test_gating_dir_env_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("F0_GATING_DIR", str(tmp_path / "g"))
+    assert gating_dir() == tmp_path / "g"
+
+
+def test_gating_dir_defaults_to_home(monkeypatch):
+    monkeypatch.delenv("F0_GATING_DIR", raising=False)
+    assert gating_dir().name == "gating"
+    assert gating_dir().parent.name == ".f0sectools"
+
+
+def test_default_stores_anchor_on_gating_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("F0_GATING_DIR", str(tmp_path / "g"))
+    assert TokenStore().dir == tmp_path / "g" / "tokens"
+    assert AuditLog().path == tmp_path / "g" / "audit.log"
+    assert ApprovalStore().requests == tmp_path / "g" / "requests"
+
+
+# ── ApprovalStore lifecycle ───────────────────────────────────────────
+def _approvals(tmp_path) -> ApprovalStore:
+    return ApprovalStore(str(tmp_path / "gating"))
+
+
+def test_approve_then_consume_succeeds_once(tmp_path):
+    s = _approvals(tmp_path)
+    s.approve("projectachilles.run_test", "uuid@host")
+    assert s.consume("projectachilles.run_test", "uuid@host") is True
+    assert s.consume("projectachilles.run_test", "uuid@host") is False  # single-use
+
+
+def test_consume_rejected_for_wrong_target(tmp_path):
+    s = _approvals(tmp_path)
+    s.approve("projectachilles.run_test", "uuid@host-a")
+    assert s.consume("projectachilles.run_test", "uuid@host-b") is False
+    # the approval for host-a is still intact (different key, nothing burned)
+    assert s.consume("projectachilles.run_test", "uuid@host-a") is True
+
+
+def test_expired_approval_rejected_and_swept(tmp_path):
+    s = _approvals(tmp_path)
+    s.approve("a.b", "t", ttl_s=-1)
+    assert s.has_approval("a.b", "t") is False
+    assert s.consume("a.b", "t") is False
+    assert list(s.approvals.glob("*.json")) == []  # swept
+
+
+def test_has_approval_does_not_consume(tmp_path):
+    s = _approvals(tmp_path)
+    s.approve("a.b", "t")
+    assert s.has_approval("a.b", "t") is True
+    assert s.has_approval("a.b", "t") is True   # still there
+    assert s.consume("a.b", "t") is True
+
+
+def test_record_request_idempotent_and_listed(tmp_path):
+    s = _approvals(tmp_path)
+    s.record_request("a.b", "t")
+    s.record_request("a.b", "t")  # refresh, not duplicate
+    pending = s.list_pending()
+    assert len(pending) == 1
+    assert pending[0]["action"] == "a.b"
+    assert pending[0]["target"] == "t"
+
+
+def test_expired_request_not_listed(tmp_path):
+    s = _approvals(tmp_path)
+    s.record_request("a.b", "t", ttl_s=-1)
+    assert s.list_pending() == []
+
+
+def test_approve_clears_the_request(tmp_path):
+    s = _approvals(tmp_path)
+    s.record_request("a.b", "t")
+    s.approve("a.b", "t")
+    assert s.list_pending() == []
+    assert s.has_approval("a.b", "t") is True
+
+
+def test_deny_removes_request_without_approving(tmp_path):
+    s = _approvals(tmp_path)
+    s.record_request("a.b", "t")
+    s.deny("a.b", "t")
+    assert s.list_pending() == []
+    assert s.has_approval("a.b", "t") is False
+
+
+def test_requests_are_not_authorization(tmp_path):
+    s = _approvals(tmp_path)
+    s.record_request("a.b", "t")
+    assert s.has_approval("a.b", "t") is False
+    assert s.consume("a.b", "t") is False
