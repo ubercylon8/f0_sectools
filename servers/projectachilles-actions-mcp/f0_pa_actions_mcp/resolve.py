@@ -6,7 +6,7 @@ an operator confirmation token or touches a write endpoint.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 from f0_sectools_core.schema.findings import (
     Evidence,
@@ -22,6 +22,8 @@ from .errors import map_pa_error
 _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
+_TAG_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,64}$")
+_MAX_FLEET = 200
 
 
 class ResolveFailed(Exception):
@@ -189,4 +191,101 @@ async def resolve_agent(pa: Any, hostname: str) -> dict[str, str]:
         "agent_id": agent_id,
         "org_id": org_id,
         "hostname": str(a.get("hostname") or h),
+    }
+
+
+async def resolve_agents_by_tag(pa: Any, tag: str) -> dict[str, Any]:
+    """tag -> {agent_ids, hostnames, org_id} for every agent carrying it.
+
+    Refuses (>_MAX_FLEET) rather than silently run on a capped subset — a
+    hidden blast-radius cap is unacceptable for an attack-simulation launcher.
+    """
+    t = tag.strip()
+    if not t or not _TAG_RE.match(t):
+        raise ResolveFailed(
+            guidance(
+                f"tag '{t or '(empty)'}' is missing or has unsupported characters",
+                "Use a tag as shown in the ProjectAchilles console "
+                "(letters, digits, . _ : @ -).",
+            )
+        )
+    try:
+        resp = await pa.get("/agent/admin/agents", params={"tag": t, "limit": _MAX_FLEET})
+    except ProjectAchillesError as e:
+        raise _mapped(e, "agent tag lookup") from e
+    data = resp.get("data") if isinstance(resp, dict) else None
+    data = data if isinstance(data, dict) else {}
+    agents_raw = data.get("agents")
+    agents = agents_raw if isinstance(agents_raw, list) else []
+    total = data.get("total")
+    usable_total = total if (isinstance(total, int) and not isinstance(total, bool)) else None
+    if (usable_total is not None and usable_total > _MAX_FLEET) or (
+        usable_total is None and len(agents) >= _MAX_FLEET
+    ):
+        raise ResolveFailed(
+            guidance(
+                f"Tag '{t}' matches more than {_MAX_FLEET} agents — refusing to fan out",
+                f"Narrow the tag so it selects at most {_MAX_FLEET} hosts, then retry.",
+            )
+        )
+    if not agents:
+        raise ResolveFailed(
+            guidance(
+                f"No agents carry tag '{t}'",
+                "Check the tag in the ProjectAchilles console (agent tags).",
+            )
+        )
+    # Build both lists from the SAME filtered set of valid records (dicts with truthy id)
+    # to keep agent_ids and hostnames index-aligned. A record with no id is dropped from both.
+    valid = [a for a in agents if isinstance(a, dict) and a.get("id")]
+    agent_ids = [str(a["id"]) for a in valid]
+    hostnames = [str(a.get("hostname") or "?") for a in valid]
+    # org_id once from the first agent's detail (the admin list strips it).
+    org_id = ""
+    if agent_ids:
+        try:
+            detail = await pa.get(f"/agent/admin/agents/{agent_ids[0]}")
+        except ProjectAchillesError as e:
+            raise _mapped(e, "agent org lookup") from e
+        d2 = detail.get("data") if isinstance(detail, dict) else None
+        if isinstance(d2, dict):
+            org_id = str(d2.get("org_id") or "")
+    return {"agent_ids": agent_ids, "hostnames": hostnames, "org_id": org_id}
+
+
+async def resolve_selection(pa: Any, hostname: str, tag: str) -> dict[str, Any]:
+    """Normalize host-or-tag targeting. Exactly one of hostname/tag must be set."""
+    h, t = hostname.strip(), tag.strip()
+    if bool(h) == bool(t):
+        raise ResolveFailed(
+            guidance(
+                "Set exactly one of hostname or tag",
+                "hostname targets ONE host; tag targets every agent carrying "
+                "that tag (a fleet).",
+            )
+        )
+    if h:
+        a = await resolve_agent(pa, h)
+        return {
+            "agent_ids": [a["agent_id"]],
+            "hostnames": [a["hostname"]],
+            "org_id": a["org_id"],
+            "target_key": a["hostname"],
+            "label": a["hostname"],
+            "count": 1,
+            "is_fleet": False,
+        }
+    fleet = await resolve_agents_by_tag(pa, t)
+    n = len(cast(list[str], fleet["agent_ids"]))
+    # target_key includes the count N baked in; consumers must compare the WHOLE string
+    # (never split on ':' — tags may legitimately contain ':', e.g. env:prod). The gate
+    # catches blast-radius drift by comparing full target_key strings.
+    return {
+        "agent_ids": fleet["agent_ids"],
+        "hostnames": fleet["hostnames"],
+        "org_id": fleet["org_id"],
+        "target_key": f"tag:{t}:{n}",
+        "label": f"tag '{t}' ({n} host{'s' if n != 1 else ''})",
+        "count": n,
+        "is_fleet": True,
     }

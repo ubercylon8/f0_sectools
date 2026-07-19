@@ -32,3 +32,10 @@ async def test_status_enums_closed():
     assert set(set_props["status"]["enum"]) == {"active", "paused"}
     list_props = tools["list_schedules"].inputSchema["properties"]
     assert set(list_props["status"]["enum"]) == {"", "active", "paused", "completed"}
+
+
+@pytest.mark.asyncio
+async def test_run_and_schedule_expose_tag_param():
+    tools = {t.name: t for t in await server.mcp.list_tools()}
+    assert "tag" in tools["run_test"].inputSchema["properties"]
+    assert "tag" in tools["schedule_test"].inputSchema["properties"]

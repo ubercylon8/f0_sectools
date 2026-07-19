@@ -79,7 +79,7 @@ async def main() -> None:
                 return
             findings = await tools.run_test(
                 pa, _gate("projectachilles.run_test", cfg),
-                args.test_uuid, args.hostname, args.token,
+                args.test_uuid, args.hostname, confirmation_token=args.token,
             )
             _show("run_test EXECUTE", findings)
             task_ids = [

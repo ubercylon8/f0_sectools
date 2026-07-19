@@ -82,7 +82,7 @@ async def test_flag_off_refuses_and_no_write_call(tmp_path):
         token = store.issue("projectachilles.run_test", TARGET)
         async with ProjectAchillesClient(_cfg()) as pa:
             findings = await run_test(
-                pa, _gate(tmp_path, enabled=False), UUID, "web-01", token
+                pa, _gate(tmp_path, enabled=False), UUID, "web-01", confirmation_token=token
             )
     assert post.called is False
     assert "not taken" in findings[0].title
@@ -97,7 +97,7 @@ async def test_wrong_target_token_refused(tmp_path):
         store = TokenStore(str(tmp_path / "pending"))
         token = store.issue("projectachilles.run_test", f"{UUID}@db-01")  # other host
         async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", token)
+            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", confirmation_token=token)
     assert post.called is False
     assert "not taken" in findings[0].title
 
@@ -112,7 +112,7 @@ async def test_valid_token_executes_posts_payload_and_audits(tmp_path):
         store = TokenStore(str(tmp_path / "pending"))
         token = store.issue("projectachilles.run_test", TARGET)
         async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", token)
+            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", confirmation_token=token)
     assert post.call_count == 1
     body = json.loads(post.calls[0].request.content)
     assert body["org_id"] == "org-1"
@@ -129,7 +129,8 @@ async def test_valid_token_executes_posts_payload_and_audits(tmp_path):
         _mock_reads(router)
         post2 = router.post(f"{BASE}/api/agent/admin/tasks")
         async with ProjectAchillesClient(_cfg()) as pa:
-            findings2 = await run_test(pa, _gate(tmp_path), UUID, "web-01", token)
+            findings2 = await run_test(
+                pa, _gate(tmp_path), UUID, "web-01", confirmation_token=token)
     assert post2.called is False
     assert "not taken" in findings2[0].title
 
@@ -144,7 +145,7 @@ async def test_resolution_failure_returns_finding_and_never_consults_gate(tmp_pa
         store = TokenStore(str(tmp_path / "pending"))
         token = store.issue("projectachilles.run_test", TARGET)
         async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", token)
+            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", confirmation_token=token)
     assert post.called is False
     assert "not found" in findings[0].title.lower()
     # token NOT consumed by a resolution failure:
@@ -163,7 +164,7 @@ async def test_platform_403_after_token_maps_to_permission_finding(tmp_path):
         store = TokenStore(str(tmp_path / "pending"))
         token = store.issue("projectachilles.run_test", TARGET)
         async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", token)
+            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", confirmation_token=token)
     assert "read-write" in (
         findings[0].title + findings[0].recommended_action.summary
     )
@@ -235,7 +236,7 @@ async def test_run_test_chat_echo_executes(tmp_path):
         gate = _gate(tmp_path, confirm_mode="chat")
         async with ProjectAchillesClient(_cfg()) as pa:
             # The model echoes the target string as the confirmation.
-            findings = await run_test(pa, gate, UUID, "web-01", TARGET)
+            findings = await run_test(pa, gate, UUID, "web-01", confirmation_token=TARGET)
     assert post.call_count == 1
     assert "Action completed" in findings[0].title
     entry = json.loads((tmp_path / "audit.log").read_text().strip())
@@ -249,7 +250,9 @@ async def test_run_test_chat_wrong_echo_still_denied(tmp_path):
         post = router.post(f"{BASE}/api/agent/admin/tasks")
         gate = _gate(tmp_path, confirm_mode="chat")
         async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await run_test(pa, gate, UUID, "web-01", f"{UUID}@wrong-host")
+            wrong_target = f"{UUID}@wrong-host"
+            findings = await run_test(pa, gate, UUID, "web-01",
+                                      confirmation_token=wrong_target)
     assert post.called is False
     assert "not taken" in findings[0].title
 
@@ -264,8 +267,125 @@ async def test_run_test_success_summary_is_fire_and_report(tmp_path):
         store = TokenStore(str(tmp_path / "pending"))
         token = store.issue("projectachilles.run_test", TARGET)
         async with ProjectAchillesClient(_cfg()) as pa:
-            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", token)
+            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", confirmation_token=token)
     summary = findings[0].recommended_action.summary.lower()
     assert "ask me later" in summary
     assert "poll" not in summary
     assert "track it" not in summary
+
+
+TAGGED = {"data": {"agents": [
+    {"id": "ag-1", "hostname": "web-01", "status": "active"},
+    {"id": "ag-2", "hostname": "web-02", "status": "active"},
+], "total": 2}}
+TAG_DETAIL = {"data": {"id": "ag-1", "org_id": "org-1", "hostname": "web-01"}}
+TAG_TARGET = f"{UUID}@tag:web:2"
+
+
+def _mock_tag_reads(router):
+    router.get(f"{BASE}/api/browser/tests/{UUID}").mock(
+        return_value=httpx.Response(200, json={"test": TEST_RECORD}))
+    router.get(f"{BASE}/api/tests/builds/{UUID}").mock(
+        return_value=httpx.Response(200, json=BUILD))
+    router.get(f"{BASE}/api/agent/admin/agents").mock(
+        return_value=httpx.Response(200, json=TAGGED))
+    router.get(f"{BASE}/api/agent/admin/agents/ag-1").mock(
+        return_value=httpx.Response(200, json=TAG_DETAIL))
+
+
+@pytest.mark.asyncio
+async def test_run_test_both_host_and_tag_guides_no_gate(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/tasks")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", tag="web")
+    assert post.called is False
+    assert "exactly one" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_run_test_tag_intent_lists_hosts_and_count(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_tag_reads(router)
+        router.post(f"{BASE}/api/agent/admin/tasks")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, _gate(tmp_path), UUID, "", tag="web")
+    f = findings[0]
+    assert "Pending action" in f.title
+    joined = " ".join(e.value for e in f.evidence)
+    assert "web-01" in joined and "web-02" in joined
+    assert any(e.key == "host_count" and e.value == "2" for e in f.evidence)
+    assert TAG_TARGET in f.recommended_action.summary  # count-bound target
+
+
+@pytest.mark.asyncio
+async def test_run_test_tag_valid_token_posts_all_agent_ids(tmp_path):
+    with respx.mock() as router:
+        _mock_tag_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/tasks").mock(
+            return_value=httpx.Response(201, json={"data": {"task_ids": ["t1", "t2"]}}))
+        store = TokenStore(str(tmp_path / "pending"))
+        token = store.issue("projectachilles.run_test", TAG_TARGET)
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, _gate(tmp_path), UUID, "", tag="web",
+                                      confirmation_token=token)
+    assert post.call_count == 1
+    body = json.loads(post.calls[0].request.content)
+    assert body["agent_ids"] == ["ag-1", "ag-2"]
+    assert body["org_id"] == "org-1"
+    assert "2 host" in findings[0].title or "2 tasks" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_run_test_tag_drift_in_count_refuses(tmp_path):
+    # Token issued for N=2; the tag now resolves to N=3 -> target mismatch -> refusal.
+    # Drift -> refusal + no write; the stale token is spent, forcing fresh approval for N=3.
+    grown = {"data": {"agents": [
+        {"id": "ag-1", "hostname": "web-01"}, {"id": "ag-2", "hostname": "web-02"},
+        {"id": "ag-3", "hostname": "web-03"},
+    ], "total": 3}}
+    with respx.mock(assert_all_called=False) as router:
+        router.get(f"{BASE}/api/browser/tests/{UUID}").mock(
+            return_value=httpx.Response(200, json={"test": TEST_RECORD}))
+        router.get(f"{BASE}/api/tests/builds/{UUID}").mock(
+            return_value=httpx.Response(200, json=BUILD))
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json=grown))
+        router.get(f"{BASE}/api/agent/admin/agents/ag-1").mock(
+            return_value=httpx.Response(200, json=TAG_DETAIL))
+        post = router.post(f"{BASE}/api/agent/admin/tasks")
+        store = TokenStore(str(tmp_path / "pending"))
+        token = store.issue("projectachilles.run_test", TAG_TARGET)  # N=2 target
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, _gate(tmp_path), UUID, "", tag="web",
+                                      confirmation_token=token)
+    assert post.called is False
+    assert "not taken" in findings[0].title
+    # The drift attempt burned the token (single-use, unlink-before-validate);
+    # the operator must re-preview and re-approve for the new fleet size.
+    assert TokenStore(str(tmp_path / "pending")).consume(
+        "projectachilles.run_test", TAG_TARGET, token) is False
+
+
+@pytest.mark.asyncio
+async def test_run_test_tag_bounds_host_evidence_to_15(tmp_path):
+    many = {"data": {"agents": [
+        {"id": f"a{i}", "hostname": f"h{i}"} for i in range(40)], "total": 40}}
+    with respx.mock(assert_all_called=False) as router:
+        router.get(f"{BASE}/api/browser/tests/{UUID}").mock(
+            return_value=httpx.Response(200, json={"test": TEST_RECORD}))
+        router.get(f"{BASE}/api/tests/builds/{UUID}").mock(
+            return_value=httpx.Response(200, json=BUILD))
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json=many))
+        router.get(f"{BASE}/api/agent/admin/agents/a0").mock(
+            return_value=httpx.Response(200, json={"data": {"id": "a0", "org_id": "o",
+                                                            "hostname": "h0"}}))
+        router.post(f"{BASE}/api/agent/admin/tasks")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, _gate(tmp_path), UUID, "", tag="web")
+    host_ev = [e for e in findings[0].evidence if e.key.startswith("host_")
+               and e.key != "host_count"]
+    assert len(host_ev) <= 15
+    assert any("more" in e.value.lower() for e in findings[0].evidence)

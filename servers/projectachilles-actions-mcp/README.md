@@ -7,12 +7,23 @@ the **write** side of the validation loop, every write gated by
 
 | Tool | Type |
 |---|---|
-| `run_test(test_id, hostname)` | GATED — execute a validation test now |
-| `schedule_test(test_id, hostname, schedule, run_time, …)` | GATED — recurring/once schedule (UTC) |
+| `run_test(test_id, hostname, tag)` | GATED — execute a validation test now, on ONE host (`hostname`) or a FLEET (`tag` — every agent carrying it) |
+| `schedule_test(test_id, hostname, schedule, run_time, …, tag)` | GATED — recurring/once schedule (UTC), on ONE host or a FLEET (`tag`) |
 | `set_schedule_status(schedule_id, status)` | GATED — pause/resume |
 | `cancel_task(task_id)` | GATED — cancel a pending run |
 | `list_schedules(status)` | read |
 | `get_task_status(task_id)` | read — one-shot; returns the run outcome (bundle rollup or single-test pass/not-passed) on completion |
+
+`run_test`/`schedule_test` take **exactly one** of `hostname` (single exact
+agent) or `tag` (fleet — every agent currently carrying that tag, fanned out
+in one gated action). The no-token intent preview lists matched hosts (up to 15, with an "N more"
+marker) and the total count; the confirmation is **bound to that host count**,
+so if the count changes before approval you must re-preview and re-confirm.
+A same-size membership swap (one host gains the tag, another loses it) is not
+caught—deliberate, for lower friction. A tag matching more than 200 hosts is
+refused — narrow it.
+Per-host results after a fleet run: `list_test_executions` on the read
+server (`get_task_status` here is one task id at a time).
 
 ## Setup
 

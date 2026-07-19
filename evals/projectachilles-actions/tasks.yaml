@@ -33,3 +33,11 @@
 
 - prompt: "Did ProjectAchilles task task-99 finish yet?"
   expect_tool: get_task_status
+
+- prompt: "Run the ProjectAchilles test 3f2a9c10-1111-4222-8333-444455556666 on every host tagged windows-endpoints."
+  expect_tool: run_test
+  expect_args: { tag: windows-endpoints }
+
+- prompt: "Schedule test 3f2a9c10-1111-4222-8333-444455556666 daily at 02:30 on all hosts tagged prod-servers."
+  expect_tool: schedule_test
+  expect_args: { tag: prod-servers, schedule: daily }

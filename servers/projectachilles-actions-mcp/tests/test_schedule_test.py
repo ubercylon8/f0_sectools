@@ -193,3 +193,68 @@ async def test_invalid_args_with_token_do_not_consume_it(tmp_path):
         "projectachilles.schedule_test", TARGET, token
     )
     assert token_survived is True
+
+
+# ── fleet scheduling (tag-based targeting) ──────────────────────────────────
+
+TAGGED = {"data": {"agents": [
+    {"id": "ag-1", "hostname": "web-01"}, {"id": "ag-2", "hostname": "web-02"},
+], "total": 2}}
+TAG_DETAIL = {"data": {"id": "ag-1", "org_id": "org-1", "hostname": "web-01"}}
+TAG_TARGET = f"{UUID}@tag:web:2"
+
+
+def _mock_tag_reads(router):
+    router.get(f"{BASE}/api/browser/tests/{UUID}").mock(
+        return_value=httpx.Response(200, json={"test": TEST_RECORD}))
+    router.get(f"{BASE}/api/tests/builds/{UUID}").mock(
+        return_value=httpx.Response(200, json=BUILD))
+    router.get(f"{BASE}/api/agent/admin/agents").mock(
+        return_value=httpx.Response(200, json=TAGGED))
+    router.get(f"{BASE}/api/agent/admin/agents/ag-1").mock(
+        return_value=httpx.Response(200, json=TAG_DETAIL))
+
+
+@pytest.mark.asyncio
+async def test_schedule_test_tag_intent_lists_count(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_tag_reads(router)
+        router.post(f"{BASE}/api/agent/admin/schedules")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await schedule_test(
+                pa, _gate(tmp_path), UUID, "", "daily", "02:30", tag="web")
+    f = findings[0]
+    assert "Pending action" in f.title
+    assert any(e.key == "host_count" and e.value == "2" for e in f.evidence)
+    assert TAG_TARGET in f.recommended_action.summary
+
+
+@pytest.mark.asyncio
+async def test_schedule_test_tag_valid_token_posts_all_agent_ids(tmp_path):
+    with respx.mock() as router:
+        _mock_tag_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/schedules").mock(
+            return_value=httpx.Response(201, json={"data": {
+                "id": "sched-1", "status": "active", "next_run_at": None}}))
+        store = TokenStore(str(tmp_path / "pending"))
+        token = store.issue("projectachilles.schedule_test", TAG_TARGET)
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await schedule_test(
+                pa, _gate(tmp_path), UUID, "", "daily", "02:30",
+                tag="web", confirmation_token=token)
+    assert post.call_count == 1
+    body = json.loads(post.calls[0].request.content)
+    assert body["agent_ids"] == ["ag-1", "ag-2"]
+    assert "Action completed" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_schedule_test_both_host_and_tag_guides(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/schedules")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await schedule_test(
+                pa, _gate(tmp_path), UUID, "web-01", "daily", "02:30", tag="web")
+    assert post.called is False
+    assert "exactly one" in findings[0].title.lower()

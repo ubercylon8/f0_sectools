@@ -50,23 +50,23 @@ _Day = Literal[
 
 @mcp.tool()
 async def run_test(
-    test_id: str, hostname: str, confirmation_token: str = ""
+    test_id: str, hostname: str = "", tag: str = "", confirmation_token: str = ""
 ) -> list[dict[str, Any]]:
-    """Run a ProjectAchilles validation test on ONE agent host now (GATED WRITE).
+    """Run a ProjectAchilles validation test now on ONE host OR a FLEET (GATED WRITE).
 
-    test_id is the test's UUID (look it up with find_tests/get_test on the
-    ProjectAchilles read server); hostname is the exact agent hostname. Call
-    WITHOUT confirmation_token first: returns the intended action only. To
-    execute, an operator runs scripts/confirm_action.py with the printed
-    target and --platform projectachilles, then you call again with the token.
-    Requires PROJECTACHILLES_ALLOW_WRITE=true and a read-write pa_ key.
+    Target exactly one of: `hostname` (one exact agent), or `tag` (every agent
+    carrying that tag — a fleet, fanned out in one action). test_id is the
+    test's UUID. Call WITHOUT confirmation_token first to preview: the intent
+    lists the hosts and count. For a fleet, the confirmation is bound to the
+    host COUNT, so if the tag's membership changes before you confirm you must
+    re-preview and re-approve. Requires PROJECTACHILLES_ALLOW_WRITE=true.
     """
     cfg = ProjectAchillesConfig.from_env()
     async with ProjectAchillesClient(cfg) as pa:
         return _render(
             await tools.run_test(
                 pa, _gate("projectachilles.run_test", cfg),
-                test_id, hostname, confirmation_token, _ACTOR,
+                test_id, hostname, tag, confirmation_token, _ACTOR,
             )
         )
 
@@ -74,19 +74,21 @@ async def run_test(
 @mcp.tool()
 async def schedule_test(
     test_id: str,
-    hostname: str,
-    schedule: Literal["once", "daily", "weekly", "monthly"],
-    run_time: str,
+    hostname: str = "",
+    schedule: Literal["once", "daily", "weekly", "monthly"] = "daily",
+    run_time: str = "",
     run_date: str = "",
     day: _Day = "",
     day_of_month: int = 0,
+    tag: str = "",
     confirmation_token: str = "",
 ) -> list[dict[str, Any]]:
-    """Schedule a ProjectAchilles validation test on ONE agent host (GATED WRITE).
+    """Schedule a ProjectAchilles validation test on ONE host OR a FLEET (GATED WRITE).
 
-    run_time is 24h HH:MM in UTC. schedule=once also needs run_date
-    (YYYY-MM-DD); weekly also needs day; monthly also needs day_of_month
-    (1-31); daily needs neither. Same two-step confirmation flow as run_test.
+    Target exactly one of `hostname` or `tag` (a fleet). run_time is 24h HH:MM
+    UTC. schedule=once also needs run_date (YYYY-MM-DD); weekly also needs day;
+    monthly also needs day_of_month (1-31). Same count-bound confirmation as
+    run_test for fleets.
     """
     cfg = ProjectAchillesConfig.from_env()
     async with ProjectAchillesClient(cfg) as pa:
@@ -94,7 +96,7 @@ async def schedule_test(
             await tools.schedule_test(
                 pa, _gate("projectachilles.schedule_test", cfg),
                 test_id, hostname, schedule, run_time, run_date, day,
-                day_of_month, confirmation_token, _ACTOR,
+                day_of_month, tag, confirmation_token, _ACTOR,
             )
         )
 
