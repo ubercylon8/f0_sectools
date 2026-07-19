@@ -51,6 +51,7 @@ _INDICATOR_REQUIRED = frozenset({"network", "process"})
 # like C:\Temp\x or a trailing \ would break out of the quoted indicator.
 _INDICATOR_RE = re.compile(r"^[A-Za-z0-9._:@/-]{1,120}$")
 _MAX_HUNT_WINDOW_H = 720
+_DEVICE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
 def _sev(value: str) -> Severity:
@@ -321,9 +322,12 @@ def _intent_finding(action_name: str, verb: str, device_id: str, comment: str,
         evidence=[Evidence(key="comment", value=comment), *extra],
         recommended_action=RecommendedAction(
             summary=(
-                f"To execute, an operator must run: python scripts/confirm_action.py "
-                f"{action_name.split('.')[-1]} {device_id} — then call this tool again "
-                f"with the printed confirmation_token."
+                "To execute: an operator approves this action in their "
+                "confirm_action.py --watch terminal, then you call this tool again "
+                "with the SAME arguments.\n"
+                "Token fallback: python scripts/confirm_action.py "
+                f"{action_name.split('.')[-1]} {device_id}\n"
+                "then pass the printed confirmation_token."
             ),
             gated_action=action_name,
             confidence="high",
@@ -353,7 +357,22 @@ async def _run_machine_action(
     sec: Any, gate: GatedAction, device_id: str, comment: str, confirmation_token: str,
     actor: str, path: str, body: dict[str, Any], verb: str, intent_extra: list[Evidence],
 ) -> list[Finding]:
-    if not confirmation_token:
+    if not _DEVICE_ID_RE.match(device_id):
+        return [
+            Finding(
+                source="defender",
+                finding_type=FindingType.action,
+                severity=Severity.info,
+                title="Action not taken: device_id contains unsupported characters",
+                recommended_action=RecommendedAction(
+                    summary="Use the device id exactly as returned by list_devices.",
+                    gated_action=gate.name,
+                    confidence="high",
+                ),
+            )
+        ]
+    if not confirmation_token and not gate.has_approval(device_id):
+        gate.record_request(device_id)
         return [_intent_finding(gate.name, verb, device_id, comment, intent_extra)]
     try:
         result = await gate.execute_async(
@@ -413,7 +432,8 @@ async def isolate_host(
     sec: Any, gate: GatedAction, device_id: str, comment: str,
     confirmation_token: str = "", actor: str = "mcp-operator",
 ) -> list[Finding]:
-    """Isolate a device from the network (gated write). No token → intent only."""
+    """Isolate a device from the network (gated write). No token and no watcher
+    approval → intent only."""
     return await _run_machine_action(
         sec, gate, device_id, comment, confirmation_token, actor,
         path=f"/machines/{device_id}/isolate",
@@ -427,7 +447,8 @@ async def release_host(
     sec: Any, gate: GatedAction, device_id: str, comment: str,
     confirmation_token: str = "", actor: str = "mcp-operator",
 ) -> list[Finding]:
-    """Release a device from isolation (gated write). No token → intent only."""
+    """Release a device from isolation (gated write). No token and no watcher
+    approval → intent only."""
     return await _run_machine_action(
         sec, gate, device_id, comment, confirmation_token, actor,
         path=f"/machines/{device_id}/unisolate",

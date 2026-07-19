@@ -201,32 +201,43 @@ split across the model and the operator:
    `confirmation_token`. This does **not** touch the API — it returns an
    `action` finding describing exactly what it intends to do (device, action,
    `gated_action: defender.isolate_host`) and asks you to confirm.
-2. **Confirm (your turn, out-of-band).** In your own terminal — not through the
-   model — run:
+2. **Confirm (your turn, out-of-band).** Two equivalent ways, both single-use,
+   target-bound, and expire in 15 minutes:
 
-   ```bash
-   uv run python scripts/confirm_action.py isolate_host <device_id>
-   ```
+   - **Watcher (default).** In your own terminal — not through the model —
+     run `python scripts/confirm_action.py --watch`. The pending request
+     appears there automatically; approve it with one keypress. Then tell
+     the agent to retry: it re-runs `isolate_host` with the SAME arguments
+     and no `confirmation_token` — the gate consumes the stored approval, so
+     no token ever enters model context.
+   - **Token (fallback, headless/scripted).** In your own terminal — not
+     through the model — run:
 
-   This prints a single-use confirmation token. The token is generated
-   out-of-band in your shell; the model never sees it and cannot request or
-   fabricate one, so it can never self-confirm. Paste the token back into the
-   chat as the `confirmation_token` argument to re-run `isolate_host` — only
-   then does the tool call the Defender isolate API.
+     ```bash
+     uv run python scripts/confirm_action.py isolate_host <device_id>
+     ```
+
+     This prints a single-use confirmation token. The token is generated
+     out-of-band in your shell; the model never sees it and cannot request or
+     fabricate one, so it can never self-confirm. Paste the token back into
+     the chat as the `confirmation_token` argument to re-run `isolate_host` —
+     only then does the tool call the Defender isolate API.
 
 Writes are also disabled at the config level unless `DEFENDER_ALLOW_WRITE=true`
 is set in `.env.defender` — even with a valid token, the tool refuses if the
 flag is off. Every action that actually executes is recorded to the local
-audit trail at `audit-logs/actions.log`, which stores the actor, target,
-action name, and a truncated SHA-256 **fingerprint** of the token — never the
+audit trail at `$F0_GATING_DIR/audit.log` (default
+`~/.f0sectools/gating/audit.log`; override via `DEFENDER_AUDIT_LOG_PATH` /
+`PROJECTACHILLES_AUDIT_LOG_PATH`), which stores the actor, target, action
+name, and a truncated SHA-256 **fingerprint** of the token — never the
 plaintext token itself. (Refused attempts — flag off or an invalid token — are
 rejected before execution and are not written to the audit trail; they surface
 to the operator as a refusal finding instead.)
 
-The MCP server and `scripts/confirm_action.py` must be run from the same
-working directory (the repo root) so the pending-token store
-(`audit-logs/pending/`) matches — otherwise a freshly issued token appears
-"invalid".
+The MCP server and `scripts/confirm_action.py` do **not** need to be run from
+the same working directory. Gating state (pending requests, approvals, and
+tokens) lives under `$F0_GATING_DIR` (default `~/.f0sectools/gating/`), a
+fixed location shared by every server and the CLI regardless of CWD.
 
 ---
 

@@ -14,7 +14,7 @@ from f0_defender_mcp.tools import (
 )
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
-from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
+from f0_sectools_core.gating.actions import ApprovalStore, AuditLog, GatedAction, TokenStore
 
 CFG = PlatformConfig(tenant_id="t", client_id="c", client_secret="s")
 TOKEN_URL = "https://login.microsoftonline.com/t/oauth2/v2.0/token"
@@ -40,6 +40,7 @@ def _gate(tmp_path, enabled):
         enabled=enabled,
         audit=AuditLog(str(tmp_path / "a.log")),
         token_store=TokenStore(str(tmp_path / "pending")),
+        approvals=ApprovalStore(str(tmp_path / "gating")),
     )
 
 
@@ -224,6 +225,21 @@ async def test_isolate_host_bad_token_refuses(tmp_path):
         assert findings[0].finding_type.value == "action"
         assert "token" in findings[0].title.lower()
         assert not post.called
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_bad_device_id_charset_rejected_no_call(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        gate = _gate(tmp_path, enabled=True)
+        bad_id = "dev\x1b[2K1"
+        tok = gate.token_store.issue("defender.isolate_host", bad_id)
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, bad_id, "c2", confirmation_token=tok)
+        assert len(findings) == 1
+        assert "unsupported characters" in findings[0].title.lower()
+        assert router.calls.call_count == 0  # no POST, not even the token exchange
+        assert gate.approvals.list_pending() == []  # no pending request recorded
 
 
 @pytest.mark.asyncio
@@ -486,3 +502,48 @@ async def test_hunt_clamps_time_window():
             await hunt(gc, "network", "evil.com", 99999)
     body = json.loads(route.calls.last.request.content)
     assert "ago(720h)" in body["Query"]
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_intent_records_pending_request(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        router.post(SEC + "/machines/dev-1/isolate")
+        gate = _gate(tmp_path, enabled=True)
+        async with _sec_client() as sec:
+            await isolate_host(sec, gate, "dev-1", "suspected c2")
+    pending = gate.approvals.list_pending()
+    assert len(pending) == 1
+    assert pending[0]["action"] == "defender.isolate_host"
+    assert pending[0]["target"] == "dev-1"
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_same_call_after_approval_executes(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        post = router.post(SEC + "/machines/dev-1/isolate").mock(
+            return_value=httpx.Response(201, json={"id": "act-1", "status": "Pending"})
+        )
+        gate = _gate(tmp_path, enabled=True)
+        gate.approvals.approve("defender.isolate_host", "dev-1")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "suspected c2")
+    assert post.call_count == 1
+    assert "Action completed" in findings[0].title
+    import json as _json
+    entry = _json.loads((tmp_path / "a.log").read_text().strip())
+    assert entry["method"] == "approval"
+
+
+@pytest.mark.asyncio
+async def test_isolate_host_approval_for_other_device_still_intent(tmp_path):
+    with respx.mock as router:
+        _token(router)
+        post = router.post(SEC + "/machines/dev-1/isolate")
+        gate = _gate(tmp_path, enabled=True)
+        gate.approvals.approve("defender.isolate_host", "dev-9")
+        async with _sec_client() as sec:
+            findings = await isolate_host(sec, gate, "dev-1", "c2")
+    assert not post.called
+    assert "Pending action" in findings[0].title

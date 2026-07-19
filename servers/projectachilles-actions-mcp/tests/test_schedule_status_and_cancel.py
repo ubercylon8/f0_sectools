@@ -9,7 +9,7 @@ import respx
 from f0_pa_actions_mcp.client import ProjectAchillesClient
 from f0_pa_actions_mcp.tools import cancel_task, set_schedule_status
 from f0_sectools_core.auth.config import ProjectAchillesConfig
-from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
+from f0_sectools_core.gating.actions import ApprovalStore, AuditLog, GatedAction, TokenStore
 
 BASE = "https://org.agent.example.com"
 
@@ -24,6 +24,7 @@ def _gate(tmp_path, name: str, enabled: bool = True) -> GatedAction:
         enabled=enabled,
         audit=AuditLog(str(tmp_path / "audit.log")),
         token_store=TokenStore(str(tmp_path / "pending")),
+        approvals=ApprovalStore(str(tmp_path / "gating")),
     )
 
 
@@ -141,3 +142,29 @@ async def test_cancel_terminal_task_400_becomes_finding(tmp_path):
     assert post.call_count == 1
     assert len(findings) == 1
     assert "rejected" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_pause_same_call_after_approval_executes(tmp_path):
+    with respx.mock() as router:
+        patch = router.patch(f"{BASE}/api/agent/admin/schedules/sched-1").mock(
+            return_value=httpx.Response(200, json={"data": {
+                "id": "sched-1", "status": "paused", "next_run_at": None,
+            }})
+        )
+        gate = _gate(tmp_path, "projectachilles.set_schedule_status")
+        gate.approvals.approve("projectachilles.set_schedule_status", "sched-1:paused")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await set_schedule_status(pa, gate, "sched-1", "paused")
+    assert patch.call_count == 1
+    assert "Action completed" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_cancel_intent_records_pending_request(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{BASE}/api/agent/admin/tasks/task-1/cancel")
+        gate = _gate(tmp_path, "projectachilles.cancel_task")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            await cancel_task(pa, gate, "task-1")
+    assert gate.approvals.list_pending()[0]["target"] == "task-1"

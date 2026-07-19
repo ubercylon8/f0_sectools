@@ -46,10 +46,12 @@ def _intent(
         evidence=[*evidence, Evidence(key="confirmation_target", value=target)],
         recommended_action=RecommendedAction(
             summary=(
-                "To execute, an operator must run:\n"
-                f'python scripts/confirm_action.py {short} "{target}" '
-                "--platform projectachilles\n"
-                "Then call this tool again with the printed confirmation_token."
+                "To execute: an operator approves this action in their "
+                "confirm_action.py --watch terminal, then you call this tool again "
+                "with the SAME arguments.\n"
+                "Token fallback: python scripts/confirm_action.py "
+                f'{short} "{target}" --platform projectachilles\n'
+                "then pass the printed confirmation_token."
             ),
             gated_action=action_name,
             confidence="high",
@@ -124,7 +126,8 @@ async def run_test(
         Evidence(key="hostname", value=agent["hostname"]),
         Evidence(key="binary_name", value=binary),
     ]
-    if not confirmation_token:
+    if not confirmation_token and not gate.has_approval(target):
+        gate.record_request(target)
         return [
             _intent(
                 gate.name, target,
@@ -286,7 +289,8 @@ async def schedule_test(
         Evidence(key="hostname", value=agent["hostname"]),
         Evidence(key="schedule", value=desc),
     ]
-    if not confirmation_token:
+    if not confirmation_token and not gate.has_approval(target):
+        gate.record_request(target)
         return [
             _intent(
                 gate.name, target,
@@ -371,7 +375,8 @@ async def set_schedule_status(
     entity = Entity(kind=EntityKind.rule, id=sid)
     evidence = [Evidence(key="schedule_id", value=sid),
                 Evidence(key="new_status", value=status)]
-    if not confirmation_token:
+    if not confirmation_token and not gate.has_approval(target):
+        gate.record_request(target)
         return [_intent(gate.name, target, f"{verb} schedule {sid}", entity, evidence)]
     try:
         result = await gate.execute_async(
@@ -427,7 +432,8 @@ async def cancel_task(
     target = tid
     entity = Entity(kind=EntityKind.rule, id=tid)
     evidence = [Evidence(key="task_id", value=tid)]
-    if not confirmation_token:
+    if not confirmation_token and not gate.has_approval(target):
+        gate.record_request(target)
         return [_intent(gate.name, target, f"cancel task {tid}", entity, evidence)]
     try:
         result = await gate.execute_async(

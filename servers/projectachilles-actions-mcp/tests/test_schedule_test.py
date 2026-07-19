@@ -10,7 +10,7 @@ from f0_pa_actions_mcp.client import ProjectAchillesClient
 from f0_pa_actions_mcp.resolve import ResolveFailed
 from f0_pa_actions_mcp.tools import _schedule_config, schedule_test
 from f0_sectools_core.auth.config import ProjectAchillesConfig
-from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
+from f0_sectools_core.gating.actions import ApprovalStore, AuditLog, GatedAction, TokenStore
 
 BASE = "https://org.agent.example.com"
 UUID = "3f2a9c10-1111-4222-8333-444455556666"
@@ -38,6 +38,7 @@ def _gate(tmp_path, enabled: bool = True) -> GatedAction:
         enabled=enabled,
         audit=AuditLog(str(tmp_path / "audit.log")),
         token_store=TokenStore(str(tmp_path / "pending")),
+        approvals=ApprovalStore(str(tmp_path / "gating")),
     )
 
 

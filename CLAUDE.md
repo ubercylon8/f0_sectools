@@ -190,10 +190,23 @@ Any tool that changes state on a live platform is **read-only-by-default and gat
 
 1. **Disabled unless enabled.** The action is unavailable unless the operator sets the platform's write flag (e.g. `DEFENDER_ALLOW_WRITE=true` in `.env.defender`).
 2. **Dry-run / intent first.** When invoked, the tool returns the *intended* action as a finding (`finding_type: "action"`) describing exactly what it will do and to which target — it does **not** execute yet.
-3. **Confirmation token required.** Execution requires a fresh, single-use confirmation token supplied by a human (or an explicitly human-in-the-loop step). No token → no execution.
-4. **Execute + audit.** On a valid token, the action runs and the result, target, actor, and token are written to the local audit trail.
+3. **Human confirmation required.** Two equivalent modes, both single-use,
+   target-bound, TTL'd, and implemented in `core/gating/`:
+   - **Watcher (default):** the intent registers a pending request; the
+     operator approves it in `python scripts/confirm_action.py --watch`
+     (one keypress), and the agent repeats the *identical* tool call — the
+     gate consumes the stored approval. No token ever enters model context.
+   - **Token (headless/scripted):** `confirm_action.py <action> "<target>"`
+     prints a single-use token passed as `confirmation_token` (used by e.g.
+     the live-smoke `--execute` flows).
+   Gating state lives under `$F0_GATING_DIR` (default `~/.f0sectools/gating/`),
+   shared by servers and the CLI regardless of working directory. No
+   confirmation → no execution.
+4. **Execute + audit.** On a valid token or consumed approval, the action runs and the result, target, actor, and token are written to the local audit trail.
 
-A small local model **must never be able to isolate a host or disable an account on its own.** The flag + token gate is the hard stop.
+A small local model **must never be able to isolate a host or disable an account on its own.** The flag + human confirmation (watcher approval or token) is the hard stop.
+
+Note: the gate's guarantee holds only when confirm_action.py runs in a terminal the model cannot drive — in runtimes where the model has shell access, treat the approval CLI (especially --approve) as operator-only and keep write flags off.
 
 ---
 

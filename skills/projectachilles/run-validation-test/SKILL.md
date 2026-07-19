@@ -32,14 +32,14 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
 2. Call the gated tool WITHOUT `confirmation_token`. You get back the
    fully-resolved intent (test, host, agent id) and a `confirmation_target`
    evidence value.
-3. STOP and hand the operator the exact command from the finding:
-   `python scripts/confirm_action.py <action> "<target>" --platform
-   projectachilles`. You cannot generate this token yourself.
-4. Call the same tool again with the SAME arguments plus the operator's
-   token. Tokens are single-use, expire in 15 minutes, and are bound to the
-   action + target (test+host for run/schedule; schedule id+status for
-   pause/resume; task id for cancel). Changing the test, host, schedule
-   id/status, or task id needs a fresh token. Schedule timing arguments
+3. STOP and ask the operator to approve the action in their
+   `confirm_action.py --watch` terminal (the pending request appears there
+   automatically; the intent finding shows the exact target). If they prefer
+   tokens, the finding also carries the one-shot command.
+4. Once the operator says approved, call the SAME tool again with the SAME
+   arguments (no token needed — the gate consumes the stored approval).
+   Approvals are single-use, expire in 15 minutes, and are bound to the
+   exact action + target shown in the intent. Schedule timing arguments
    (time/day/date) are NOT part of the binding — re-read the intent finding
    before confirming so you approve the exact schedule shown.
 5. Verify: `get_task_status` for runs (then `list_test_executions` on the

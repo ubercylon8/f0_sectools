@@ -9,7 +9,7 @@ import respx
 from f0_pa_actions_mcp.client import ProjectAchillesClient
 from f0_pa_actions_mcp.tools import run_test
 from f0_sectools_core.auth.config import ProjectAchillesConfig
-from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
+from f0_sectools_core.gating.actions import ApprovalStore, AuditLog, GatedAction, TokenStore
 from f0_sectools_core.schema.findings import FindingType
 
 BASE = "https://org.agent.example.com"
@@ -38,6 +38,7 @@ def _gate(tmp_path, enabled: bool = True) -> GatedAction:
         enabled=enabled,
         audit=AuditLog(str(tmp_path / "audit.log")),
         token_store=TokenStore(str(tmp_path / "pending")),
+        approvals=ApprovalStore(str(tmp_path / "gating")),
     )
 
 
@@ -165,3 +166,46 @@ async def test_platform_403_after_token_maps_to_permission_finding(tmp_path):
     assert "read-write" in (
         findings[0].title + findings[0].recommended_action.summary
     )
+
+
+@pytest.mark.asyncio
+async def test_run_test_intent_records_pending_request(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_reads(router)
+        router.post(f"{BASE}/api/agent/admin/tasks")
+        gate = _gate(tmp_path)
+        async with ProjectAchillesClient(_cfg()) as pa:
+            await run_test(pa, gate, UUID, "web-01")
+    pending = gate.approvals.list_pending()
+    assert len(pending) == 1
+    assert pending[0]["target"] == TARGET
+
+
+@pytest.mark.asyncio
+async def test_run_test_same_call_after_approval_executes(tmp_path):
+    with respx.mock() as router:
+        _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/tasks").mock(
+            return_value=httpx.Response(201, json={"data": {"task_ids": ["task-1"]}})
+        )
+        gate = _gate(tmp_path)
+        gate.approvals.approve("projectachilles.run_test", TARGET)
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, gate, UUID, "web-01")
+    assert post.call_count == 1
+    assert "Action completed" in findings[0].title
+    entry = json.loads((tmp_path / "audit.log").read_text().strip())
+    assert entry["method"] == "approval"
+
+
+@pytest.mark.asyncio
+async def test_run_test_approval_for_other_host_still_intent(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_reads(router)
+        post = router.post(f"{BASE}/api/agent/admin/tasks")
+        gate = _gate(tmp_path)
+        gate.approvals.approve("projectachilles.run_test", f"{UUID}@db-01")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, gate, UUID, "web-01")
+    assert post.called is False
+    assert "Pending action" in findings[0].title
