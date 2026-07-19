@@ -413,8 +413,84 @@ async def list_test_executions(pa: Any, days: int = 7, limit: int = 25) -> list[
         if finding:
             return [finding]
         raise
+    rows = _rows(d)[:limit]
+    # The rollup below only sees the fetched window (pageSize=limit). If the
+    # server-reported total exceeds what we actually fetched, a COMPLIANT verdict
+    # is only true FOR THIS WINDOW — failing rows outside it wouldn't be caught.
+    # A NON-COMPLIANT verdict stays definitive: a found failure is a found failure.
+    total_items = None
+    if isinstance(d, dict):
+        pagination = d.get("pagination")
+        if isinstance(pagination, dict):
+            total_items = pagination.get("totalItems")
+    truncated = (
+        isinstance(total_items, int)
+        and not isinstance(total_items, bool)
+        and total_items > len(rows)
+    )
+    bundle_rows = [r for r in rows if r.get("is_bundle_control")]
+    single_rows = [r for r in rows if not r.get("is_bundle_control")]
     out: list[Finding] = []
-    for x in _rows(d)[:limit]:
+
+    # Roll up bundle-control rows: one finding per (bundle, host) run.
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for r in bundle_rows:
+        key = (str(r.get("bundle_name") or r.get("test_name") or "bundle"),
+               str(r.get("hostname") or ""))
+        groups.setdefault(key, []).append(r)
+    for (bname, host), ctrls in groups.items():
+        total = len(ctrls)
+        failing = [c for c in ctrls if not c.get("is_protected")]
+        passed = total - len(failing)
+        non_compliant = bool(failing)
+        if non_compliant:
+            any_high = any(
+                str(c.get("severity", "")).lower() in ("critical", "high") for c in failing
+            )
+            sev = Severity.high if any_high else Severity.medium
+        else:
+            sev = Severity.info
+        ftype = FindingType.misconfig if non_compliant else FindingType.posture
+        verdict = "NON-COMPLIANT" if non_compliant else "COMPLIANT"
+        # A found failure is definitive even over a truncated window; only soften
+        # a COMPLIANT verdict, which is only true for the rows we actually saw.
+        verdict_label = "COMPLIANT (in fetched window)" if (
+            truncated and not non_compliant
+        ) else verdict
+        ev = [
+            Evidence(key="verdict", value=verdict),
+            Evidence(key="passed", value=str(passed)),
+            Evidence(key="failed", value=str(len(failing))),
+            Evidence(key="total", value=str(total)),
+        ]
+        for i, c in enumerate(failing[:15]):
+            ev.append(Evidence(
+                key=f"failing_control_{i + 1}",
+                value=f"{c.get('test_name', '?')} ({c.get('control_validator', '?')})",
+            ))
+        if len(failing) > 15:
+            ev.append(Evidence(key="more_not_shown",
+                               value=f"{len(failing) - 15} more not shown"))
+        if truncated:
+            ev.append(Evidence(
+                key="window_truncated",
+                value=f"verdict based on {len(rows)} of {total_items} rows in window",
+            ))
+        techniques = {str(t) for c in failing for t in (c.get("techniques") or []) if t}
+        ent = Entity(kind=EntityKind.host, id=host, name=host) if host else None
+        out.append(Finding(
+            source="projectachilles",
+            finding_type=ftype,
+            severity=sev,
+            title=f"{bname} on {host}: {verdict_label} ({passed}/{total} controls passed)",
+            entity=ent,
+            evidence=ev,
+            references=[Reference(type="mitre", id=t) for t in sorted(techniques)],
+            observed_at=ctrls[0].get("timestamp"),
+        ))
+
+    # Non-bundle rows keep the existing per-row security/hygiene vocabulary.
+    for x in single_rows:
         host = x.get("hostname", "")
         name = x.get("test_name", "test")
         # PA runs two kinds of check (the `category` field). Cyber-hygiene rows are

@@ -156,11 +156,12 @@ async def list_schedules(
 
 @mcp.tool()
 async def get_task_status(task_id: str) -> list[dict[str, Any]]:
-    """Check whether a ProjectAchilles test-run task finished (read-only).
+    """One-shot status check for a ProjectAchilles test-run task (read-only).
 
-    One task by task_id (from run_test). For the security outcome
-    (blocked / not blocked), use list_test_executions on the read server
-    after the task completes.
+    One task by task_id (from run_test). If still running, report that status
+    and do not call again until the user asks. On completion, returns the run's
+    OUTCOME (bundle verdict or pass/not-passed) — no need to check again or call
+    list_test_executions.
     """
     cfg = ProjectAchillesConfig.from_env()
     async with ProjectAchillesClient(cfg) as pa:

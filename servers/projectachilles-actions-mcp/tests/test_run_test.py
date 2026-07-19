@@ -252,3 +252,20 @@ async def test_run_test_chat_wrong_echo_still_denied(tmp_path):
             findings = await run_test(pa, gate, UUID, "web-01", f"{UUID}@wrong-host")
     assert post.called is False
     assert "not taken" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_run_test_success_summary_is_fire_and_report(tmp_path):
+    with respx.mock() as router:
+        _mock_reads(router)
+        router.post(f"{BASE}/api/agent/admin/tasks").mock(
+            return_value=httpx.Response(201, json={"data": {"task_ids": ["task-1"]}})
+        )
+        store = TokenStore(str(tmp_path / "pending"))
+        token = store.issue("projectachilles.run_test", TARGET)
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await run_test(pa, _gate(tmp_path), UUID, "web-01", token)
+    summary = findings[0].recommended_action.summary.lower()
+    assert "ask me later" in summary
+    assert "poll" not in summary
+    assert "track it" not in summary
