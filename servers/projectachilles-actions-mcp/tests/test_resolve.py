@@ -243,6 +243,29 @@ async def test_resolve_agents_by_tag_over_200_hard_refusal():
 
 
 @pytest.mark.asyncio
+async def test_resolve_agents_by_tag_id_and_host_lists_stay_aligned():
+    # When tag response includes a record with no id, both agent_ids and hostnames
+    # must drop it to stay aligned (no index mismatch).
+    mixed = {"data": {"agents": [
+        {"id": "ag-1", "hostname": "h1"},
+        {"hostname": "h-noid"},  # missing id — must be dropped from BOTH lists
+        {"id": "ag-3", "hostname": "h3"},
+    ], "total": 3}}
+    with respx.mock() as router:
+        router.get(f"{BASE}/api/agent/admin/agents").mock(
+            return_value=httpx.Response(200, json=mixed)
+        )
+        router.get(f"{BASE}/api/agent/admin/agents/ag-1").mock(
+            return_value=httpx.Response(200, json=DETAIL)
+        )
+        async with ProjectAchillesClient(_cfg()) as pa:
+            r = await resolve_agents_by_tag(pa, "mixed")
+    assert len(r["agent_ids"]) == len(r["hostnames"])  # aligned
+    assert r["agent_ids"] == ["ag-1", "ag-3"]  # id-less record dropped
+    assert r["hostnames"] == ["h1", "h3"]  # corresponding hostname also dropped
+
+
+@pytest.mark.asyncio
 async def test_resolve_agents_by_tag_bad_charset_guides():
     async with ProjectAchillesClient(_cfg()) as pa:
         with pytest.raises(ResolveFailed):

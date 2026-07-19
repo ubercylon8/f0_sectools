@@ -234,8 +234,11 @@ async def resolve_agents_by_tag(pa: Any, tag: str) -> dict[str, Any]:
                 "Check the tag in the ProjectAchilles console (agent tags).",
             )
         )
-    agent_ids = [str(a.get("id")) for a in agents if isinstance(a, dict) and a.get("id")]
-    hostnames = [str(a.get("hostname") or "?") for a in agents if isinstance(a, dict)]
+    # Build both lists from the SAME filtered set of valid records (dicts with truthy id)
+    # to keep agent_ids and hostnames index-aligned. A record with no id is dropped from both.
+    valid = [a for a in agents if isinstance(a, dict) and a.get("id")]
+    agent_ids = [str(a["id"]) for a in valid]
+    hostnames = [str(a.get("hostname") or "?") for a in valid]
     # org_id once from the first agent's detail (the admin list strips it).
     org_id = ""
     if agent_ids:
@@ -273,6 +276,9 @@ async def resolve_selection(pa: Any, hostname: str, tag: str) -> dict[str, Any]:
         }
     fleet = await resolve_agents_by_tag(pa, t)
     n = len(cast(list[str], fleet["agent_ids"]))
+    # target_key includes the count N baked in; consumers must compare the WHOLE string
+    # (never split on ':' — tags may legitimately contain ':', e.g. env:prod). The gate
+    # catches blast-radius drift by comparing full target_key strings.
     return {
         "agent_ids": fleet["agent_ids"],
         "hostnames": fleet["hostnames"],
