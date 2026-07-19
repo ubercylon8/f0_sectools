@@ -58,12 +58,30 @@ Base tool names (runtime may prefix): `run_test`, `schedule_test`,
    single-test pass/not-passed) directly — there's no need to also call the
    read server for the result. Use `list_schedules` to verify schedules.
 
+### Fleet-by-tag targeting
+
+`run_test`/`schedule_test` take exactly one of `hostname` (one exact agent)
+or `tag`. A `tag` fans the same test out to every agent carrying it — a
+fleet — in one gated action. The step-2 intent preview lists the matched
+hosts plus the total count as evidence; the step-4 confirmation is **bound
+to that count**, so if the fleet's membership changes between preview and
+approval (an agent gains/loses the tag), confirmation fails and you must
+re-preview and re-approve against the new count. A tag matching more than
+200 hosts is refused outright — narrow the tag and retry. After a fleet run,
+get per-host results from `list_test_executions` on the read server
+(`get_task_status` only covers one task id at a time, not the whole fleet).
+
 ## Pitfalls
 
 - The test must be BUILT in the ProjectAchilles console first; an unbuilt
   test returns a "not built" finding, not an error.
-- One host per call (exact hostname match). Fleet-wide runs are not
-  supported here — use the PA console.
+- `hostname` is an exact, single-agent match. To target several hosts at
+  once, use `tag` instead (see Fleet-by-tag targeting above) — there is no
+  hostname list/glob.
+- Fleet confirmations are bound to host COUNT, not the specific host list —
+  a same-size membership swap between preview and approval will NOT be
+  caught. Re-preview if you have reason to think membership changed even
+  when the count looks the same.
 - All schedule times are UTC, 24h HH:MM.
 - "Unschedule" = pause (`set_schedule_status` status=paused). There is no
   delete — that is admin-only in the platform.
