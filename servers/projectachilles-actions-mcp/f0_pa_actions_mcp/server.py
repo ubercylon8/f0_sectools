@@ -66,7 +66,7 @@ async def run_test(
         return _render(
             await tools.run_test(
                 pa, _gate("projectachilles.run_test", cfg),
-                test_id, hostname, confirmation_token, _ACTOR,
+                test_id, hostname, confirmation_token=confirmation_token, actor=_ACTOR,
             )
         )
 
