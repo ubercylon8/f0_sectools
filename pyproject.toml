@@ -1,6 +1,6 @@
 [project]
 name = "f0_sectools"
-version = "0.1.0"
+version = "0.2.0"
 description = "Security-operations tools, skills, and MCP servers for local AI agents — privacy-first, small-model-driven."
 readme = "README.md"
 requires-python = ">=3.11"
