@@ -1,4 +1,6 @@
-"""Defender MCP server (stdio). Read-only tools over Microsoft Graph.
+"""Defender MCP server (stdio). Read tools over Microsoft Graph, plus two
+gated write actions (host isolate/release, disabled unless DEFENDER_ALLOW_WRITE
+and human-confirmed).
 
 Each tool loads credentials from the DEFENDER_* environment (typically a
 `.env.defender` file), opens a short-lived Graph client, maps the result to
