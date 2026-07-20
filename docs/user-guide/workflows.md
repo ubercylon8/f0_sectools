@@ -136,8 +136,8 @@ approve it:
 - **Cancel** — `cancel_tasks` cancels one task, or bulk-cancels a run's pending
   tasks by `status`/`search` in one count-bound gated action.
 
-See [Gated write actions](getting-started.md) for the confirmation flow (watcher,
-token, or opt-in chat-confirm).
+See [Gated write actions](#gated-write-actions-isolaterelease-a-host) below for
+the confirmation flow (watcher, token, or opt-in chat-confirm).
 
 ## Intune device compliance (CISO / security engineer) — default focus
 
