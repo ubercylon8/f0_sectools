@@ -42,6 +42,7 @@ class FakeClient:
 
     def list_detections(self, start, end, limit=50, category=None):
         self._maybe_raise("list_detections")
+        self.last_detections_limit = limit
         return self._data.get("detections", [])
 
     def query(self, lcql, start, end, limit=50):
@@ -76,6 +77,12 @@ def test_list_detections_maps():
     findings = tools.list_detections(lc)
     assert findings[0].finding_type.value == "alert"
     assert "Suspicious PowerShell" in findings[0].title
+
+
+def test_list_detections_clamps_oversized_limit():
+    lc = FakeClient(detections=[])
+    tools.list_detections(lc, limit=5000)
+    assert lc.last_detections_limit == 100  # clamped from 5000
 
 
 def test_list_dr_rules_maps():

@@ -132,6 +132,14 @@ async def test_list_test_executions_uses_enriched_paginated_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_list_test_executions_clamps_oversized_limit():
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": []}})
+    await tools.list_test_executions(pa, limit=5000)
+    _, params = pa.calls[0]
+    assert params["pageSize"] == 100  # clamped from 5000
+
+
+@pytest.mark.asyncio
 async def test_list_test_executions_maps_unprotected():
     pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
         {"test_name": "Kerberoast", "hostname": "dc-01", "is_protected": False,

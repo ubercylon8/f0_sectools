@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from f0_sectools_core.gating.actions import GatedAction, GateDenied
+from f0_sectools_core.paging import clamp_limit
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -703,6 +704,7 @@ async def list_tasks(
 ) -> list[Finding]:
     """List admin tasks with their lifecycle status (read). One call, N per-host
     rows — the fleet-aware alternative to N get_task_status calls."""
+    limit = clamp_limit(limit)
     if status and status not in _TASK_STATUS:
         return [guidance(
             f"status '{status}' is not a task state",

@@ -11,6 +11,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from f0_sectools_core.paging import clamp_limit
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -106,6 +107,7 @@ def _test_evidence(t: dict[str, Any]) -> list[Evidence]:
 
 
 async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     by = by.strip().lower()
     if by not in _FIND_BY:
         return [
@@ -359,6 +361,7 @@ async def get_defense_score_trend(pa: Any, days: int = 30, interval: str = "day"
 
 
 async def get_weak_techniques(pa: Any, days: int = 30, limit: int = 10) -> list[Finding]:
+    limit = clamp_limit(limit)
     frm, to = _window(days)
     try:
         d = await pa.get("/analytics/defense-score/by-technique", params={"from": frm, "to": to})
@@ -410,6 +413,7 @@ async def list_test_executions(
     pa: Any, days: int = 7, limit: int = 25,
     test: str = "", tag: str = "", hostname: str = "",
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     frm, to = _window(days)
     for field, value in (("test", test), ("tag", tag), ("hostname", hostname)):
         if value and not _SCOPE_RE.match(value):
@@ -568,6 +572,7 @@ async def list_test_executions(
 
 
 async def list_risk_acceptances(pa: Any, status: str = "active", limit: int = 50) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         d = await pa.get("/risk-acceptances", params={"status": status, "pageSize": limit})
     except Exception as e:
@@ -597,6 +602,7 @@ async def list_risk_acceptances(pa: Any, status: str = "active", limit: int = 50
 async def list_agents(
     pa: Any, status: str | None = None, online_only: bool = False, limit: int = 50
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     params: dict[str, Any] = {"limit": limit, "online_only": str(online_only).lower()}
     if status:
         params["status"] = status

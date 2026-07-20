@@ -54,6 +54,16 @@ async def test_list_tasks_passes_status_and_search():
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_clamps_oversized_limit():
+    with respx.mock as router:
+        route = router.get(f"{BASE}/api/agent/admin/tasks").mock(
+            return_value=_tasks_response([], 0))
+        async with ProjectAchillesClient(_cfg()) as pa:
+            await list_tasks(pa, limit=5000)
+    assert "limit=100" in str(route.calls[0].request.url)
+
+
+@pytest.mark.asyncio
 async def test_list_tasks_empty_is_clean():
     with respx.mock as router:
         router.get(f"{BASE}/api/agent/admin/tasks").mock(

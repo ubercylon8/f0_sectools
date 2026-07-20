@@ -12,6 +12,7 @@ from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
 from f0_sectools_core.graph_errors import map_graph_error
+from f0_sectools_core.paging import clamp_limit
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -73,6 +74,7 @@ def _device_finding(d: dict[str, Any]) -> Finding:
 
 
 async def list_managed_devices(gc: Any, compliance: str = "all", limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     params: dict[str, Any] = {"$top": limit, "$select": _DEVICE_SELECT}
     filt = _COMPLIANCE_FILTER.get(str(compliance).lower())
     if filt:
@@ -128,6 +130,7 @@ async def list_stale_devices(gc: Any, days: int = 30, limit: int = 25) -> list[F
     # desc return identical unordered pages), so an oldest-first page is impossible. It DOES
     # honor a server-side $filter, so select stale devices directly and bound to `limit`.
     # The client-side cutoff check below stays as a defensive backstop.
+    limit = clamp_limit(limit)
     cutoff = datetime.now(UTC) - timedelta(days=days)
     cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
     params = {
@@ -221,6 +224,7 @@ def _policy_finding(p: dict[str, Any], kind_label: str) -> Finding:
 
 
 async def list_compliance_policies(gc: Any, limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         resp = await gc.get(
             "/deviceManagement/deviceCompliancePolicies", params={"$top": limit}
@@ -239,6 +243,7 @@ async def list_compliance_policies(gc: Any, limit: int = 25) -> list[Finding]:
 
 
 async def list_configuration_profiles(gc: Any, limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         resp = await gc.get(
             "/deviceManagement/deviceConfigurations", params={"$top": limit}

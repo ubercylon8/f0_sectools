@@ -86,6 +86,16 @@ async def test_bulk_no_token_intent_counts_matches(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_cancel_tasks_enumeration_still_requests_201(tmp_path):
+    with respx.mock(assert_all_called=False) as router:
+        get = router.get(f"{BASE}/api/agent/admin/tasks").mock(return_value=_tasks(["t1"]))
+        router.post(url__regex=rf"{BASE}/api/agent/admin/tasks/.+/cancel")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            await cancel_tasks(pa, _gate(tmp_path), status="pending")
+    assert "limit=201" in str(get.calls[0].request.url)  # NOT clamped to 100
+
+
+@pytest.mark.asyncio
 async def test_bulk_drift_refuses_stale_token(tmp_path):
     # Token issued for N=3; fleet shrinks to N=2 before execute -> target mismatch.
     gate = _gate(tmp_path)

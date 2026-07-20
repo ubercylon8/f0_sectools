@@ -11,6 +11,7 @@ import re
 import time
 from typing import Any
 
+from f0_sectools_core.paging import clamp_limit
 from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import (
     Entity,
@@ -112,6 +113,7 @@ def get_sensor(lc: Any, hostname: str) -> list[Finding]:
 
 
 def list_dr_rules(lc: Any, namespace: str = "general", limit: int = _MAX_ITEMS) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         rules = lc.list_dr_rules(namespace=namespace)
     except Exception as e:
@@ -142,6 +144,7 @@ _DET_SEV = {0: Severity.low, 1: Severity.low, 2: Severity.medium, 3: Severity.me
 def list_detections(
     lc: Any, hours_back: float = 24, limit: int = _MAX_ITEMS, category: str | None = None
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     end = int(time.time())
     start = int(end - hours_back * 3600)
     try:
@@ -233,6 +236,7 @@ def query_telemetry(
     domain: str | None = None,
     lcql: str | None = None,
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     end = int(time.time())
     start = int(end - hours_back * 3600)
     # Scope is only meaningful on the guided preset path; a raw lcql override ignores

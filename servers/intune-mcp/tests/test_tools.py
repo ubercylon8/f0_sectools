@@ -61,6 +61,16 @@ async def test_list_managed_devices_noncompliant_high_severity_and_filter():
 
 
 @pytest.mark.asyncio
+async def test_list_managed_devices_clamps_oversized_limit():
+    with respx.mock as router:
+        _token(router)
+        route = router.get(DEV).mock(return_value=httpx.Response(200, json={"value": []}))
+        async with GraphClient(CFG) as gc:
+            await list_managed_devices(gc, limit=5000)
+    assert route.calls[0].request.url.params["$top"] == "100"  # clamped from 5000
+
+
+@pytest.mark.asyncio
 async def test_list_managed_devices_403_permission_finding():
     with respx.mock as router:
         _token(router)
