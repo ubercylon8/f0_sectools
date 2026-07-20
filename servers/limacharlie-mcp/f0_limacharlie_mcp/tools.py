@@ -79,6 +79,7 @@ def _sensor_findings(sensors: list[dict[str, Any]], cap: int = _MAX_ITEMS) -> li
 
 
 def list_sensors(lc: Any, online_only: bool = False, limit: int = _MAX_ITEMS) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         sensors = lc.list_sensors(online_only=online_only, limit=limit)
     except Exception as e:

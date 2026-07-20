@@ -23,6 +23,7 @@ from f0_sectools_core.schema.findings import (
     Reference,
     Severity,
 )
+from f0_sectools_core.smallmodel import scope_ok, search_ok
 
 from .client import ProjectAchillesError
 from .errors import map_pa_error
@@ -37,15 +38,7 @@ from .resolve import (
 _SOURCE = "projectachilles"
 _ID_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,64}$")
 _TASK_STATUS = {"pending", "assigned", "running", "completed", "failed", "expired"}
-_SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
 _MAX_CANCEL = 200
-
-
-def _search_ok(value: str) -> bool:
-    """Permissive bound for a read-side search term: reject only oversized or
-    control-character values (context-window / hygiene, not injection — httpx
-    encodes params). Legit multi-word / dotted / id searches pass."""
-    return len(value) <= 128 and all(ord(c) >= 0x20 for c in value)
 
 
 def _intent(
@@ -510,7 +503,7 @@ async def cancel_tasks(
                 f"status '{st}' is not a task state",
                 "Use one of: " + ", ".join(sorted(_TASK_STATUS)) + ".",
             )]
-        if srch and not _SCOPE_RE.match(srch):
+        if srch and not scope_ok(srch):
             return [guidance(
                 "search contains unsupported characters",
                 "Pass a plain test-name or hostname substring.",
@@ -717,7 +710,7 @@ async def list_tasks(
             f"status '{status}' is not a task state",
             "Use one of: " + ", ".join(sorted(_TASK_STATUS)) + " (or omit for all).",
         )]
-    if search and not _search_ok(search):
+    if search and not search_ok(search):
         return [guidance(
             "search is too long or contains control characters",
             "Use a plain test-name or hostname substring (<=128 chars).",

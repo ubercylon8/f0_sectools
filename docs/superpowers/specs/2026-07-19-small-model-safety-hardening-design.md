@@ -57,7 +57,9 @@ Confirmed-closed params (each has an explicit closed set in code — a validatio
 - **limacharlie:** `list_dr_rules`, `list_detections`, `query_telemetry`
 - **intune:** `list_managed_devices`
 
-Pattern: `limit = clamp_limit(limit, default=<the tool's existing default>)` at the top of each tools-layer function, preserving each tool's current default (50/25/10/…) as the `default=` so garbage inputs fall back to today's value, and capping oversized inputs at 100. The existing "N more available" / bounded-output messaging is unchanged.
+Pattern: `limit = clamp_limit(limit)` at the top of each tools-layer function (the bare call matches the existing defender/tenable pattern) — bounds oversized inputs to 100 and floors sub-1 values to 1. `limit` is typed `int`, so the framework coerces it before the tool runs and `clamp_limit`'s `default` branch is unreachable in practice; the bare call is therefore sufficient, and each tool's own signature default still applies when the arg is omitted. The existing "N more available" / bounded-output messaging is unchanged.
+
+> Implementation note (2026-07-20): also swept limacharlie `list_sensors` for uniformity (a review-flagged omission from the original 12-site list; its output was already hard-capped at 50).
 
 **Do NOT clamp internal, non-model-facing limits** — e.g. `cancel_tasks`'s hardcoded enumeration `limit=201` (that's the 200-cap machinery, not a model input). Only clamp parameters the model supplies.
 
