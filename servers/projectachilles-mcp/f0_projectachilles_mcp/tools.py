@@ -22,6 +22,7 @@ from f0_sectools_core.schema.findings import (
     Reference,
     Severity,
 )
+from f0_sectools_core.smallmodel import scope_ok, search_ok
 
 from .client import ProjectAchillesError
 from .errors import map_pa_error
@@ -74,18 +75,6 @@ _UUID_RE = re.compile(
     r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", re.IGNORECASE
 )
 
-# Scoping values (test name/uuid, tag, hostname) — bounded, printable, no
-# control chars. Permissive enough for test names with spaces; strict enough
-# to reject newlines/garbage before they hit the query string.
-_SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
-
-
-def _search_ok(value: str) -> bool:
-    """Permissive bound for a read-side search term: reject only oversized or
-    control-character values (context-window / hygiene, not injection — httpx
-    encodes params). Legit multi-word / dotted / id searches pass."""
-    return len(value) <= 128 and all(ord(c) >= 0x20 for c in value)
-
 # PA supports these filters server-side on GET /api/browser/tests; the rest
 # (actor/tactic/tag) are filtered client-side over the returned list.
 _SERVER_SIDE = {"technique": "technique", "category": "category", "keyword": "search"}
@@ -128,7 +117,7 @@ async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Find
                 ),
             )
         ]
-    if value and not _search_ok(value):
+    if value and not search_ok(value):
         return [
             Finding(
                 source="projectachilles",
@@ -435,7 +424,7 @@ async def list_test_executions(
     limit = clamp_limit(limit)
     frm, to = _window(days)
     for field, value in (("test", test), ("tag", tag), ("hostname", hostname)):
-        if value and not _SCOPE_RE.match(value):
+        if value and not scope_ok(value):
             return [_scope_guidance(field, value)]
     params: dict[str, Any] = {
         "from": frm,
