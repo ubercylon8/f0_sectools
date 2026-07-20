@@ -56,11 +56,13 @@ async def list_test_executions(
     days: int = 7, limit: int = 25,
     test: str = "", tag: str = "", hostname: str = "",
 ) -> list[dict[str, Any]]:
-    """Recent test executions per host. Two kinds (see the `check_kind` evidence):
-    attack simulations — blocked vs NOT blocked; and cyber-hygiene control checks —
-    passed vs not passed. Bundle runs roll up into one per-run COMPLIANT/NON-COMPLIANT
-    finding (X/Y controls). Pass `test` (and/or `tag`/`hostname`) to scope results to
-    ONE run instead of a raw time window (avoids unrelated hosts appearing)."""
+    """Test RESULTS / outcomes — how test runs actually did, per host (NOT the test
+    catalog; for "which tests exist" use find_tests). Use for "results for test X",
+    "how did the <tag> fleet do", "recent executions that were not blocked". Pass
+    `test` (a test name), `tag` (a fleet), and/or `hostname` to scope the results to
+    one run. Two kinds (see the `check_kind` evidence): attack simulations — blocked
+    vs NOT blocked; cyber-hygiene control checks — passed vs not passed. Bundle runs
+    roll up into one per-run COMPLIANT/NON-COMPLIANT finding (X/Y controls)."""
     async with _client() as pa:
         return _render(await tools.list_test_executions(pa, days, limit, test, tag, hostname))
 
@@ -110,8 +112,10 @@ async def find_tests(
 
 @mcp.tool()
 async def get_test(test_id: str) -> list[dict[str, Any]]:
-    """Full detail for ONE catalog test — description, OS/target, complexity, tactics,
-    tags, MITRE techniques. test_id is a test uuid or an exact test name."""
+    """Full detail for ONE specific test — use for "what does test X cover / do",
+    "details on the <name> test". Returns description, OS/target, complexity, tactics,
+    tags, MITRE techniques. test_id is a test uuid or an exact test name (to SEARCH or
+    LIST across many tests use find_tests instead)."""
     async with _client() as pa:
         return _render(await tools.get_test(pa, test_id))
 
