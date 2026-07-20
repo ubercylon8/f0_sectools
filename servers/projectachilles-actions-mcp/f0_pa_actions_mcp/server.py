@@ -52,13 +52,16 @@ _Day = Literal[
 async def run_test(
     test_id: str, hostname: str = "", tag: str = "", confirmation_token: str = ""
 ) -> list[dict[str, Any]]:
-    """Run a ProjectAchilles validation test now on ONE host OR a FLEET (GATED WRITE).
+    """Run a ProjectAchilles validation test now on ONE host OR a whole TAG/GROUP (GATED WRITE).
 
-    Target exactly one of: `hostname` (one exact agent), or `tag` (every agent
-    carrying that tag — a fleet, fanned out in one action). test_id is the
-    test's UUID. Call WITHOUT confirmation_token first to preview: the intent
-    lists the hosts and count. For a fleet, the confirmation is bound to the
-    host COUNT, so if the tag's membership changes before you confirm you must
+    Target exactly one of `hostname` (one exact agent) OR `tag`. Any request to
+    run on a GROUP of hosts — "the hosts tagged X", "hosts with tag X", "the X
+    group", "the same test on tag X" — is a `tag` run: pass that tag string
+    straight to `tag` and the server expands it to every matching agent. Do NOT
+    look up or enumerate the hosts yourself first. test_id is the test's UUID.
+    Call WITHOUT confirmation_token first to preview: the intent lists the
+    matched hosts and count. For a fleet the confirmation is bound to the host
+    COUNT, so if the tag's membership changes before you confirm you must
     re-preview and re-approve. Requires PROJECTACHILLES_ALLOW_WRITE=true.
     """
     cfg = ProjectAchillesConfig.from_env()
@@ -83,12 +86,14 @@ async def schedule_test(
     tag: str = "",
     confirmation_token: str = "",
 ) -> list[dict[str, Any]]:
-    """Schedule a ProjectAchilles validation test on ONE host OR a FLEET (GATED WRITE).
+    """Schedule a ProjectAchilles validation test on ONE host OR a whole TAG/GROUP (GATED WRITE).
 
-    Target exactly one of `hostname` or `tag` (a fleet). run_time is 24h HH:MM
-    UTC. schedule=once also needs run_date (YYYY-MM-DD); weekly also needs day;
-    monthly also needs day_of_month (1-31). Same count-bound confirmation as
-    run_test for fleets.
+    Target exactly one of `hostname` or `tag`. Any "hosts tagged X / hosts with
+    tag X / the X group" request is a `tag` run: pass the tag string straight to
+    `tag` and the server expands it — do NOT look up or enumerate the hosts
+    yourself. run_time is 24h HH:MM UTC. schedule=once also needs run_date
+    (YYYY-MM-DD); weekly also needs day; monthly also needs day_of_month (1-31).
+    Same count-bound confirmation as run_test for fleets.
     """
     cfg = ProjectAchillesConfig.from_env()
     async with ProjectAchillesClient(cfg) as pa:
