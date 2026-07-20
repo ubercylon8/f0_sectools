@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from f0_sectools_core.gating.actions import GatedAction, GateDenied
+from f0_sectools_core.paging import clamp_limit
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -38,6 +39,13 @@ _ID_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,64}$")
 _TASK_STATUS = {"pending", "assigned", "running", "completed", "failed", "expired"}
 _SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
 _MAX_CANCEL = 200
+
+
+def _search_ok(value: str) -> bool:
+    """Permissive bound for a read-side search term: reject only oversized or
+    control-character values (context-window / hygiene, not injection — httpx
+    encodes params). Legit multi-word / dotted / id searches pass."""
+    return len(value) <= 128 and all(ord(c) >= 0x20 for c in value)
 
 
 def _intent(
@@ -703,10 +711,16 @@ async def list_tasks(
 ) -> list[Finding]:
     """List admin tasks with their lifecycle status (read). One call, N per-host
     rows — the fleet-aware alternative to N get_task_status calls."""
+    limit = clamp_limit(limit)
     if status and status not in _TASK_STATUS:
         return [guidance(
             f"status '{status}' is not a task state",
             "Use one of: " + ", ".join(sorted(_TASK_STATUS)) + " (or omit for all).",
+        )]
+    if search and not _search_ok(search):
+        return [guidance(
+            "search is too long or contains control characters",
+            "Use a plain test-name or hostname substring (<=128 chars).",
         )]
     params: dict[str, Any] = {"limit": limit}
     if status:

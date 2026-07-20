@@ -132,6 +132,14 @@ async def test_list_test_executions_uses_enriched_paginated_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_list_test_executions_clamps_oversized_limit():
+    pa = FakeClient(responses={"/analytics/executions/paginated": {"data": []}})
+    await tools.list_test_executions(pa, limit=5000)
+    _, params = pa.calls[0]
+    assert params["pageSize"] == 100  # clamped from 5000
+
+
+@pytest.mark.asyncio
 async def test_list_test_executions_maps_unprotected():
     pa = FakeClient(responses={"/analytics/executions/paginated": {"data": [
         {"test_name": "Kerberoast", "hostname": "dc-01", "is_protected": False,
@@ -591,3 +599,28 @@ async def test_list_test_executions_rejects_bad_scope_charset():
     assert findings[0].finding_type.value == "posture"
     assert "scope" in findings[0].title.lower() or "character" in findings[0].title.lower()
     assert pa.calls == []  # rejected pre-request
+
+
+@pytest.mark.asyncio
+async def test_find_tests_unknown_by_is_graceful_finding():
+    # tools-layer keeps its floor even though the wrapper now advertises an enum.
+    class _Fake:
+        async def get(self, path, params=None): return {}
+    findings = await tools.find_tests(_Fake(), by="bogus", value="x")
+    assert findings[0].finding_type.value == "posture"
+    assert "Unknown search dimension" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_find_tests_rejects_oversized_value():
+    pa = FakeClient(responses={"/browser/tests": {"data": []}})
+    findings = await tools.find_tests(pa, by="keyword", value="x" * 129)
+    assert findings[0].finding_type.value == "posture"
+    assert pa.calls == []  # rejected pre-request
+
+
+@pytest.mark.asyncio
+async def test_find_tests_allows_normal_multiword_value():
+    pa = FakeClient(responses={"/browser/tests": {"data": []}})
+    await tools.find_tests(pa, by="keyword", value="pass the hash (T1550.002)")
+    assert pa.calls  # normal search reached the API

@@ -5,6 +5,7 @@ Real dict key names are validated by the live smoke test.
 """
 from __future__ import annotations
 
+import pytest
 from f0_limacharlie_mcp import tools
 from limacharlie.errors import PermissionDeniedError, RateLimitError
 
@@ -41,6 +42,7 @@ class FakeClient:
 
     def list_detections(self, start, end, limit=50, category=None):
         self._maybe_raise("list_detections")
+        self.last_detections_limit = limit
         return self._data.get("detections", [])
 
     def query(self, lcql, start, end, limit=50):
@@ -75,6 +77,12 @@ def test_list_detections_maps():
     findings = tools.list_detections(lc)
     assert findings[0].finding_type.value == "alert"
     assert "Suspicious PowerShell" in findings[0].title
+
+
+def test_list_detections_clamps_oversized_limit():
+    lc = FakeClient(detections=[])
+    tools.list_detections(lc, limit=5000)
+    assert lc.last_detections_limit == 100  # clamped from 5000
 
 
 def test_list_dr_rules_maps():
@@ -383,3 +391,11 @@ def test_list_detections_rate_limited_degrades():
     findings = tools.list_detections(lc)
     assert findings[0].finding_type.value == "posture"
     assert "rate limited" in findings[0].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_open_passthrough_params_stay_free_strings():
+    from f0_limacharlie_mcp import server
+    tools_by_name = {t.name: t for t in await server.mcp.list_tools()}
+    assert "enum" not in tools_by_name["list_detections"].inputSchema["properties"]["category"]
+    assert "enum" not in tools_by_name["list_dr_rules"].inputSchema["properties"]["namespace"]

@@ -7,7 +7,7 @@ findings, and redacts every payload before returning it to the agent.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
@@ -63,7 +63,10 @@ async def get_secure_score() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def list_incidents(severity_min: str = "medium", limit: int = 25) -> list[dict[str, Any]]:
+async def list_incidents(
+    severity_min: Literal["info", "low", "medium", "high", "critical"] = "medium",
+    limit: int = 25,
+) -> list[dict[str, Any]]:
     """List Defender XDR incidents (correlated alert groups).
 
     severity_min: one of info|low|medium|high|critical. limit: max incidents.
@@ -74,7 +77,10 @@ async def list_incidents(severity_min: str = "medium", limit: int = 25) -> list[
 
 
 @mcp.tool()
-async def list_alerts(severity_min: str = "high", limit: int = 25) -> list[dict[str, Any]]:
+async def list_alerts(
+    severity_min: Literal["info", "low", "medium", "high", "critical"] = "high",
+    limit: int = 25,
+) -> list[dict[str, Any]]:
     """List Defender XDR alerts (alerts_v2).
 
     severity_min: one of info|low|medium|high|critical. limit: max alerts.
@@ -104,7 +110,9 @@ async def run_hunting_query(kql: str) -> list[dict[str, Any]]:
 
 @mcp.tool()
 async def hunt(
-    category: str, indicator: str = "", time_window_hours: int = 24
+    category: Literal["network", "process", "logon", "email"],
+    indicator: str = "",
+    time_window_hours: int = 24,
 ) -> list[dict[str, Any]]:
     """Guided Microsoft Defender hunt — the server builds correct KQL, so you don't have to.
 

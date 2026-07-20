@@ -11,6 +11,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from f0_sectools_core.paging import clamp_limit
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -78,6 +79,13 @@ _UUID_RE = re.compile(
 # to reject newlines/garbage before they hit the query string.
 _SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
 
+
+def _search_ok(value: str) -> bool:
+    """Permissive bound for a read-side search term: reject only oversized or
+    control-character values (context-window / hygiene, not injection — httpx
+    encodes params). Legit multi-word / dotted / id searches pass."""
+    return len(value) <= 128 and all(ord(c) >= 0x20 for c in value)
+
 # PA supports these filters server-side on GET /api/browser/tests; the rest
 # (actor/tactic/tag) are filtered client-side over the returned list.
 _SERVER_SIDE = {"technique": "technique", "category": "category", "keyword": "search"}
@@ -106,6 +114,7 @@ def _test_evidence(t: dict[str, Any]) -> list[Evidence]:
 
 
 async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Finding]:
+    limit = clamp_limit(limit)
     by = by.strip().lower()
     if by not in _FIND_BY:
         return [
@@ -116,6 +125,18 @@ async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Find
                 title=f"Unknown search dimension '{by}'",
                 recommended_action=RecommendedAction(
                     summary="Use by = technique | actor | tactic | category | tag | keyword.",
+                ),
+            )
+        ]
+    if value and not _search_ok(value):
+        return [
+            Finding(
+                source="projectachilles",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title="Search value too long or contains control characters",
+                recommended_action=RecommendedAction(
+                    summary="Use a plain search term (<=128 chars, no control characters).",
                 ),
             )
         ]
@@ -359,6 +380,7 @@ async def get_defense_score_trend(pa: Any, days: int = 30, interval: str = "day"
 
 
 async def get_weak_techniques(pa: Any, days: int = 30, limit: int = 10) -> list[Finding]:
+    limit = clamp_limit(limit)
     frm, to = _window(days)
     try:
         d = await pa.get("/analytics/defense-score/by-technique", params={"from": frm, "to": to})
@@ -410,6 +432,7 @@ async def list_test_executions(
     pa: Any, days: int = 7, limit: int = 25,
     test: str = "", tag: str = "", hostname: str = "",
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     frm, to = _window(days)
     for field, value in (("test", test), ("tag", tag), ("hostname", hostname)):
         if value and not _SCOPE_RE.match(value):
@@ -568,6 +591,7 @@ async def list_test_executions(
 
 
 async def list_risk_acceptances(pa: Any, status: str = "active", limit: int = 50) -> list[Finding]:
+    limit = clamp_limit(limit)
     try:
         d = await pa.get("/risk-acceptances", params={"status": status, "pageSize": limit})
     except Exception as e:
@@ -597,6 +621,7 @@ async def list_risk_acceptances(pa: Any, status: str = "active", limit: int = 50
 async def list_agents(
     pa: Any, status: str | None = None, online_only: bool = False, limit: int = 50
 ) -> list[Finding]:
+    limit = clamp_limit(limit)
     params: dict[str, Any] = {"limit": limit, "online_only": str(online_only).lower()}
     if status:
         params["status"] = status
