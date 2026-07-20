@@ -176,3 +176,11 @@ async def test_list_compliance_policies_403_names_config_permission():
         async with GraphClient(CFG) as gc:
             findings = await list_compliance_policies(gc)
     assert "DeviceManagementConfiguration.Read.All" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_compliance_enum_closed():
+    from f0_intune_mcp import server
+    tools = {t.name: t for t in await server.mcp.list_tools()}
+    enum = tools["list_managed_devices"].inputSchema["properties"]["compliance"]["enum"]
+    assert set(enum) == {"all", "compliant", "noncompliant", "ingraceperiod", "unknown"}

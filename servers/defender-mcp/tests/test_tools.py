@@ -547,3 +547,48 @@ async def test_isolate_host_approval_for_other_device_still_intent(tmp_path):
             findings = await isolate_host(sec, gate, "dev-1", "c2")
     assert not post.called
     assert "Pending action" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_severity_and_category_enums_closed():
+    from f0_defender_mcp import server
+    tools = {t.name: t for t in await server.mcp.list_tools()}
+    for name in ("list_incidents", "list_alerts"):
+        enum = tools[name].inputSchema["properties"]["severity_min"]["enum"]
+        assert set(enum) == {"info", "low", "medium", "high", "critical"}
+    assert set(tools["hunt"].inputSchema["properties"]["category"]["enum"]) == {
+        "network", "process", "logon", "email"}
+
+
+@pytest.mark.asyncio
+async def test_list_incidents_bogus_severity_min_is_graceful():
+    # Tools-layer keeps its floor even though the wrapper now advertises an enum
+    # (a lenient client bypassing the schema must not crash).
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/security/incidents").mock(
+            return_value=httpx.Response(
+                200,
+                json={"value": [{"id": "1", "displayName": "x", "severity": "high",
+                                  "status": "active", "alerts": []}]},
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_incidents(gc, severity_min="bogus")
+    assert findings  # did not raise; degraded to the default floor
+
+
+@pytest.mark.asyncio
+async def test_list_alerts_bogus_severity_min_is_graceful():
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/security/alerts_v2").mock(
+            return_value=httpx.Response(
+                200,
+                json={"value": [{"id": "a1", "title": "x", "severity": "high",
+                                  "status": "new"}]},
+            )
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_alerts(gc, severity_min="bogus")
+    assert findings  # did not raise; degraded to the default floor

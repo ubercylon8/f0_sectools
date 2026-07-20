@@ -4,7 +4,7 @@ Findings are redacted before they leave the server.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import TenableConfig
@@ -41,7 +41,7 @@ async def get_vulnerability_summary() -> list[dict[str, Any]]:
 
 @mcp.tool()
 async def list_top_vulnerabilities(
-    severity_min: str = "high", limit: int = 10
+    severity_min: Literal["low", "medium", "high", "critical"] = "high", limit: int = 10
 ) -> list[dict[str, Any]]:
     """Tenable worst vulnerabilities to fix first — ranked by severity then VPR.
 
@@ -65,7 +65,9 @@ async def list_assets(hostname: str = "", limit: int = 25) -> list[dict[str, Any
 
 @mcp.tool()
 async def get_asset_vulnerabilities(
-    asset: str, severity_min: str = "high", limit: int = 25
+    asset: str,
+    severity_min: Literal["low", "medium", "high", "critical"] = "high",
+    limit: int = 25,
 ) -> list[dict[str, Any]]:
     """Tenable vulnerabilities on ONE host. `asset` is a hostname, IP, or asset UUID.
 

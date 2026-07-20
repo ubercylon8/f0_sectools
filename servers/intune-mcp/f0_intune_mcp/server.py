@@ -6,7 +6,7 @@ before returning it to the agent.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
@@ -27,7 +27,10 @@ def _render(findings: list[Finding]) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def list_managed_devices(compliance: str = "all", limit: int = 25) -> list[dict[str, Any]]:
+async def list_managed_devices(
+    compliance: Literal["all", "compliant", "noncompliant", "ingraceperiod", "unknown"] = "all",
+    limit: int = 25,
+) -> list[dict[str, Any]]:
     """List Intune-managed devices with compliance/encryption/owner/sync state.
 
     compliance: one of all|compliant|noncompliant|ingraceperiod|unknown. limit: max devices.

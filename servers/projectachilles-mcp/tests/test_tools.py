@@ -591,3 +591,13 @@ async def test_list_test_executions_rejects_bad_scope_charset():
     assert findings[0].finding_type.value == "posture"
     assert "scope" in findings[0].title.lower() or "character" in findings[0].title.lower()
     assert pa.calls == []  # rejected pre-request
+
+
+@pytest.mark.asyncio
+async def test_find_tests_unknown_by_is_graceful_finding():
+    # tools-layer keeps its floor even though the wrapper now advertises an enum.
+    class _Fake:
+        async def get(self, path, params=None): return {}
+    findings = await tools.find_tests(_Fake(), by="bogus", value="x")
+    assert findings[0].finding_type.value == "posture"
+    assert "Unknown search dimension" in findings[0].title

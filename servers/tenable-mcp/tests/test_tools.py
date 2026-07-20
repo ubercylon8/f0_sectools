@@ -285,3 +285,33 @@ async def test_server_registers_seven_tools():
         "get_asset_vulnerabilities", "get_vulnerability_info", "list_vulnerability_assets",
         "list_scans",
     }
+
+
+@pytest.mark.asyncio
+async def test_severity_min_enum_closed():
+    from f0_tenable_mcp import server
+    tools_by_name = {t.name: t for t in await server.mcp.list_tools()}
+    for name in ("list_top_vulnerabilities", "get_asset_vulnerabilities"):
+        enum = tools_by_name[name].inputSchema["properties"]["severity_min"]["enum"]
+        assert set(enum) == {"low", "medium", "high", "critical"}
+
+
+@pytest.mark.asyncio
+async def test_list_top_vulnerabilities_bogus_severity_min_is_graceful():
+    # Tools-layer keeps its floor even though the wrapper now advertises an enum
+    # (a lenient client bypassing the schema must not crash).
+    tio = FakeClient(responses={"/workbenches/vulnerabilities": _VULNS})
+    findings = await tools.list_top_vulnerabilities(tio, severity_min="bogus")
+    assert findings  # did not raise; degraded to the default floor
+
+
+@pytest.mark.asyncio
+async def test_get_asset_vulnerabilities_bogus_severity_min_is_graceful():
+    tio = FakeClient(responses={
+        f"/workbenches/assets/{_UUID}/vulnerabilities": {"vulnerabilities": [
+            {"plugin_id": 19506, "plugin_name": "SSL cert", "severity": 4, "count": 1,
+             "cves": ["CVE-2021-1234"]},
+        ]},
+    })
+    findings = await tools.get_asset_vulnerabilities(tio, _UUID, severity_min="bogus")
+    assert findings  # did not raise; degraded to the default floor

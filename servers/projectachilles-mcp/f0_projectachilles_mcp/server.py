@@ -4,7 +4,7 @@ Findings are redacted before they leave the server.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import ProjectAchillesConfig
@@ -66,7 +66,9 @@ async def list_test_executions(
 
 
 @mcp.tool()
-async def list_risk_acceptances(status: str = "active", limit: int = 50) -> list[dict[str, Any]]:
+async def list_risk_acceptances(
+    status: Literal["active", "revoked"] = "active", limit: int = 50
+) -> list[dict[str, Any]]:
     """Risks deliberately accepted (not remediated). status: active|revoked."""
     async with _client() as pa:
         return _render(await tools.list_risk_acceptances(pa, status, limit))
@@ -93,7 +95,11 @@ async def get_fleet_health() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def find_tests(by: str, value: str, limit: int = 25) -> list[dict[str, Any]]:
+async def find_tests(
+    by: Literal["technique", "actor", "tactic", "category", "tag", "keyword"],
+    value: str,
+    limit: int = 25,
+) -> list[dict[str, Any]]:
     """Search the ProjectAchilles TEST CATALOG — the library of tests that CAN be run,
     not run history (use list_test_executions for history). by selects the dimension:
     technique|actor|tactic|category|tag|keyword. Returns a match count plus the matching
