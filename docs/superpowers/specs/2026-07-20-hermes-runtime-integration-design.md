@@ -1,0 +1,216 @@
+# Hermes Agent Runtime Integration — Design
+
+**Date:** 2026-07-20
+**Status:** Design (awaiting review)
+**Goal:** Live-validate f0_sectools under the **Hermes Agent** runtime (v0.18.2,
+the library's primary intended target), then ship it as a one-command
+**profile distribution** — without disturbing the operator's existing general
+Hermes agent.
+
+---
+
+## 1. Background — what we learned from the installed runtime
+
+The prior plan assumed a fresh Hermes install and a config template that would
+be rendered over `~/.hermes/config.yaml`. Inspecting the **actually-installed
+Hermes Agent v0.18.2** invalidated both assumptions:
+
+- **`~/.hermes/` is a live daily driver**, not a blank install — a 17 KB
+  `config.yaml` with WhatsApp/Slack gateways, kanban, pets, memories, sessions,
+  and **8 existing personalities**. Rendering our template over it would clobber
+  a working setup. **We will not write to the `default` profile's config.**
+- **Our `integrations/hermes/config.example.yaml` has schema drift.** Validated
+  block-by-block against the installed source:
+
+  | Template block | Verdict | Correct form in v0.18.2 |
+  |---|---|---|
+  | `mcp_servers:` (top-level) | ❌ Not a real key | `hermes mcp add`, or `mcp.json` inside a distribution |
+  | `skills.external_dirs:` | ✅ Real (has source + tests) | Loads skills from the repo in place |
+  | `agent.personalities:` | ✅ Real | Switched with `/personality <name>`; coexists with the 8 stock personas |
+
+### Two Hermes primitives, not one
+
+- **Personality** — a text lens layered on *one* agent (`/personality ciso`),
+  sharing that agent's tools, skills, and memory. Our 4 role personas are
+  personalities.
+- **Profile** — a *fully isolated Hermes instance* (own config, MCP servers,
+  skills, SOUL, memory; own HERMES_HOME on disk). `hermes profile use <name>`
+  switches the sticky default; `default` lives at `/home/jimx/.hermes`.
+
+The operator's goal ("switch to sec-tools while keeping Hermes as a general
+agent") **is the profile mechanism**, with our 4 personas living *inside* that
+profile as personalities.
+
+### Why isolation is the *architecturally correct* choice (not just tidy)
+
+`hermes mcp add` has **no `--profile` flag** (open upstream issue #61765) — it
+writes to the **active** profile. The library's entire thesis is that small
+local models degrade with too many registered tools. Putting all 7 sec-tools
+servers (~45 tools) in the general `default` profile would trigger exactly that
+failure mode for *both* general and security use. An isolated profile scopes the
+45 tools to the security agent and leaves the general agent clean.
+
+---
+
+## 2. Decisions locked (with the operator)
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Direction | **A → B**: stand up a local isolated profile now, validate, then graduate to a git-installable distribution | Validate live before packaging (mirrors the repo's add-a-platform recipe: "validate live → then package") |
+| Model backend | **Qwen3.5-9B** via **llama.cpp** at `http://localhost:8081/v1` | Our reference small-model tool-caller and the eval-scorecard baseline; already live. Frontier `kimi-k3` stays on `default`. |
+| First validation pass | **Read-only sweep** across all 7 servers | Shake out schema/callability drift with zero state change; gated-write live test deferred to a later, explicit pass |
+| Phase-A reproducibility | Direct `hermes` CLI commands (no throwaway script) | Phase B's distribution *is* the reusable installer; a Phase-A script would be superseded |
+
+**GPU note:** only one local model fits the 16 GB GPU at a time. Qwen3.5-9B is
+loaded on :8081; the sec-tools profile uses it. `default`/kimi-k3 is cloud and
+unaffected. Do not run Ollama (:11434) models concurrently with :8081.
+
+---
+
+## 3. Phase A — Isolated profile + read-only live validation
+
+### 3.1 Stand up the profile (local, reversible, isolated)
+
+Ordering is **load-bearing** because `mcp add` targets the active profile:
+
+1. `hermes profile create f0sectools --clone --description "f0_sectools security-operations agent: read-only SOC/IR/CISO tooling over Defender, Entra, LimaCharlie, ProjectAchilles, Intune, Tenable, driven by a local small model."`
+   - `--clone` copies `config.yaml`, `.env`, `SOUL.md`, and skills from the
+     active (`default`) profile, so the security profile inherits a working base
+     (providers, tool defaults). We then override the security-specific pieces.
+2. `hermes profile use f0sectools` — make it the sticky-active profile.
+3. **Verify active** (`hermes profile list` shows `◆ f0sectools`) *before any
+   `mcp add`.* This is the guard against polluting `default`.
+4. **Model backend** → point the profile at Qwen3.5-9B. Either `hermes model`
+   (interactive picker after adding the :8081 provider) or edit the profile's
+   `config.yaml`:
+   ```yaml
+   model:
+     base_url: http://localhost:8081/v1
+     default: Qwen3.5-9B
+     provider: local-8081
+     api_key: dummy          # llama.cpp ignores it
+     api_mode: chat_completions
+   providers:
+     local-8081:
+       api: http://localhost:8081/v1
+       name: Local llama.cpp (Qwen3.5-9B)
+       default_model: Qwen3.5-9B
+   ```
+5. **MCP servers** (into the *now-active* f0sectools profile) — one `add` per
+   server; the server loads its own `.env.<platform>` via `uv run --directory`,
+   so **no secrets enter Hermes config** (`--env` unused):
+   ```
+   hermes mcp add f0-defender        --command <abs-uv> --args run --directory <checkout> f0-defender-mcp
+   hermes mcp add f0-entra           --command <abs-uv> --args run --directory <checkout> f0-entra-mcp
+   hermes mcp add f0-limacharlie     --command <abs-uv> --args run --directory <checkout> f0-limacharlie-mcp
+   hermes mcp add f0-projectachilles --command <abs-uv> --args run --directory <checkout> f0-projectachilles-mcp
+   hermes mcp add f0-pa-actions      --command <abs-uv> --args run --directory <checkout> f0-projectachilles-actions-mcp
+   hermes mcp add f0-intune          --command <abs-uv> --args run --directory <checkout> f0-intune-mcp
+   hermes mcp add f0-tenable         --command <abs-uv> --args run --directory <checkout> f0-tenable-mcp
+   ```
+   `<abs-uv>` = `which uv`; `<checkout>` = `/home/jimx/F0RT1KA/sec-tools`.
+   `f0-pa-actions` write tools stay inert unless `PROJECTACHILLES_ALLOW_WRITE=true`
+   (not set for the read-only pass).
+6. **Skills** — point the profile at the repo skills in place (no copy):
+   ```yaml
+   skills:
+     external_dirs:
+       - <checkout>/skills
+   ```
+7. **SOUL + personas** — copy `integrations/hermes/SOUL.md` to the profile's
+   `SOUL.md`, and add our 4 personas under `agent.personalities`
+   (ciso / threat-hunter / detection-engineer / security-engineer) from
+   `integrations/hermes/config.example.yaml`.
+
+### 3.2 Read-only validation sweep
+
+Start Qwen3.5-9B on :8081, launch `hermes chat` in the f0sectools profile, and
+drive one representative read task per server (each **user-gated** — a real
+tenant call). Confirm the tool is **selected**, **arg-filled**, and returns a
+well-shaped **finding** (not just "no crash" — verify field shapes, per the
+recipe's step-9 lesson):
+
+| Server | Representative read | Default skill |
+|---|---|---|
+| f0-defender | Secure score + open incidents | defender-posture-summary |
+| f0-entra | Risky users / privileged roles | entra-identity-risk-review |
+| f0-limacharlie | Org overview / endpoint investigation | investigate-lc-endpoint |
+| f0-projectachilles | Defense score / weak techniques | pa-defense-posture-review |
+| f0-pa-actions | `list_tasks` / `get_task_status` (reads only) | — |
+| f0-intune | Device compliance review | intune-device-compliance-review |
+| f0-tenable | Exposure posture review | tenable-exposure-posture-review |
+
+Also verify: `/personality` switching changes response framing; a `posture`
+finding (missing permission / rate-limit) is relayed plainly and halts.
+
+### 3.3 Fix-forward
+
+Each drift/callability bug found → branch → PR → merge (house rules; push only
+on explicit instruction). Expect 1–3 (mocks/templates encode assumptions; the
+live runtime is truth). After **any** tool-description edit, re-run the affected
+server's eval (descriptions are a shared namespace — the #47 lesson).
+
+**Exit criteria for Phase A:** all 7 servers return correctly-shaped findings
+under Qwen3.5-9B in Hermes; personas switch; degradation relayed. The
+`default` profile is provably untouched.
+
+---
+
+## 4. Phase B — Profile distribution (the shippable artifact)
+
+Package the *validated* profile as a git-installable distribution so anyone runs
+`hermes profile install github.com/ubercylon8/f0_sectools` and gets the whole
+security agent (skills + MCP + personas + SOUL), keeping their own keys/memory.
+
+Distribution layout (authored in the repo, likely under
+`integrations/hermes/distribution/` or a dedicated path — decided in the Phase-B
+plan):
+
+- `distribution.yaml` — manifest: name, version, and **env-var requirements**
+  (documents the per-platform `.env` the operator must supply; never ships
+  secrets).
+- `SOUL.md` — the security identity (from `integrations/hermes/SOUL.md`).
+- `config.yaml` — model/tool defaults + the 4 `agent.personalities`.
+- `mcp.json` — the 7 servers (the **correct** home for MCP wiring, replacing the
+  drifted top-level `mcp_servers:` block), with per-user path rendering.
+- `skills/` — bundled, or referenced via `skills.external_dirs` to the repo.
+- (optional) `cron/` — deferred; no scheduled tasks in v1.
+
+Phase B also **fixes `integrations/hermes/config.example.yaml`** (or replaces it
+with the distribution + a pointer) so the committed template stops advertising
+the invalid `mcp_servers:` schema, and updates
+`docs/user-guide/runtimes/hermes.md`. The drift-guard test
+(`integrations/test_integrations_valid.py`) must be updated to assert against
+whatever artifact becomes canonical (distribution `mcp.json` and/or the fixed
+template) so all 7 servers stay wired.
+
+Phase B is a code deliverable → it gets its own `writing-plans` plan and
+subagent-driven execution once Phase A validates.
+
+---
+
+## 5. Out of scope (this design)
+
+- Live **gated-write** test under Hermes (deferred to an explicit later pass;
+  the confirmation flow itself is already validated under pi).
+- Hermes **gateway/messaging** (WhatsApp/Slack/Telegram) integration for
+  sec-tools — the `default` profile already owns those; not a security-agent goal.
+- **Cron**/scheduled security tasks — YAGNI for v1.
+- Editing the **`default`** profile in any way.
+
+---
+
+## 6. Risks / open items
+
+- **Profile disk layout** — confirmed each profile is an isolated HERMES_HOME;
+  the exact path for `f0sectools` is revealed on `create` (default is
+  `~/.hermes`; no `profiles/` dir exists yet). Verify before editing its config.
+- **`hermes model` is interactive** — if scripting the provider add is awkward,
+  edit the profile `config.yaml` directly (§3.1 step 4). Confirm the provider key
+  format matches the installed schema (`providers.<key>.api`), which we read from
+  the live config.
+- **Literal-enum `""`/case caveat (#46)** — if Hermes validates MCP input
+  schemas strictly, watch whether the promoted `Literal` enums reject empty or
+  wrong-case values during the sweep; note any such interaction.
+- **GPU contention** — one local model at a time (§2). Keep :8081 loaded; don't
+  start :11434 models during the sweep.
