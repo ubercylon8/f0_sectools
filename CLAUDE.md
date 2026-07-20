@@ -86,8 +86,8 @@ f0_sectools/
     entra-mcp/              # built + live-validated
     limacharlie-mcp/        # built + live-validated
     projectachilles-mcp/    # built + live-validated
-    projectachilles-actions-mcp/   # built (live-validation pending) — gated writes
-    intune-mcp/             # built (live-validation pending)
+    projectachilles-actions-mcp/   # built + live-validated — gated writes
+    intune-mcp/             # built + live-validated
     tenable-mcp/            # built + live-validated
     # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
     #          sophos, misp, thehive, opencti (see Platform Integrations)
@@ -248,7 +248,7 @@ Targets (build incrementally — the six built servers below are the reference i
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
 
-**Implemented & live-validated:** `defender-mcp`, `entra-mcp`, `limacharlie-mcp` (the last uses the official `limacharlie` Python SDK and closes the offensive↔defensive loop with `f0_library`'s D&R rules). **Implemented & live-validated:** `projectachilles-mcp` (read-only over the PA REST API with a `pa_` Bearer key — defense score, test results, weak techniques, agents). The PA API lives on the `agent` subdomain (e.g. `https://<org>.agent.projectachilles.io`). **Implemented & live-validated:** `tenable-mcp` (read-only over the Tenable Vulnerability Management Workbenches API with `X-ApiKeys` access/secret keys — vulnerability summary, top vulnerabilities, assets, per-asset vulnerabilities, plugin detail, scans, plugin affected-hosts). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis). `projectachilles-actions-mcp` is built (7 tools: 4 gated writes — `run_test`, `schedule_test`, `set_schedule_status`, `cancel_tasks` (single task_id **or** a bulk status/search filter, count-bound confirmation, 200 cap) — + 3 reads — `list_schedules`, `get_task_status`, `list_tasks`), the second consumer of `core/gating/` after Defender, with live validation pending a read-write-scope `pa_` key.
+**Implemented & live-validated:** `defender-mcp`, `entra-mcp`, `limacharlie-mcp` (the last uses the official `limacharlie` Python SDK and closes the offensive↔defensive loop with `f0_library`'s D&R rules). **Implemented & live-validated:** `projectachilles-mcp` (read-only over the PA REST API with a `pa_` Bearer key — defense score, test results, weak techniques, agents). The PA API lives on the `agent` subdomain (e.g. `https://<org>.agent.projectachilles.io`). **Implemented & live-validated:** `tenable-mcp` (read-only over the Tenable Vulnerability Management Workbenches API with `X-ApiKeys` access/secret keys — vulnerability summary, top vulnerabilities, assets, per-asset vulnerabilities, plugin detail, scans, plugin affected-hosts). The official Go [lc-mcp-server](https://github.com/refractionPOINT/lc-mcp-server) is a different tool (278 tools, write-capable, optional cloud LLM) — referenced in the user guide as the frontier-model alternative, intentionally not incorporated (it's incompatible with the small-model-safe, local-only, read-only-gated thesis). `projectachilles-actions-mcp` is built (7 tools: 4 gated writes — `run_test`, `schedule_test`, `set_schedule_status`, `cancel_tasks` (single task_id **or** a bulk status/search filter, count-bound confirmation, 200 cap) — + 3 reads — `list_schedules`, `get_task_status`, `list_tasks`), the second consumer of `core/gating/` after Defender, **live-validated** on a real tenant with a read-write-scope `pa_` key (single-host and tag/fleet runs, count-bound bulk cancel).
 
 ---
 

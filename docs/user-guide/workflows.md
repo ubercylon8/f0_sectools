@@ -113,6 +113,32 @@ category, tag, or keyword) to enumerate the available tests — the library of w
 (description, OS/target, techniques, tactics). Lead with the exact match count
 from the summary finding.
 
+## Run & manage validation tests (security engineer) — gated writes
+
+> **Prompt:** "Run the Kerberoast test on the windows fleet, then show me the
+> results per host."
+
+The `run-validation-test` skill drives the **actions** server
+(`f0-projectachilles-actions-mcp`). Every state-changing call is gated — it needs
+a read-write `pa_` key, `PROJECTACHILLES_ALLOW_WRITE=true`, and a per-action human
+confirmation — and each returns an intent preview first, so nothing runs until you
+approve it:
+
+- **Run or schedule** — `run_test` / `schedule_test` on a single host (`hostname`)
+  **or a whole tag/fleet** (`tag` — every agent carrying it, fanned out in one
+  gated action; the confirmation is bound to the matched host *count*, and a
+  >200-host tag is refused).
+- **Check progress** — `list_tasks(status="pending")` sweeps every task of a run
+  in one call (per-host rows), instead of polling each task id.
+- **Per-host results** — `list_test_executions` on the read server, scoped with
+  `test=` and/or `tag=`, gives the outcome for each host (bundle runs roll up to
+  one COMPLIANT / NON-COMPLIANT finding per host).
+- **Cancel** — `cancel_tasks` cancels one task, or bulk-cancels a run's pending
+  tasks by `status`/`search` in one count-bound gated action.
+
+See [Gated write actions](getting-started.md) for the confirmation flow (watcher,
+token, or opt-in chat-confirm).
+
 ## Intune device compliance (CISO / security engineer) — default focus
 
 > **Prompt:** "How compliant are our Intune-managed devices?"
