@@ -609,3 +609,18 @@ async def test_find_tests_unknown_by_is_graceful_finding():
     findings = await tools.find_tests(_Fake(), by="bogus", value="x")
     assert findings[0].finding_type.value == "posture"
     assert "Unknown search dimension" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_find_tests_rejects_oversized_value():
+    pa = FakeClient(responses={"/browser/tests": {"data": []}})
+    findings = await tools.find_tests(pa, by="keyword", value="x" * 129)
+    assert findings[0].finding_type.value == "posture"
+    assert pa.calls == []  # rejected pre-request
+
+
+@pytest.mark.asyncio
+async def test_find_tests_allows_normal_multiword_value():
+    pa = FakeClient(responses={"/browser/tests": {"data": []}})
+    await tools.find_tests(pa, by="keyword", value="pass the hash (T1550.002)")
+    assert pa.calls  # normal search reached the API

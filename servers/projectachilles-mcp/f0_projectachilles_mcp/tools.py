@@ -79,6 +79,13 @@ _UUID_RE = re.compile(
 # to reject newlines/garbage before they hit the query string.
 _SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
 
+
+def _search_ok(value: str) -> bool:
+    """Permissive bound for a read-side search term: reject only oversized or
+    control-character values (context-window / hygiene, not injection — httpx
+    encodes params). Legit multi-word / dotted / id searches pass."""
+    return len(value) <= 128 and all(ord(c) >= 0x20 for c in value)
+
 # PA supports these filters server-side on GET /api/browser/tests; the rest
 # (actor/tactic/tag) are filtered client-side over the returned list.
 _SERVER_SIDE = {"technique": "technique", "category": "category", "keyword": "search"}
@@ -118,6 +125,18 @@ async def find_tests(pa: Any, by: str, value: str, limit: int = 25) -> list[Find
                 title=f"Unknown search dimension '{by}'",
                 recommended_action=RecommendedAction(
                     summary="Use by = technique | actor | tactic | category | tag | keyword.",
+                ),
+            )
+        ]
+    if value and not _search_ok(value):
+        return [
+            Finding(
+                source="projectachilles",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title="Search value too long or contains control characters",
+                recommended_action=RecommendedAction(
+                    summary="Use a plain search term (<=128 chars, no control characters).",
                 ),
             )
         ]

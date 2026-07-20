@@ -41,6 +41,13 @@ _SCOPE_RE = re.compile(r"^[A-Za-z0-9 ._:@/\-]{1,128}$")
 _MAX_CANCEL = 200
 
 
+def _search_ok(value: str) -> bool:
+    """Permissive bound for a read-side search term: reject only oversized or
+    control-character values (context-window / hygiene, not injection — httpx
+    encodes params). Legit multi-word / dotted / id searches pass."""
+    return len(value) <= 128 and all(ord(c) >= 0x20 for c in value)
+
+
 def _intent(
     action_name: str,
     target: str,
@@ -709,6 +716,11 @@ async def list_tasks(
         return [guidance(
             f"status '{status}' is not a task state",
             "Use one of: " + ", ".join(sorted(_TASK_STATUS)) + " (or omit for all).",
+        )]
+    if search and not _search_ok(search):
+        return [guidance(
+            "search is too long or contains control characters",
+            "Use a plain test-name or hostname substring (<=128 chars).",
         )]
     params: dict[str, Any] = {"limit": limit}
     if status:

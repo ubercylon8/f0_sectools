@@ -83,3 +83,13 @@ async def test_list_tasks_permission_error_is_finding():
             findings = await list_tasks(pa)
     assert findings[0].finding_type.value in ("posture", "misconfig")
     assert "permission" in (findings[0].title + findings[0].recommended_action.summary).lower()
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_rejects_control_char_search():
+    with respx.mock(assert_all_called=False) as router:
+        route = router.get(f"{BASE}/api/agent/admin/tasks")
+        async with ProjectAchillesClient(_cfg()) as pa:
+            findings = await list_tasks(pa, search="bad\nsearch")
+    assert route.called is False
+    assert findings[0].finding_type.value == "posture"
