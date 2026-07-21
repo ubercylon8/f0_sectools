@@ -8,4 +8,4 @@ enforced in one auditable place and cannot drift across platform servers.
 See CLAUDE.md at the repository root for the rules these modules implement.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.2.0"

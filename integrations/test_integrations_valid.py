@@ -52,6 +52,9 @@ def test_every_server_wired_into_hermes_template():
         "integrations/hermes/config.example.yaml is out of sync with servers/* — "
         "add/remove the server entry there (recipe step 11)"
     )
+    # The gated-WRITE server ships disabled here too (parity with the distribution) —
+    # writes are an explicit opt-in; a missing or `true` value must fail CI.
+    assert cfg["mcp_servers"]["f0-pa-actions"].get("enabled") is False
 
 
 def test_every_server_wired_into_distribution():
