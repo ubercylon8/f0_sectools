@@ -19,7 +19,12 @@ false`**. Under opencode the model has shell access, so the gated-write
 confirmation is **not forge-resistant** (a misbehaving model could drive
 `confirm_action.py` itself). Enable it only if you accept that risk, and keep
 `PROJECTACHILLES_ALLOW_WRITE=false` otherwise — same caveat as the Hermes
-runtime.
+runtime. As runtime defense-in-depth, the project config pre-arms opencode's
+`"ask"` permission on all four write tools — each write call requires an
+interactive TUI approval the model cannot forge (auto-rejected in
+non-interactive runs; verified live). The enable procedure and approval flow
+are documented in
+[user-guide/runtimes/opencode.md](../../docs/user-guide/runtimes/opencode.md#enabling-gated-writes-projectachilles-actions).
 
 **Windows note:** the skill entries are POSIX symlinks; on Windows enable
 `git config core.symlinks true` + Developer Mode before cloning, or the skills

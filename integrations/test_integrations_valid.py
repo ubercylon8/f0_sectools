@@ -115,6 +115,11 @@ def test_every_server_wired_into_opencode_config():
     # The gated-WRITE server ships DISABLED — the opencode model has shell, so
     # the confirmation gate is not forge-resistant; writes are an explicit opt-in.
     assert cfg["mcp"]["f0-pa-actions"]["enabled"] is False
+    # Runtime defense-in-depth: when an operator DOES enable the server, every
+    # WRITE tool call must hit opencode's interactive "ask" approval (a TUI
+    # prompt the model cannot forge). Reads stay friction-free.
+    for write_tool in ("run_test", "schedule_test", "set_schedule_status", "cancel_tasks"):
+        assert cfg["permission"][f"f0-pa-actions_{write_tool}"] == "ask", write_tool
     # Never touch the operator's model/provider setup from the project config.
     assert "model" not in cfg and "provider" not in cfg
 

@@ -53,6 +53,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- **opencode gated-write path** — the project config pre-arms opencode's
+  `"ask"` permission on the four ProjectAchilles write tools: when an operator
+  opts in (`enabled: true` + `PROJECTACHILLES_ALLOW_WRITE=true`), every write
+  call requires an interactive TUI approval the model cannot forge, layered on
+  top of the core gate; non-interactive runs auto-reject writes (verified
+  live). The server itself still ships `enabled: false`; the enable procedure
+  is documented in the opencode runtime guide.
 - The distribution ships the gated-write `f0-pa-actions` server
   **`enabled: false`** (explicit opt-in), and both it and `config.example.yaml`
   document that under Hermes v0.18.2 the model retains shell access — so the

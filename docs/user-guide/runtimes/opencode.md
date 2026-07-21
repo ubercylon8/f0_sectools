@@ -49,11 +49,44 @@ Add `-m <provider>/<model>` to pick a specific local model for the run.
   has **shell access**, so the gated-write confirmation flow is **not
   forge-resistant** — a misbehaving model could in principle drive
   `scripts/confirm_action.py` itself. Enable the server only if you accept
-  that risk; otherwise keep it disabled **and** keep
+  that risk (see below); otherwise keep it disabled **and** keep
   `PROJECTACHILLES_ALLOW_WRITE=false` in `.env.projectachilles` (defense in
   depth — same caveat as the [Hermes runtime](hermes.md)).
 - Everything else is read-only by design; credentials stay in the gitignored
   `.env.<platform>` files and never enter model context.
+
+## Enabling gated writes (ProjectAchilles actions)
+
+For **supervised, interactive** sessions only — never unattended. Three layers
+stack; all of them stay in force:
+
+1. **Enable the server** — in your checkout, edit `opencode.json`:
+   `"f0-pa-actions": { …, "enabled": true }`, then restart opencode. (This
+   dirties the working tree deliberately — revert with
+   `git checkout -- opencode.json` when done.)
+2. **Enable the write flag** — in `.env.projectachilles`:
+   `PROJECTACHILLES_ALLOW_WRITE=true`, plus your confirmation mode
+   (`PROJECTACHILLES_CONFIRM_MODE=chat` for in-chat "approved", or leave the
+   default token/watcher — see [gated write actions](../../../CLAUDE.md#gated-write-actions)).
+3. **opencode's own approval gate (ships pre-armed).** The project config
+   marks all four write tools (`run_test`, `schedule_test`,
+   `set_schedule_status`, `cancel_tasks`) as `"ask"`: every write **call**
+   pops an approval prompt in the TUI that the model cannot answer or forge.
+   Choose **`once`** each time — **never `always`**, which would waive the
+   prompt for the rest of the session. Reads (`list_schedules`,
+   `get_task_status`, `list_tasks`) stay friction-free. In non-interactive
+   `opencode run`, write calls **auto-reject** (verified live) unless you pass
+   `--auto` — don't pass `--auto` with writes enabled.
+
+A typical gated run then looks like: you ask for a test → the write tool call
+prompts (`once`) → the tool returns an **intent** finding → you confirm per
+your gate mode (e.g. reply "approved" in chat) → the re-call prompts again
+(`once`) → executes and is audited.
+
+**Honest caveat:** the `ask` layer guards the *tool call* path, not the shell —
+a misaligned model with bash access could still attempt to self-approve
+outside the tools. The layering raises the bar; it is not forge-resistance.
+Supervised sessions only.
 
 ## Troubleshooting
 

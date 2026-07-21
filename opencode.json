@@ -3,43 +3,89 @@
   "mcp": {
     "f0-defender": {
       "type": "local",
-      "command": ["uv", "run", "--directory", ".", "f0-defender-mcp"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-defender-mcp"
+      ],
       "enabled": true
     },
     "f0-entra": {
       "type": "local",
-      "command": ["uv", "run", "--directory", ".", "f0-entra-mcp"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-entra-mcp"
+      ],
       "enabled": true
     },
     "f0-limacharlie": {
       "type": "local",
-      "command": ["uv", "run", "--directory", ".", "f0-limacharlie-mcp"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-limacharlie-mcp"
+      ],
       "enabled": true
     },
     "f0-projectachilles": {
       "type": "local",
-      "command": ["uv", "run", "--directory", ".", "f0-projectachilles-mcp"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-projectachilles-mcp"
+      ],
       "enabled": true
     },
     "f0-intune": {
       "type": "local",
-      "command": ["uv", "run", "--directory", ".", "f0-intune-mcp"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-intune-mcp"
+      ],
       "enabled": true
     },
     "f0-tenable": {
       "type": "local",
-      "command": ["uv", "run", "--directory", ".", "f0-tenable-mcp"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-tenable-mcp"
+      ],
       "enabled": true
     },
     "f0-pa-actions": {
       "type": "local",
-      "command": ["uv", "run", "--directory", ".", "f0-projectachilles-actions-mcp"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-projectachilles-actions-mcp"
+      ],
       "enabled": false
     }
   },
   "permission": {
     "skill": {
       "*": "allow"
-    }
+    },
+    "f0-pa-actions_run_test": "ask",
+    "f0-pa-actions_schedule_test": "ask",
+    "f0-pa-actions_set_schedule_status": "ask",
+    "f0-pa-actions_cancel_tasks": "ask"
   }
 }
