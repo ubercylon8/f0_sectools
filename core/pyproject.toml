@@ -1,6 +1,6 @@
 [project]
 name = "f0-sectools-core"
-version = "0.0.1"
+version = "0.2.0"
 description = "Shared core for f0_sectools: findings schema, redaction, auth, paging, small-model helpers, gated-action machinery, and persona renderers."
 readme = "README.md"
 requires-python = ">=3.11"
