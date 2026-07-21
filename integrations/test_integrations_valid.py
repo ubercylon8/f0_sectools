@@ -95,3 +95,19 @@ def test_distribution_manifest_valid():
     assert "F0_SECTOOLS_DIR" in env_names, "manifest must document F0_SECTOOLS_DIR"
     # No platform secrets are ever documented as required env (they live in .env.<platform>).
     assert not (env_names & {"DEFENDER_CLIENT_SECRET", "PROJECTACHILLES_API_KEY", "LC_API_KEY"})
+
+
+def test_distribution_config_valid():
+    cfg = yaml.safe_load(
+        (ROOT / "integrations/hermes/distribution/config.yaml").read_text("utf-8")
+    )
+    # Skills load from the checkout via the env placeholder — never copied, never a real path.
+    assert cfg["skills"]["external_dirs"] == ["${F0_SECTOOLS_DIR}/skills"]
+    # The 4 role personas ship with the distribution.
+    assert {"ciso", "threat-hunter", "detection-engineer", "security-engineer"} <= set(
+        cfg["agent"]["personalities"]
+    )
+    # Security-only lockdown is declared.
+    assert cfg["agent"].get("disabled_toolsets"), "distribution must lock down general toolsets"
+    # No operator-specific model config is baked in (config.yaml is preserved on update).
+    assert "model" not in cfg and "providers" not in cfg
