@@ -65,9 +65,11 @@ permissions; otherwise they return a graceful "permission/throttled" finding.
 | Claude Code | ✅ native | via prompt | stdio | [claude-code.md](runtimes/claude-code.md) |
 | LM Studio | ➖ system prompt | ➖ prompt modes | stdio | [lm-studio.md](runtimes/lm-studio.md) |
 | Open WebUI | ➖ system prompt | ➖ prompt modes | HTTP via `mcpo` | [open-webui.md](runtimes/open-webui.md) |
+| opencode *(planned)* | 🔲 planned | 🔲 planned | stdio (native MCP) | 🔲 roadmap |
 
 ✅ native skill system · ➖ no skill system → use the portable prompt in
-[`prompts/`](../../prompts/).
+[`prompts/`](../../prompts/). · 🔲 planned — on the roadmap: [opencode.ai](https://opencode.ai)
+terminal agent (native MCP; agent files → personas, `AGENTS.md` → identity), not yet wired.
 
 ### Personas
 
