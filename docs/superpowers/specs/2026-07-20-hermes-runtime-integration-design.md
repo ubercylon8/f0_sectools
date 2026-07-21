@@ -1,7 +1,7 @@
 # Hermes Agent Runtime Integration — Design
 
 **Date:** 2026-07-20
-**Status:** Design (awaiting review)
+**Status:** Phase A COMPLETE (executed 2026-07-20, see §3.5); Phase B next
 **Goal:** Live-validate f0_sectools under the **Hermes Agent** runtime (v0.18.2,
 the library's primary intended target), then ship it as a one-command
 **profile distribution** — without disturbing the operator's existing general
@@ -155,6 +155,50 @@ under Qwen3.5-9B in Hermes; personas switch; degradation relayed. The
 `default` profile is provably untouched.
 
 ---
+
+## 3.5 Phase A — Results (executed 2026-07-20)
+
+Phase A ran end-to-end and is complete. What actually happened, and the
+mechanics the pre-execution plan above got wrong (carry these into Phase B):
+
+**Stood up & validated.** Isolated `f0sectools` profile created
+(`~/.hermes/profiles/f0sectools`), pointed at Qwen3.5-9B on `:8081`, 7 MCP
+servers / 45 tools wired, 22 skills via `external_dirs`, security SOUL + 4
+personas. The `default` profile was never touched (0 MCP servers, still
+kimi-k3). **Read-sweep passed on all 7 servers** (Defender, Entra, LimaCharlie,
+ProjectAchilles, pa-actions reads, Intune, Tenable) with real-tenant data.
+**Gated writes validated** (chat-confirm): single-host *and* fleet-by-tag — an
+8-host `group-b` fleet resolved with a count-bound intent `<uuid>@tag:group-b:8`.
+
+**Plan corrections (important for Phase B):**
+- **`hermes mcp add` is interactive** ("Enable all N tools?") and has **no
+  `--profile` flag** (upstream issue #61765) — it writes to the *active*
+  profile. Scope via the `hermes -p <profile>` wrapper; pipe `Y` for
+  non-interactive add. The distribution's `mcp.json` sidesteps this entirely.
+- **`toolsets:` is NOT an enforcing whitelist** in the chat/`-z` path (Hermes
+  defaults to the `hermes-cli` bundle, `cli.py:15493`). The security-only
+  **lockdown must use `agent.disabled_toolsets`** + a session restart — set it
+  in the distribution `config.yaml`. (A `toolsets: [<mcp names>]` whitelist edit
+  was a no-op and was reverted.)
+- `mcp_servers:` top-level (in our `config.example.yaml`) is confirmed **not a
+  real key** → distribution `mcp.json` is the correct home. Fix the template.
+
+**Bugs found → fixed → merged** (the fix-forward the live run was for):
+- **#1 Entra output bounding** — `list_privileged_role_assignments` returned
+  ~100 findings (~123 KB) past Hermes' 50 KB `tool_output` cap; the small model
+  silently saw a fraction. Fixed (default 100→25 + `clamp_limit` +
+  "more available" note, criticals-first preserved). **PR #53, merged.**
+- **#2 pa-actions fleet-by-tag routing** — a multi-turn "run the *same* test on
+  the hosts with tag X" made the model enumerate hosts instead of passing `tag`.
+  Sharpened `run_test`/`schedule_test` descriptions. **PR #52, merged.**
+
+**Key lesson.** The isolated eval routes `tag` at 100% even with distractor
+tools; single-turn tag runs work. The failure only appears under a realistic
+loaded context (skills + 45 tools + multi-turn history, ~78 K tokens). **The
+vacuum eval structurally cannot reproduce context-load small-model degradation —
+Hermes itself is the test instrument** for that class of bug. (Env note: the
+`:8081` llama.cpp backend is flaky under sustained eval load; single `-z` calls
+are fine.)
 
 ## 4. Phase B — Profile distribution (the shippable artifact)
 
