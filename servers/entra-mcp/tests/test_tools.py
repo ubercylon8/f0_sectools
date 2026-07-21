@@ -186,3 +186,43 @@ async def test_list_privileged_role_assignments_maps():
     assert findings[0].finding_type.value == "posture"
     assert findings[0].severity.value == "high"
     assert "Global Administrator" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_list_privileged_role_assignments_bounds_and_notes():
+    # A large assignment set must not dump hundreds of findings past a small
+    # model's runtime output cap: return one bounded page (default 25) + a
+    # "more available" note, criticals first.
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/roleManagement/directory/roleDefinitions").mock(
+            return_value=httpx.Response(
+                200,
+                json={"value": [
+                    {"id": "rd1", "displayName": "Global Administrator"},
+                    {"id": "rd2", "displayName": "Message Center Reader"},
+                ]},
+            )
+        )
+        assignments = [
+            {"id": f"crit{i}", "roleDefinitionId": "rd1",
+             "principal": {"userPrincipalName": f"admin{i}@corp.com", "id": f"c{i}"}}
+            for i in range(5)
+        ] + [
+            {"id": f"reg{i}", "roleDefinitionId": "rd2",
+             "principal": {"userPrincipalName": f"user{i}@corp.com", "id": f"u{i}"}}
+            for i in range(25)
+        ]
+        router.get(GRAPH + "/roleManagement/directory/roleAssignments").mock(
+            return_value=httpx.Response(200, json={"value": assignments})
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_privileged_role_assignments(gc)
+    # 30 assignments > default limit 25 -> 25 findings + 1 "more available" note.
+    assert len(findings) == 26
+    note = findings[-1]
+    assert note.severity.value == "info"
+    assert "more results available" in note.title.lower()
+    shown = findings[:25]
+    assert all(f.severity.value == "high" for f in shown[:5])  # criticals first
+    assert all("more results" not in f.title.lower() for f in shown)

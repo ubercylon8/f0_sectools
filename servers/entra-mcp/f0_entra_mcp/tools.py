@@ -155,9 +155,10 @@ async def list_conditional_access_policies(gc: GraphClient) -> list[Finding]:
     return out
 
 
-async def list_privileged_role_assignments(gc: GraphClient, limit: int = 100) -> list[Finding]:
+async def list_privileged_role_assignments(gc: GraphClient, limit: int = 25) -> list[Finding]:
     # Graph permits only ONE $expand per query, so resolve role names from a
     # separate roleDefinitions lookup and expand only `principal` on assignments.
+    limit = clamp_limit(limit)
     perm = "RoleManagement.Read.Directory"
     try:
         defs = await gc.get_all("/roleManagement/directory/roleDefinitions")
@@ -193,6 +194,13 @@ async def list_privileged_role_assignments(gc: GraphClient, limit: int = 100) ->
                 ),
             )
         )
-    # Critical roles first, then cap output to keep payloads small-model-safe.
+    # Critical roles first, then cap output to keep payloads small-model-safe:
+    # a tenant's full assignment set can be hundreds of findings (>100 KB), past a
+    # small model's runtime output cap, which silently truncates it. Return one
+    # bounded page + a "more available" note, like the other Entra read tools.
     out.sort(key=lambda f: 0 if f.severity == Severity.high else 1)
-    return out[:limit]
+    has_more = len(out) > limit
+    out = out[:limit]
+    if has_more:
+        out.append(more_available_finding("entra", shown=len(out)))
+    return out
