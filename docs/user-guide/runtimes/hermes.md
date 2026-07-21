@@ -51,9 +51,10 @@ Hermes profiles let you install f0_sectools in one command. The recommended path
    ```
    This creates `~/.hermes/profiles/f0sectools/` with:
    - `SOUL.md` (base identity: read-only / never-fabricate principles)
-   - `mcp.json` (seven MCP servers: defender, entra, limacharlie, projectachilles,
-     pa-actions, intune, tenable)
-   - `config.yaml` (personas, skills, security-only tool scoping)
+   - `config.yaml` (the seven MCP servers — defender, entra, limacharlie,
+     projectachilles, pa-actions, intune, tenable — under `mcp_servers`, plus
+     personas and skills). Hermes reads MCP servers from `config.yaml`, not a
+     separate `mcp.json`.
 
 4. **Set the checkout path** in the profile's environment:
    ```bash
@@ -146,8 +147,10 @@ tool selection**. Hermes gives you the knobs:
   server to the two or three tools a task actually calls.
 - **`agent.reasoning_effort`** — raise it for multi-step correlation, lower it for
   simple lookups.
-- **`agent.disabled_toolsets`** — drop built-in toolsets you don't want competing
-  for the model's attention.
+- **`agent.disabled_toolsets`** — drop built-in *non-core* toolsets you don't want
+  competing for the model's attention. Note: core tools (`terminal`, `read_file`)
+  can't be removed this way in Hermes v0.18.2, so a full "security-only" lockdown
+  isn't achievable from config alone yet.
 
 Keeping the live tool count small is the single highest-leverage thing you can do
 for reliability on a local model.

@@ -5,9 +5,8 @@ Files for running f0_sectools under [Hermes Agent](https://hermes-agent.nousrese
 | File | Purpose |
 |------|---------|
 | `distribution/distribution.yaml` | Distribution manifest for git-based install into Hermes. Specifies environment requirements (`F0_SECTOOLS_DIR`, Hermes version). |
-| `distribution/mcp.json` | MCP server sources — the seven f0_sectools servers (defender, entra, limacharlie, projectachilles, pa-actions, intune, tenable) and their launch commands. |
 | `distribution/SOUL.md` | Base agent identity — read-only / never-fabricate operating principles. Auto-installed to `~/.hermes/profiles/f0sectools/SOUL.md` by distribution installer; or manually copy to `~/.hermes/SOUL.md` for manual-merge setup. |
-| `distribution/config.yaml` | Personas, skills, and tool-scoping — automatically installed to `~/.hermes/profiles/f0sectools/config.yaml` by the distribution installer. |
+| `distribution/config.yaml` | The seven f0_sectools MCP servers (defender, entra, limacharlie, projectachilles, pa-actions, intune, tenable) under `mcp_servers`, plus personas and skills — auto-installed to `~/.hermes/profiles/f0sectools/config.yaml`. Hermes reads MCP servers from `config.yaml`, not a separate `mcp.json`. |
 
 **Full setup and usage:** see the canonical guide at
 [`docs/user-guide/runtimes/hermes.md`](../../docs/user-guide/runtimes/hermes.md).

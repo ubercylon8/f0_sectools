@@ -54,14 +54,16 @@ def test_every_server_wired_into_hermes_template():
 
 
 def test_every_server_wired_into_distribution():
-    mcp = json.loads(
-        (ROOT / "integrations/hermes/distribution/mcp.json").read_text(encoding="utf-8")
+    # Hermes v0.18.2 reads servers from config.yaml's `mcp_servers` (a shipped
+    # mcp.json is copied but not auto-loaded by the CLI — verified live).
+    cfg = yaml.safe_load(
+        (ROOT / "integrations/hermes/distribution/config.yaml").read_text(encoding="utf-8")
     )
-    assert _wired(mcp["servers"]) == _server_scripts(), (
-        "integrations/hermes/distribution/mcp.json is out of sync with servers/*"
+    assert _wired(cfg["mcp_servers"]) == _server_scripts(), (
+        "integrations/hermes/distribution/config.yaml mcp_servers is out of sync with servers/*"
     )
     # Every server runs from the F0_SECTOOLS_DIR placeholder, never a real path.
-    for s in mcp["servers"].values():
+    for s in cfg["mcp_servers"].values():
         assert "${F0_SECTOOLS_DIR}" in s["args"], s
 
 
@@ -69,7 +71,6 @@ def test_templates_use_placeholder_paths_only():
     # Files that should use ${F0_SECTOOLS_DIR}
     distribution_files = {
         "integrations/hermes/config.example.yaml",
-        "integrations/hermes/distribution/mcp.json",
         "integrations/hermes/distribution/config.yaml",
     }
     # Files that should use /ABSOLUTE/PATH/TO/sec-tools
@@ -110,7 +111,7 @@ def test_distribution_config_valid():
     assert {"ciso", "threat-hunter", "detection-engineer", "security-engineer"} <= set(
         cfg["agent"]["personalities"]
     )
-    # Security-only lockdown is declared.
-    assert cfg["agent"].get("disabled_toolsets"), "distribution must lock down general toolsets"
+    # The 7 MCP servers are wired here (Hermes reads mcp_servers from config.yaml).
+    assert len(cfg["mcp_servers"]) == 7
     # No operator-specific model config is baked in (config.yaml is preserved on update).
     assert "model" not in cfg and "providers" not in cfg

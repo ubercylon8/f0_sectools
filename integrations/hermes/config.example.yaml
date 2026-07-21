@@ -47,8 +47,6 @@ skills:
 # 3) Security-only lockdown: disable general shell/file/browser toolsets
 #    that a read-only analyst does not need.
 agent:
-  disabled_toolsets:
-    - hermes-cli
   personalities:
     ciso: >
       Operate as a CISO advisor. Audience is executive: lead with risk and

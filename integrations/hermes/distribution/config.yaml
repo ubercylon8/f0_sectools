@@ -1,18 +1,53 @@
-# f0_sectools distribution config — behaviour only. Preserved on update, so
-# operator overrides (model/provider, extra personas) persist. Set your local
-# model with `hermes -p f0sectools model`; set F0_SECTOOLS_DIR in this profile's
-# .env (points at your uv-synced checkout).
+# f0_sectools distribution config. Preserved on update, so operator overrides
+# (model/provider, extra personas) persist. Set your local model with
+# `hermes -p f0sectools model`; set F0_SECTOOLS_DIR in this profile's .env
+# (points at your uv-synced checkout).
+#
+# NOTE: a security-only toolset lockdown (dropping the general shell/file tools)
+# is NOT shipped in v0.1.0 — Hermes v0.18.2 keeps `terminal`/`read_file` as core
+# tools that `disabled_toolsets` cannot remove from the default bundle. Tracked
+# for a future version. The agent is read-only by default; gated writes still
+# require the PROJECTACHILLES_ALLOW_WRITE flag AND per-action human confirmation.
+
+# The 7 f0_sectools MCP servers. Hermes v0.18.2 reads servers from config.yaml's
+# `mcp_servers` (a distribution mcp.json is copied but not auto-loaded by the
+# CLI). `uv run --directory ${F0_SECTOOLS_DIR}` runs each server from the
+# operator's checkout; ${F0_SECTOOLS_DIR} is set in this profile's .env.
+mcp_servers:
+  f0-defender:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-defender-mcp]
+    enabled: true
+  f0-entra:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-entra-mcp]
+    enabled: true
+  f0-limacharlie:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-limacharlie-mcp]
+    enabled: true
+  f0-projectachilles:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-projectachilles-mcp]
+    enabled: true
+  f0-pa-actions:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-projectachilles-actions-mcp]
+    enabled: true
+  f0-intune:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-intune-mcp]
+    enabled: true
+  f0-tenable:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-tenable-mcp]
+    enabled: true
+
 skills:
   external_dirs:
     - ${F0_SECTOOLS_DIR}/skills
 
 agent:
-  # Security-only lockdown: expose the 7 MCP servers + skills, drop the general
-  # shell/file/browser toolsets a read-only analyst does not need. The exact
-  # bundle names are verified live in Task 6 (restart + probe); this is the
-  # candidate set.
-  disabled_toolsets:
-    - hermes-cli
   personalities:
     ciso: >
       Operate as a CISO advisor. Audience is executive: lead with risk and
