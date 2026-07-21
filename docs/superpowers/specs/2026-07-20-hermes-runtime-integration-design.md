@@ -19,12 +19,13 @@ Hermes Agent v0.18.2** invalidated both assumptions:
   `config.yaml` with WhatsApp/Slack gateways, kanban, pets, memories, sessions,
   and **8 existing personalities**. Rendering our template over it would clobber
   a working setup. **We will not write to the `default` profile's config.**
-- **Our `integrations/hermes/config.example.yaml` has schema drift.** Validated
-  block-by-block against the installed source:
+- **Our `integrations/hermes/config.example.yaml` is structurally valid** (an
+  initial read misdiagnosed `mcp_servers:` as drift — corrected below).
+  Validated block-by-block against the installed source:
 
-  | Template block | Verdict | Correct form in v0.18.2 |
+  | Template block | Verdict | Notes for v0.18.2 |
   |---|---|---|
-  | `mcp_servers:` (top-level) | ❌ Not a real key | `hermes mcp add`, or `mcp.json` inside a distribution |
+  | `mcp_servers:` (top-level) | ✅ Real — populated by `hermes mcp add` | Absent until the profile has ≥1 server (which caused the initial mis-read); `mcp.json` is the same map as a distribution-owned file |
   | `skills.external_dirs:` | ✅ Real (has source + tests) | Loads skills from the repo in place |
   | `agent.personalities:` | ✅ Real | Switched with `/personality <name>`; coexists with the 8 stock personas |
 
@@ -180,8 +181,12 @@ ProjectAchilles, pa-actions reads, Intune, Tenable) with real-tenant data.
   **lockdown must use `agent.disabled_toolsets`** + a session restart — set it
   in the distribution `config.yaml`. (A `toolsets: [<mcp names>]` whitelist edit
   was a no-op and was reverted.)
-- `mcp_servers:` top-level (in our `config.example.yaml`) is confirmed **not a
-  real key** → distribution `mcp.json` is the correct home. Fix the template.
+- `mcp_servers:` top-level **is a real key**, populated by `hermes mcp add` (the
+  Phase-A "not a real key" read was mistaken — it checked the *default* profile,
+  which has no servers, so the key was simply absent). `mcp.json` is the same
+  `mcp_servers` map as a distribution-owned file. `config.example.yaml` is
+  **not** drifted; a distribution ships `mcp.json` because it is *replaced* on
+  update while `config.yaml` is *preserved*.
 
 **Bugs found → fixed → merged** (the fix-forward the live run was for):
 - **#1 Entra output bounding** — `list_privileged_role_assignments` returned
@@ -215,18 +220,19 @@ plan):
   secrets).
 - `SOUL.md` — the security identity (from `integrations/hermes/SOUL.md`).
 - `config.yaml` — model/tool defaults + the 4 `agent.personalities`.
-- `mcp.json` — the 7 servers (the **correct** home for MCP wiring, replacing the
-  drifted top-level `mcp_servers:` block), with per-user path rendering.
+- `mcp.json` — the 7 servers (the distribution-owned form of the `mcp_servers`
+  map, chosen because it is *replaced* on update, unlike the *preserved*
+  `config.yaml`), using `${F0_SECTOOLS_DIR}` for the per-user checkout path.
 - `skills/` — bundled, or referenced via `skills.external_dirs` to the repo.
 - (optional) `cron/` — deferred; no scheduled tasks in v1.
 
-Phase B also **fixes `integrations/hermes/config.example.yaml`** (or replaces it
-with the distribution + a pointer) so the committed template stops advertising
-the invalid `mcp_servers:` schema, and updates
+Phase B **keeps `integrations/hermes/config.example.yaml`** (the valid "manually
+merge `mcp_servers:` into your profile" path, optionally repointed to
+`${F0_SECTOOLS_DIR}`) and adds the distribution alongside it, and updates
 `docs/user-guide/runtimes/hermes.md`. The drift-guard test
-(`integrations/test_integrations_valid.py`) must be updated to assert against
-whatever artifact becomes canonical (distribution `mcp.json` and/or the fixed
-template) so all 7 servers stay wired.
+(`integrations/test_integrations_valid.py`) is **extended** to also assert the
+distribution `mcp.json` wires all 7 servers — keeping both the template and the
+distribution in sync with `servers/*`.
 
 Phase B is a code deliverable → it gets its own `writing-plans` plan and
 subagent-driven execution once Phase A validates.
