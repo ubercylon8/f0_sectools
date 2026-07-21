@@ -28,6 +28,8 @@ gated actions) are live-validated today — see the support matrix below.
    - **[Claude Code](runtimes/claude-code.md)** — terminal agent (skills + MCP).
    - **[pi](runtimes/pi.md)** — minimal terminal harness (skills + personas; MCP
      via the `pi-mcp-extension` bridge).
+   - **[opencode](runtimes/opencode.md)** — terminal agent (native MCP + native
+     skills; wiring ships in-repo — just run it from the checkout).
    - Generic vLLM/llama.cpp + any MCP client → see
      [running with local models](../running-with-local-models.md).
 3. **[Using skills & personas](using-skills-and-personas.md)** — what the
@@ -65,11 +67,10 @@ permissions; otherwise they return a graceful "permission/throttled" finding.
 | Claude Code | ✅ native | via prompt | stdio | [claude-code.md](runtimes/claude-code.md) |
 | LM Studio | ➖ system prompt | ➖ prompt modes | stdio | [lm-studio.md](runtimes/lm-studio.md) |
 | Open WebUI | ➖ system prompt | ➖ prompt modes | HTTP via `mcpo` | [open-webui.md](runtimes/open-webui.md) |
-| opencode *(planned)* | 🔲 planned | 🔲 planned | stdio (native MCP) | 🔲 roadmap |
+| opencode | ✅ native | ✅ agent files | stdio | [opencode.md](runtimes/opencode.md) |
 
 ✅ native skill system · ➖ no skill system → use the portable prompt in
-[`prompts/`](../../prompts/). · 🔲 planned — on the roadmap: [opencode.ai](https://opencode.ai)
-terminal agent (native MCP; agent files → personas, `AGENTS.md` → identity), not yet wired.
+[`prompts/`](../../prompts/).
 
 ### Personas
 

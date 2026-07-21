@@ -99,6 +99,8 @@ f0_sectools/
     cross-platform/         # multi-server correlation: incident triage, offensive<->defensive loop
   integrations/             # runtime-specific wiring (NO skill content — see rule 9)
     hermes/                 # config.example.yaml (manual-merge) + distribution/ (installable profile: distribution.yaml + config.yaml + SOUL.md)
+    pi/                     # mcp.json + AGENTS.md + persona prompt templates
+    opencode/               # README only — the wiring is in-repo: /opencode.json + /.opencode/{skills,agents}
   prompts/                  # portable system prompts for non-skill UIs (LM Studio, Open WebUI)
   evals/                    # small-model tool-calling eval harness + task sets
   docs/
@@ -178,6 +180,7 @@ CISO, threat hunter, detection engineer, security engineer — each a behavioura
 - **Hermes Agent** (primary) — skills-aware, native MCP, OpenAI-compatible backend. `integrations/hermes/` holds `config.example.yaml` (the manual-merge template — wires `mcp_servers`, points `skills.external_dirs` at this repo's `skills/` in place, defines the four personalities) and **`distribution/`** — a **git-installable profile distribution** (`distribution.yaml` manifest + `config.yaml` + `SOUL.md`; `hermes profile install ./integrations/hermes/distribution`). NB: Hermes reads MCP servers from `config.yaml`'s `mcp_servers` (a distribution `mcp.json` is **not** auto-loaded by the CLI), and the gated-write server ships **disabled-by-default**. See its README + `docs/user-guide/runtimes/hermes.md`.
 - **Claude Code / other agentskills.io clients** — the same `skills/` load unmodified.
 - **pi** ([pi.dev](https://pi.dev/docs/latest)) — minimal agentskills.io terminal harness; the same `skills/` load unmodified. No native MCP — bridge our servers with the `pi-mcp-extension`. `integrations/pi/` holds `mcp.json`, `AGENTS.md` (base identity), and the four persona prompt templates. See `docs/user-guide/runtimes/pi.md`.
+- **opencode** ([opencode.ai](https://opencode.ai), ≥1.18) — terminal agent with native MCP **and** native SKILL.md skills. Wiring ships **in-repo**: root `opencode.json` (7 servers, relative commands, `f0-pa-actions` disabled), `.opencode/skills/` (22 committed symlinks into `skills/` — no forks), `.opencode/agents/` (4 persona agents). Run opencode from the checkout and it all auto-loads. See `integrations/opencode/README.md` + `docs/user-guide/runtimes/opencode.md`.
 - **Non-skill chat UIs (LM Studio, Open WebUI)** — no skill system; paste `prompts/f0-sectools-system-prompt.md` (persona-switchable) as the system prompt. See `docs/running-with-local-models.md`.
 
 **Rule of thumb:** skill *content* and persona *definitions* are authored once; `integrations/` and `prompts/` only carry runtime wiring, never copies of skill logic.

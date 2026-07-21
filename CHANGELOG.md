@@ -16,6 +16,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the per-platform `.env` files. Live-validated end to end (fresh install →
   7 servers, 22 skills, a human-approved fleet-by-tag gated write).
 
+- **opencode runtime** — [opencode](https://opencode.ai) (≥1.18) is wired as an
+  in-repo project config: run `opencode` from the checkout and the 7 MCP
+  servers, all 22 skills (via opencode's **native** SKILL.md loader — committed
+  symlinks, no forks), and the 4 role personas (project agent files) auto-load.
+  The gated-write server ships `enabled: false` (the model has shell, so the
+  confirmation gate is not forge-resistant). Live-validated on opencode 1.18.4
+  with a local Qwen3.5-9B.
+
 - **LimaCharlie sleeper visibility** — sensor tags are now surfaced:
   `get_sensor` lists them (flagging dormant `lc:sleeper` sensors, which collect
   no telemetry by design), a zero-event `query_telemetry` result diagnoses the
