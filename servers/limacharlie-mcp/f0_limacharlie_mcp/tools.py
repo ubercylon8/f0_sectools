@@ -335,6 +335,23 @@ def query_telemetry(
                 raise
             hostnames = sorted({str(s["hostname"]) for s in exact if s.get("hostname")})
             if len(hostnames) == 1:
+                # The STORED hostname is live platform data (agent-side enrollment),
+                # not the validated caller argument — it must pass the same LCQL
+                # string-literal safety check before it is spliced into the selector.
+                if not _HOSTNAME_RE.match(hostnames[0]):
+                    return [
+                        Finding(
+                            source="limacharlie",
+                            finding_type=FindingType.posture,
+                            severity=Severity.info,
+                            title=f"Stored hostname for '{scope_host}' contains "
+                            "unsupported characters — telemetry query not run",
+                            recommended_action=RecommendedAction(
+                                summary="Inspect the sensor with get_sensor; its "
+                                "enrolled hostname cannot be queried safely.",
+                            ),
+                        )
+                    ]
                 # Prefer an online record for the later state/tags diagnosis.
                 resolved_sensor = next(
                     (s for s in exact if _first(s, "is_online", "online", default=False)),

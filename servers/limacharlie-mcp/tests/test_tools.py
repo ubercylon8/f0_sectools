@@ -308,6 +308,23 @@ def test_query_telemetry_tags_lookup_failure_keeps_finding():
     assert "0 telemetry event(s)" in findings[0].title
 
 
+def test_query_telemetry_rejects_unsafe_stored_hostname():
+    # The RESOLVED hostname comes from live platform data (agent-side enrollment),
+    # not the validated caller argument — it must pass the same LCQL-safety check
+    # before being spliced into the selector string, else a stored hostname with a
+    # quote breaks out of the string literal (CC review, PR #58).
+    class _NeverQuery(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            raise AssertionError("query must not run with an unsafe stored hostname")
+
+    lc = _NeverQuery(find_sensor=[
+        {"sid": "s1", "hostname": 'web-01.evil" | x', "is_online": True},
+    ])
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
+    assert findings[0].finding_type.value == "posture"
+    assert "hostname" in findings[0].title.lower()
+
+
 def test_query_telemetry_resolution_ignores_deleted_sensors():
     lc = FakeClient(find_sensor=[
         {"sid": "s1", "hostname": "web-01.corp.local", "is_del": True},
