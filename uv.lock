@@ -474,7 +474,7 @@ dev = [
 
 [[package]]
 name = "f0-sectools-core"
-version = "0.0.1"
+version = "0.2.0"
 source = { editable = "core" }
 dependencies = [
     { name = "httpx" },
