@@ -81,10 +81,11 @@ def test_templates_use_placeholder_paths_only():
 
     for rel in placeholder_required_files | legacy_placeholder_files | no_real_paths_files:
         text = (ROOT / rel).read_text(encoding="utf-8")
-        assert "/home/" not in text, (
-            f"{rel} leaks a real local path — use {PLACEHOLDER} or ${{F0_SECTOOLS_DIR}} "
-            "(rendering happens locally, e.g. scripts/sync_pi_config.py)"
-        )
+        for real_root in ("/home/", "/Users/"):
+            assert real_root not in text, (
+                f"{rel} leaks a real local path ({real_root}) — use {PLACEHOLDER} or "
+                "${F0_SECTOOLS_DIR} (rendering happens locally, e.g. scripts/sync_pi_config.py)"
+            )
         if rel in placeholder_required_files:
             assert "${F0_SECTOOLS_DIR}" in text, f"{rel} lost the ${{F0_SECTOOLS_DIR}} placeholder"
         elif rel in legacy_placeholder_files:
@@ -117,5 +118,9 @@ def test_distribution_config_valid():
     )
     # The 7 MCP servers are wired here (Hermes reads mcp_servers from config.yaml).
     assert len(cfg["mcp_servers"]) == 7
+    # The gated-WRITE server ships DISABLED — writes are an explicit opt-in
+    # (the model has shell in Hermes v0.18.2, so the confirmation gate is not
+    # forge-resistant). Read-only servers stay enabled.
+    assert cfg["mcp_servers"]["f0-pa-actions"]["enabled"] is False
     # No operator-specific model config is baked in (config.yaml is preserved on update).
     assert "model" not in cfg and "providers" not in cfg

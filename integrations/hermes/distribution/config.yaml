@@ -6,8 +6,15 @@
 # NOTE: a security-only toolset lockdown (dropping the general shell/file tools)
 # is NOT shipped in v0.1.0 — Hermes v0.18.2 keeps `terminal`/`read_file` as core
 # tools that `disabled_toolsets` cannot remove from the default bundle. Tracked
-# for a future version. The agent is read-only by default; gated writes still
-# require the PROJECTACHILLES_ALLOW_WRITE flag AND per-action human confirmation.
+# for a future version.
+#
+# SECURITY: because the model retains shell access (above), the gated-write
+# confirmation is NOT forge-resistant here — a model with the terminal tool could
+# run scripts/confirm_action.py to self-authorize a write. So the gated-write
+# server `f0-pa-actions` ships `enabled: false` (opt-in) and the agent is
+# read-only by default. Enable pa-actions + PROJECTACHILLES_ALLOW_WRITE=true ONLY
+# if you accept that a shell-capable model could bypass the confirmation gate.
+# See docs/user-guide/runtimes/hermes.md.
 
 # The 7 f0_sectools MCP servers. Hermes v0.18.2 reads servers from config.yaml's
 # `mcp_servers` (a distribution mcp.json is copied but not auto-loaded by the
@@ -30,10 +37,13 @@ mcp_servers:
     command: uv
     args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-projectachilles-mcp]
     enabled: true
+  # Gated-WRITE server — ships DISABLED (opt-in). The model has shell in Hermes
+  # v0.18.2, so the confirmation gate is not forge-resistant; see the SECURITY
+  # note above before enabling.
   f0-pa-actions:
     command: uv
     args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-projectachilles-actions-mcp]
-    enabled: true
+    enabled: false
   f0-intune:
     command: uv
     args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-intune-mcp]

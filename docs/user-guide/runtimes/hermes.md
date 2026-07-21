@@ -77,7 +77,8 @@ Hermes profiles let you install f0_sectools in one command. The recommended path
 
 **Security notes:**
 - Read-only tools are the default and are always available.
-- The `f0-pa-actions` MCP server exposes gated-write tools for ProjectAchilles (run/schedule tests, cancel tasks). These tools are **inert by default** — they do nothing without the `PROJECTACHILLES_ALLOW_WRITE=true` flag set in `.env.projectachilles`. Even when enabled, each action requires explicit human confirmation (watcher approval or a single-use token) before execution. No action runs autonomously.
+- The `f0-pa-actions` MCP server (gated-write tools for ProjectAchilles — run/schedule tests, cancel tasks) ships **`enabled: false`** in the distribution. Write capability is an explicit opt-in: enable the server *and* set `PROJECTACHILLES_ALLOW_WRITE=true` in `.env.projectachilles`.
+- **The confirmation gate is not forge-resistant under Hermes v0.18.2.** The gated-write flow normally depends on an out-of-band human confirmation (`scripts/confirm_action.py` — watcher approval or a single-use token). But Hermes keeps `terminal` as a core tool the model can drive, and `confirm_action.py` has no operator authentication of its own — so a shell-capable model could run it to self-authorize a write and bypass the human step. Per CLAUDE.md's gating rule, *in a runtime where the model has shell access, treat the approval CLI as operator-only and keep write flags off.* **Keep `PROJECTACHILLES_ALLOW_WRITE=false`** unless you accept that risk; the opt-in chat-confirm mode is model-forgeable by design and only suits a supervised session you watch every turn.
 
 ### Manual config merge (alternative)
 
