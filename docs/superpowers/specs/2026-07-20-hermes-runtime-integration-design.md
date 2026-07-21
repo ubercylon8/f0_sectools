@@ -36,7 +36,7 @@ Hermes Agent v0.18.2** invalidated both assumptions:
   personalities.
 - **Profile** — a *fully isolated Hermes instance* (own config, MCP servers,
   skills, SOUL, memory; own HERMES_HOME on disk). `hermes profile use <name>`
-  switches the sticky default; `default` lives at `/home/jimx/.hermes`.
+  switches the sticky default; `default` lives at `~/.hermes`.
 
 The operator's goal ("switch to sec-tools while keeping Hermes as a general
 agent") **is the profile mechanism**, with our 4 personas living *inside* that
@@ -109,7 +109,7 @@ Ordering is **load-bearing** because `mcp add` targets the active profile:
    hermes mcp add f0-intune          --command <abs-uv> --args run --directory <checkout> f0-intune-mcp
    hermes mcp add f0-tenable         --command <abs-uv> --args run --directory <checkout> f0-tenable-mcp
    ```
-   `<abs-uv>` = `which uv`; `<checkout>` = `/home/jimx/F0RT1KA/sec-tools`.
+   `<abs-uv>` = `which uv`; `<checkout>` = your f0_sectools clone (e.g. `~/f0_sectools`).
    `f0-pa-actions` write tools stay inert unless `PROJECTACHILLES_ALLOW_WRITE=true`
    (not set for the read-only pass).
 6. **Skills** — point the profile at the repo skills in place (no copy):
