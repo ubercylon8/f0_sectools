@@ -96,6 +96,38 @@ def test_templates_use_placeholder_paths_only():
         # no_real_paths_files: only check for absence of /home/, no specific placeholder required
 
 
+def _skill_names_to_dirs() -> dict[str, Path]:
+    """Frontmatter `name` -> skill directory, for every skills/*/*/SKILL.md."""
+    out: dict[str, Path] = {}
+    for skill_md in sorted(ROOT.glob("skills/*/*/SKILL.md")):
+        text = skill_md.read_text(encoding="utf-8")
+        assert text.startswith("---"), f"{skill_md} missing frontmatter"
+        meta = yaml.safe_load(text.split("---", 2)[1])
+        out[meta["name"]] = skill_md.parent
+    return out
+
+
+def test_opencode_skill_symlinks_complete_and_valid():
+    # opencode (>=1.18) discovers .opencode/skills/*/SKILL.md natively; each entry
+    # is a committed RELATIVE symlink to the portable skill dir (Critical Rule 9:
+    # one skill set, wiring only). Adding skill #23 without a link = red build.
+    links_dir = ROOT / ".opencode/skills"
+    expected = _skill_names_to_dirs()
+    assert links_dir.is_dir(), ".opencode/skills is missing"
+    actual = {p.name: p for p in links_dir.iterdir()}
+    assert set(actual) == set(expected), (
+        ".opencode/skills is out of sync with skills/* — "
+        "add/remove the symlink (recipe step 11)"
+    )
+    for name, link in actual.items():
+        assert link.is_symlink(), f"{link} must be a symlink, not a copy"
+        assert not link.readlink().is_absolute(), f"{link} must use a relative target"
+        assert link.resolve() == expected[name].resolve(), (
+            f"{link} resolves to {link.resolve()}, expected {expected[name]}"
+        )
+        assert (link / "SKILL.md").is_file(), f"{link}/SKILL.md unreadable via symlink"
+
+
 def test_distribution_manifest_valid():
     manifest = yaml.safe_load(
         (ROOT / "integrations/hermes/distribution/distribution.yaml").read_text(encoding="utf-8")
