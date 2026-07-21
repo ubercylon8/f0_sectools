@@ -35,11 +35,13 @@ _LABEL_PERM = "InformationProtectionPolicy.Read.All"
 _DLP_SOURCE = "dataLossPrevention"
 _IRM_SOURCE = "microsoftInsiderRiskManagement"
 
-# Graph beta is required for the labels inventory only; GraphClient passes an
-# absolute URL through unchanged.
+# Graph beta is required for the labels inventory AND (live-confirmed 2026-07-21)
+# the Audit Search API — the documented v1.0 audit path 404s on the real tenant
+# while beta serves it. GraphClient passes absolute URLs through unchanged.
 _LABELS_BETA_URL = (
     "https://graph.microsoft.com/beta/security/informationProtection/sensitivityLabels"
 )
+_AUDIT_QUERIES_URL = "https://graph.microsoft.com/beta/security/auditLog/queries"
 
 _SEV = {"informational": Severity.info, "low": Severity.low,
         "medium": Severity.medium, "high": Severity.high}
@@ -286,7 +288,7 @@ def _audit_record_finding(r: dict[str, Any]) -> Finding:
 
 async def _audit_records(gc: Any, query_id: str, limit: int) -> list[Finding]:
     data = await gc.get(
-        f"/security/auditLog/queries/{query_id}/records", params={"$top": limit}
+        f"{_AUDIT_QUERIES_URL}/{query_id}/records", params={"$top": limit}
     )
     records = [r for r in data.get("value", []) if isinstance(r, dict)]
     summary = Finding(
@@ -343,7 +345,7 @@ async def search_audit_log(
     if user:
         body["userPrincipalNameFilters"] = [user]
     try:
-        created = await gc.post("/security/auditLog/queries", json_body=body)
+        created = await gc.post(_AUDIT_QUERIES_URL, json_body=body)
         query_id = str(created.get("id", ""))
         deadline = asyncio.get_event_loop().time() + _POLL_DEADLINE_S
         status = str(created.get("status", "notStarted"))
@@ -351,7 +353,7 @@ async def search_audit_log(
             if asyncio.get_event_loop().time() >= deadline:
                 return [_pending_finding(query_id, status)]
             await asyncio.sleep(_POLL_INTERVAL_S)
-            q = await gc.get(f"/security/auditLog/queries/{query_id}")
+            q = await gc.get(f"{_AUDIT_QUERIES_URL}/{query_id}")
             status = str(q.get("status", "running"))
         if status != "succeeded":
             return [
@@ -381,7 +383,7 @@ async def get_audit_results(gc: Any, audit_query_id: str, limit: int = 25) -> li
     if not _QUERY_ID_RE.match(audit_query_id or ""):
         return [_invalid("audit_query_id", audit_query_id)]
     try:
-        q = await gc.get(f"/security/auditLog/queries/{audit_query_id}")
+        q = await gc.get(f"{_AUDIT_QUERIES_URL}/{audit_query_id}")
         status = str(q.get("status", "unknown"))
         if status != "succeeded":
             return [_pending_finding(audit_query_id, status)]
