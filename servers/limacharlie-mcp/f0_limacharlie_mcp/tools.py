@@ -113,15 +113,45 @@ def _resolve_sensor(
     return exact, prefix
 
 
-def list_sensors(lc: Any, online_only: bool = False, limit: int = _MAX_ITEMS) -> list[Finding]:
+def list_sensors(
+    lc: Any, online_only: bool = False, limit: int = _MAX_ITEMS, tag: str = ""
+) -> list[Finding]:
     limit = clamp_limit(limit)
+    # "" from a small model means unset. A set tag is spliced into a double-quoted
+    # selector literal — guard the charset like hostname/domain.
+    if tag and not _TAG_RE.match(tag):
+        return [
+            Finding(
+                source="limacharlie",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Invalid tag '{tag}' — sensor listing not run",
+                recommended_action=RecommendedAction(
+                    summary="tag may contain only letters, digits, ':', '.', '-', '_'.",
+                ),
+            )
+        ]
     try:
-        sensors = lc.list_sensors(online_only=online_only, limit=limit)
+        sensors = lc.list_sensors(online_only=online_only, limit=limit, tag=tag or None)
     except Exception as e:
         finding = map_lc_error(e, "LimaCharlie sensors", "sensor.list")
         if finding:
             return [finding]
         raise
+    if tag and not sensors:
+        # An empty list is invisible to a small model — say it explicitly.
+        return [
+            Finding(
+                source="limacharlie",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"No sensor carries tag '{tag}'",
+                recommended_action=RecommendedAction(
+                    summary="Check the tag spelling; get_org_overview shows the "
+                    "dormant-sleeper census.",
+                ),
+            )
+        ]
     # The SDK does not strictly honor `limit`; enforce it on the output.
     return _sensor_findings(sensors, cap=limit)
 
@@ -240,11 +270,30 @@ _HUNT_PRESETS = {
     ),
     "dns_requests": "{t} | {sel} | DNS_REQUEST | * | event/DOMAIN_NAME",
     "network_connections": "{t} | {sel} | NETWORK_CONNECTIONS | * | event/NETWORK_ACTIVITY",
+    # "What users were seen on host X?" — routing/hostname projected so a
+    # fleet-wide run says WHERE each user appeared (probed live 2026-07-21).
+    "user_activity": "{t} | {sel} | USER_OBSERVED | * | event/USER_NAME routing/hostname",
 }
 
 # LCQL string literals are double-quoted; only allow values that can't break out.
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _DOMAIN_RE = re.compile(r"^[A-Za-z0-9.*_-]+$")
+_TAG_RE = re.compile(r"^[A-Za-z0-9:._-]+$")
+# Windows account names: DOMAIN\user, "NT AUTHORITY\NETWORK SERVICE" (spaces),
+# machine accounts ending in $. Backslash allowed so a qualified name passes.
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9 ._$\\-]+$")
+
+
+def _username_clause(username: str) -> str:
+    """Boundary-anchored USER_NAME filter. A qualified name (DOMAIN\\user) matches
+    exactly; a bare name matches exactly OR at the backslash boundary of any
+    qualified form — never as a substring ("xjsmith" must not match)."""
+    if "\\" in username:
+        return f'event/USER_NAME is "{username}"'
+    return (
+        f'event/USER_NAME is "{username}" '
+        f'or event/USER_NAME ends with "\\{username}"'
+    )
 
 
 def _time_descriptor(hours_back: float) -> str:
@@ -283,6 +332,7 @@ def query_telemetry(
     limit: int = _MAX_ITEMS,
     hostname: str | None = None,
     domain: str | None = None,
+    username: str | None = None,
     lcql: str | None = None,
 ) -> list[Finding]:
     limit = clamp_limit(limit)
@@ -293,6 +343,7 @@ def query_telemetry(
     # value ("", which a small model may emit for an optional arg) means unset.
     scope_host = hostname if (hostname and lcql is None) else None
     scope_domain: str | None = None  # set to the base domain actually queried, below
+    scope_user: str | None = None  # set when the username filter is actually applied
     resolved_sensor: dict[str, Any] | None = None  # the record scoping resolved to
     if not lcql:
         if hostname and not _HOSTNAME_RE.match(hostname):
@@ -316,6 +367,19 @@ def query_telemetry(
                     title=f"Invalid domain '{domain}' — telemetry query not run",
                     recommended_action=RecommendedAction(
                         summary="domain may contain only letters, digits, '.', '*', '-', '_'.",
+                    ),
+                )
+            ]
+        if username and not _USERNAME_RE.match(username):
+            return [
+                Finding(
+                    source="limacharlie",
+                    finding_type=FindingType.posture,
+                    severity=Severity.info,
+                    title=f"Invalid username '{username}' — telemetry query not run",
+                    recommended_action=RecommendedAction(
+                        summary="username may contain only letters, digits, spaces, "
+                        "'.', '-', '_', '$', and '\\' for DOMAIN\\user.",
                     ),
                 )
             ]
@@ -413,6 +477,15 @@ def query_telemetry(
         else:
             template = _HUNT_PRESETS.get(hunt, _HUNT_PRESETS["new_processes"])
             lcql = template.format(t=td, sel=sel)
+            if username:
+                # DNS lookups (the branch above) carry no acting user, so the
+                # username filter applies only on the preset path. Inject into
+                # the filter slot; AND-group with an existing preset filter.
+                uf = _username_clause(username)
+                parts = lcql.split(" | ")
+                parts[3] = uf if parts[3] == "*" else f"{parts[3]} and ({uf})"
+                lcql = " | ".join(parts)
+                scope_user = username
     try:
         rows = lc.query(lcql, start, end, limit=limit)
     except Exception as e:
@@ -426,6 +499,7 @@ def query_telemetry(
         part for part in (
             f" on {scope_host}" if scope_host else "",
             f" matching {scope_domain}" if scope_domain else "",
+            f" by user {scope_user}" if scope_user else "",
         )
     )
     summary_evidence = [

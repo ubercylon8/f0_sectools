@@ -28,8 +28,9 @@ class FakeClient:
     def org_stats(self):
         return self._data.get("org_stats", {})
 
-    def list_sensors(self, online_only=False, limit=50):
+    def list_sensors(self, online_only=False, limit=50, tag=None):
         self._maybe_raise("list_sensors")
+        self.last_sensors_tag = tag
         return self._data.get("sensors", [])
 
     def find_sensor(self, hostname):
@@ -77,6 +78,43 @@ def test_list_sensors_maps_platform_int():
     lc = FakeClient(sensors=[{"sid": "s1", "hostname": "win-01", "platform": 0x10000000}])
     plat = {e.key: e.value for e in tools.list_sensors(lc)[0].evidence}["platform"]
     assert plat == "windows"
+
+
+def test_list_sensors_tag_filter_passes_through():
+    # "which hosts carry tag X" — the platform filters server-side via the
+    # sensor-selector ('"<tag>" in tags', probed live 2026-07-21).
+    lc = FakeClient(sensors=[{"sid": "s1", "hostname": "web-01", "is_online": True}])
+    findings = tools.list_sensors(lc, tag="prueba")
+    assert lc.last_sensors_tag == "prueba"
+    assert findings[0].entity.name == "web-01"
+
+
+def test_list_sensors_empty_tag_means_unfiltered():
+    # Small models emit "" for optional args — treat as unset, not invalid.
+    lc = FakeClient(sensors=[{"sid": "s1", "hostname": "web-01"}])
+    tools.list_sensors(lc, tag="")
+    assert lc.last_sensors_tag is None
+
+
+def test_list_sensors_rejects_unsafe_tag():
+    # The tag is spliced into a double-quoted selector literal — same breakout
+    # guard as hostname/domain. Client must never be called with an unsafe value.
+    class _NeverList(FakeClient):
+        def list_sensors(self, online_only=False, limit=50, tag=None):
+            raise AssertionError("list_sensors must not run with an unsafe tag")
+
+    findings = tools.list_sensors(_NeverList(), tag='x" | evil')
+    assert findings[0].finding_type.value == "posture"
+    assert "tag" in findings[0].title.lower()
+
+
+def test_list_sensors_tag_with_no_matches_says_so():
+    # An empty list is invisible to a small model; say explicitly no sensor
+    # carries the tag (mirrors get_sensor's not-found finding).
+    lc = FakeClient(sensors=[])
+    findings = tools.list_sensors(lc, tag="ghost-tag")
+    assert findings[0].finding_type.value == "posture"
+    assert "ghost-tag" in findings[0].title
 
 
 def test_list_detections_maps():
@@ -306,6 +344,118 @@ def test_query_telemetry_tags_lookup_failure_keeps_finding():
     findings = tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
     assert findings[0].finding_type.value == "hunt_result"
     assert "0 telemetry event(s)" in findings[0].title
+
+
+def test_query_telemetry_user_activity_preset():
+    # 5th hunt preset: "what users were seen on host X" -> USER_OBSERVED, with
+    # routing/hostname projected so fleet-wide runs say WHERE (probed live).
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="user_activity")
+    assert "USER_OBSERVED" in captured["lcql"]
+    assert "event/USER_NAME" in captured["lcql"]
+    assert "routing/hostname" in captured["lcql"]
+
+
+def test_query_telemetry_username_filters_boundary_anchored():
+    # Windows reports "DOMAIN\\user"; a bare username must match the exact name
+    # or a domain-qualified form at the backslash BOUNDARY — "xjsmith" must not.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    findings = tools.query_telemetry(_Cap(), hunt="new_processes", username="jsmith")
+    q = captured["lcql"]
+    assert 'event/USER_NAME is "jsmith"' in q
+    assert 'event/USER_NAME ends with "\\jsmith"' in q
+    assert "by user jsmith" in findings[0].title
+
+
+def test_query_telemetry_qualified_username_matches_exactly():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="new_processes", username="SUPERNET\\aalbuez")
+    q = captured["lcql"]
+    assert 'event/USER_NAME is "SUPERNET\\aalbuez"' in q
+    assert "ends with" not in q  # already domain-qualified: exact match only
+
+
+def test_query_telemetry_username_composes_with_preset_filter():
+    # powershell_activity already has a filter; the username clause must AND with
+    # it, parenthesised so the OR stays grouped.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    tools.query_telemetry(_Cap(), hunt="powershell_activity", username="jsmith")
+    q = captured["lcql"]
+    assert 'event/FILE_PATH contains "powershell"' in q
+    assert 'and (event/USER_NAME is "jsmith"' in q
+
+
+def test_query_telemetry_rejects_unsafe_username():
+    class _NeverQuery(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            raise AssertionError("query must not run with an unsafe username")
+
+    findings = tools.query_telemetry(
+        _NeverQuery(), hunt="new_processes", username='x" | evil'
+    )
+    assert findings[0].finding_type.value == "posture"
+    assert "username" in findings[0].title.lower()
+
+
+def test_query_telemetry_empty_username_is_unset():
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    findings = tools.query_telemetry(_Cap(), hunt="new_processes", username="")
+    assert "USER_NAME is" not in captured["lcql"]
+    assert "by user" not in findings[0].title
+
+
+def test_query_telemetry_domain_wins_over_username():
+    # DNS events carry no acting user; when both are given the domain routing
+    # applies and the result must NOT be labelled by user.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    findings = tools.query_telemetry(_Cap(), domain="microsoft.com", username="jsmith")
+    assert "DNS_REQUEST" in captured["lcql"]
+    assert "USER_NAME" not in captured["lcql"]
+    assert "by user" not in findings[0].title
+
+
+def test_query_telemetry_lcql_override_ignores_username():
+    lc = FakeClient(query=[{"rows": []}])
+    findings = tools.query_telemetry(
+        lc, username="jsmith", lcql="-1h | * | DNS_REQUEST | * | event/DOMAIN_NAME"
+    )
+    assert "by user" not in findings[0].title
 
 
 def test_query_telemetry_rejects_unsafe_stored_hostname():

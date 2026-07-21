@@ -25,8 +25,15 @@ class LimaCharlieClient:
     def org_stats(self) -> dict[str, Any]:
         return self._org.get_stats()
 
-    def list_sensors(self, online_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
-        return list(self._org.list_sensors(is_online_only=online_only, limit=limit))
+    def list_sensors(
+        self, online_only: bool = False, limit: int = 50, tag: str | None = None
+    ) -> list[dict[str, Any]]:
+        # Tag filtering is server-side via the sensor-selector expression
+        # ('"<tag>" in tags' — probed live); the tool layer guards the tag charset.
+        selector = f'"{tag}" in tags' if tag else None
+        return list(
+            self._org.list_sensors(selector=selector, is_online_only=online_only, limit=limit)
+        )
 
     def find_sensor(self, hostname: str) -> list[dict[str, Any]]:
         # find_sensors_by_hostname returns only {"sid": [[sid, hostname], ...]} — no

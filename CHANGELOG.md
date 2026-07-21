@@ -16,6 +16,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the per-platform `.env` files. Live-validated end to end (fresh install →
   7 servers, 22 skills, a human-approved fleet-by-tag gated write).
 
+- **LimaCharlie tag view & user-focused queries** — `list_sensors` gains a
+  `tag` filter ("which hosts carry lc:sleeper / prueba"), and `query_telemetry`
+  gains a fifth `user_activity` hunt preset (USER_OBSERVED, with the host each
+  user was seen on) plus a `username` filter for process/PowerShell activity by
+  the acting user — boundary-anchored (`DOMAIN\user`-aware), so lookalike names
+  never match. Still 6 tools.
 - **LimaCharlie sleeper visibility** — sensor tags are now surfaced:
   `get_sensor` lists them (flagging dormant `lc:sleeper` sensors, which collect
   no telemetry by design), a zero-event `query_telemetry` result diagnoses the

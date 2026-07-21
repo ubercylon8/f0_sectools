@@ -47,7 +47,7 @@ gated actions) are live-validated today — see the support matrix below.
 |----------|--------|--------|-------|
 | Microsoft Defender XDR | `f0-defender-mcp` | ✅ live-validated | secure score, incidents, alerts, hunting (KQL), guided hunt |
 | Microsoft Entra ID | `f0-entra-mcp` | ✅ live-validated | risky users*, risk detections*, conditional access, privileged roles |
-| LimaCharlie | `f0-limacharlie-mcp` | ✅ live-validated | org overview, sensors, D&R rules, detections, LCQL telemetry |
+| LimaCharlie | `f0-limacharlie-mcp` | ✅ live-validated | org overview, sensors (tag filter), D&R rules, detections, LCQL telemetry (incl. user activity + per-user filtering) |
 | ProjectAchilles | `f0-projectachilles-mcp` | ✅ live-validated | defense score, score trend, weak techniques, test results, risk acceptances, agents, fleet health |
 | Microsoft Intune | `f0-intune-mcp` | ✅ live-validated | managed devices, compliance summary, stale devices, compliance policies, config profiles |
 | Tenable Vulnerability Management | `f0-tenable-mcp` | ✅ live-validated | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans, plugin affected-hosts |
