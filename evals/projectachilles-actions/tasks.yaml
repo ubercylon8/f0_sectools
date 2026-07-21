@@ -49,3 +49,22 @@
 - prompt: "Schedule test 3f2a9c10-1111-4222-8333-444455556666 daily at 02:30 on all hosts tagged prod-servers."
   expect_tool: schedule_test
   expect_args: { tag: prod-servers, schedule: daily }
+
+# Fleet-by-tag phrased as "hosts WITH TAG X" / "the X group" (not the tidy
+# "tagged X"). This is the exact phrasing that made a small model try to
+# enumerate hosts (list_agents/list_tasks) instead of passing `tag` to
+# run_test — see the Hermes live-validation finding. Regression guard.
+- prompt: "Run the ProjectAchilles test 3f2a9c10-1111-4222-8333-444455556666 on the hosts with tag group-b."
+  expect_tool: run_test
+  expect_args: { tag: group-b }
+  origin: projectachilles-actions
+
+- prompt: "run the same test 3f2a9c10-1111-4222-8333-444455556666 on host with tag group-b"
+  expect_tool: run_test
+  expect_args: { tag: group-b }
+  origin: projectachilles-actions
+
+- prompt: "Run test 3f2a9c10-1111-4222-8333-444455556666 on the group-b group of hosts."
+  expect_tool: run_test
+  expect_args: { tag: group-b }
+  origin: projectachilles-actions
