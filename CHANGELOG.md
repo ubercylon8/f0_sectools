@@ -6,6 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Hermes profile distribution** (`integrations/hermes/distribution/`) — a
+  git-installable Hermes Agent profile: `hermes profile install
+  ./integrations/hermes/distribution` stands up the f0_sectools security agent
+  (7 MCP servers + 22 skills + 4 personas + SOUL) from a checkout, with servers
+  and skills resolved at runtime from `${F0_SECTOOLS_DIR}` and secrets kept in
+  the per-platform `.env` files. Live-validated end to end (fresh install →
+  7 servers, 22 skills, a human-approved fleet-by-tag gated write).
+
+### Fixed
+
+- **ProjectAchilles fleet-by-tag routing** — sharpened `run_test`/`schedule_test`
+  tool descriptions so a small model runs a whole tag by passing `tag=…` instead
+  of trying to enumerate the hosts first (surfaced by the Hermes live run).
+- **Entra `list_privileged_role_assignments` output bounding** — returns one
+  bounded page (default 25) plus a "more available" note instead of ~100 findings
+  that overflowed a small model's runtime output cap; critical roles still first.
+
+### Security
+
+- The distribution ships the gated-write `f0-pa-actions` server
+  **`enabled: false`** (explicit opt-in), and both it and `config.example.yaml`
+  document that under Hermes v0.18.2 the model retains shell access — so the
+  gated-write confirmation is **not forge-resistant**; keep
+  `PROJECTACHILLES_ALLOW_WRITE=false` unless that risk is accepted.
+
 ## [0.2.0] — 2026-07-20
 
 Adds the **ProjectAchilles actions server** (the platform's first full gated-write

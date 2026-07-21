@@ -98,7 +98,7 @@ f0_sectools/
     tenable/                # exposure-posture-review, host-vulnerability-triage, scan-coverage-review
     cross-platform/         # multi-server correlation: incident triage, offensive<->defensive loop
   integrations/             # runtime-specific wiring (NO skill content — see rule 9)
-    hermes/                 # SOUL.md + config.example.yaml (mcp_servers, external skills dir, 4 personas)
+    hermes/                 # config.example.yaml (manual-merge) + distribution/ (installable profile: distribution.yaml + config.yaml + SOUL.md)
   prompts/                  # portable system prompts for non-skill UIs (LM Studio, Open WebUI)
   evals/                    # small-model tool-calling eval harness + task sets
   docs/
@@ -175,7 +175,7 @@ CISO, threat hunter, detection engineer, security engineer — each a behavioura
 
 ### Runtimes
 
-- **Hermes Agent** (primary) — skills-aware, native MCP, OpenAI-compatible backend. `integrations/hermes/` holds `SOUL.md` (base identity) and `config.example.yaml` (wires `mcp_servers`, points `skills.external_dirs` at this repo's `skills/` in place, defines the four personalities). See its README.
+- **Hermes Agent** (primary) — skills-aware, native MCP, OpenAI-compatible backend. `integrations/hermes/` holds `config.example.yaml` (the manual-merge template — wires `mcp_servers`, points `skills.external_dirs` at this repo's `skills/` in place, defines the four personalities) and **`distribution/`** — a **git-installable profile distribution** (`distribution.yaml` manifest + `config.yaml` + `SOUL.md`; `hermes profile install ./integrations/hermes/distribution`). NB: Hermes reads MCP servers from `config.yaml`'s `mcp_servers` (a distribution `mcp.json` is **not** auto-loaded by the CLI), and the gated-write server ships **disabled-by-default**. See its README + `docs/user-guide/runtimes/hermes.md`.
 - **Claude Code / other agentskills.io clients** — the same `skills/` load unmodified.
 - **pi** ([pi.dev](https://pi.dev/docs/latest)) — minimal agentskills.io terminal harness; the same `skills/` load unmodified. No native MCP — bridge our servers with the `pi-mcp-extension`. `integrations/pi/` holds `mcp.json`, `AGENTS.md` (base identity), and the four persona prompt templates. See `docs/user-guide/runtimes/pi.md`.
 - **Non-skill chat UIs (LM Studio, Open WebUI)** — no skill system; paste `prompts/f0-sectools-system-prompt.md` (persona-switchable) as the system prompt. See `docs/running-with-local-models.md`.
@@ -266,7 +266,7 @@ The four built servers (`defender`, `entra`, `limacharlie`, `projectachilles`) f
 8. **Smoke script** — `scripts/live_smoke_<platform>.py`.
 9. **Live-test** — create `.env.<platform>` at the repo root (gitignored), run the smoke script **with network/sandbox enabled**, and fix-forward field-name/shape mismatches (this step always finds 1–3 — mocks encode assumptions; the live API is truth). Mark live-validated once clean.
 10. **Skills** (after the server is validated) — three `SKILL.md` under `skills/<platform>/` (a posture/coverage skill, a gap/investigation skill, a platform-native one). Pick a default focus and say so. Wire into Hermes personas if relevant.
-11. **Docs & runtime wiring** — update the Platform Integrations table + Architecture tree here, the README status, the user-guide support matrix + workflows, **and the runtime integration templates** (`integrations/pi/mcp.json`, `integrations/hermes/config.example.yaml`). The templates are drift-guarded: `integrations/test_integrations_valid.py` derives the server list from the workspace `[project.scripts]` entries and fails CI if any template is missing a server, references a removed one, or leaks a real local path (placeholders only — operators render locally, e.g. `scripts/sync_pi_config.py`).
+11. **Docs & runtime wiring** — update the Platform Integrations table + Architecture tree here, the README status, the user-guide support matrix + workflows, **and the runtime integration templates** (`integrations/pi/mcp.json`, `integrations/hermes/config.example.yaml`, `integrations/hermes/distribution/config.yaml`). The templates are drift-guarded: `integrations/test_integrations_valid.py` derives the server list from the workspace `[project.scripts]` entries and fails CI if any template is missing a server, references a removed one, or leaks a real local path (placeholders only — operators render locally, e.g. `scripts/sync_pi_config.py`).
 12. **Verify & ship** — `uv run pytest`, `uv run ruff check .`, markdown link check, secret scan (no real `.env` staged), commit (conventional, with the Co-Authored-By/session trailers), **push only on explicit instruction**.
 
 **Auth models already handled** (none required a `core/` change): Microsoft Graph OAuth client-credentials, a synchronous vendor SDK (LimaCharlie), and a static `Bearer` REST key (ProjectAchilles). See the Quick Reference table for the one-liners.
