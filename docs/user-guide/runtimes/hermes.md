@@ -22,25 +22,77 @@ credentials + verify).
 
 ## Setup
 
-1. **Install Hermes** and point its model backend at your local OpenAI-compatible
-   endpoint (vLLM / llama.cpp) per the Hermes config docs — any compliant endpoint
-   works.
+Hermes profiles let you install f0_sectools in one command. The recommended path:
 
-2. **Base identity** — copy the shared identity into place:
+### Install the distribution (recommended)
+
+1. **Clone and sync** the f0_sectools repo:
    ```bash
-   cp integrations/hermes/SOUL.md ~/.hermes/SOUL.md
+   git clone https://github.com/ubercylon8/f0_sectools.git
+   cd f0_sectools
+   uv sync --all-packages
    ```
-   It defines the read-only / never-fabricate operating principles that always
-   apply.
 
-3. **Config** — merge [`integrations/hermes/config.example.yaml`](../../../integrations/hermes/config.example.yaml)
-   into `~/.hermes/config.yaml` and adjust the absolute paths (`which uv`, your
-   checkout). It wires:
-   - `mcp_servers` → `f0-defender`, `f0-entra` (stdio, launched via
-     `uv run --directory`). Add the other servers the same way
-     (`f0-limacharlie`, `f0-projectachilles`, `f0-intune`, `f0-tenable`).
-   - `skills.external_dirs` → this repo's `skills/` (loaded **in place** — no
-     copying, version-controlled with the code).
+2. **Create credential files** at the repo root, one per platform:
+   ```bash
+   # Copy the templates and fill in your API credentials
+   cp .env.defender.example .env.defender
+   cp .env.entra.example .env.entra
+   # ... repeat for limacharlie, projectachilles, intune, tenable
+   ```
+   No credentials are stored in Hermes — the MCP servers load them from these files.
+
+3. **Install the f0sectools profile** into Hermes:
+   ```bash
+   hermes profile install ./integrations/hermes/distribution
+   ```
+   This creates `~/.hermes/profiles/f0sectools/` with:
+   - `SOUL.md` (base identity: read-only / never-fabricate principles)
+   - `mcp.json` (seven MCP servers: defender, entra, limacharlie, projectachilles,
+     pa-actions, intune, tenable)
+   - `config.yaml` (personas, skills, security-only tool scoping)
+
+4. **Set the checkout path** in the profile's environment:
+   ```bash
+   echo "F0_SECTOOLS_DIR=$(pwd)" >> ~/.hermes/profiles/f0sectools/.env
+   ```
+   The MCP servers use this to load your `.env.<platform>` files and run tools via
+   `uv run --directory`.
+
+5. **Point Hermes at your model**:
+   ```bash
+   hermes -p f0sectools model
+   ```
+   Enter the URL of your local OpenAI-compatible endpoint (vLLM, llama.cpp, etc.).
+
+6. **Launch the chat**:
+   ```bash
+   f0sectools chat
+   ```
+   (Hermes alias for `hermes -p f0sectools chat`.)
+
+**Security notes:**
+- All tools are read-only by default; no gated write actions are exposed.
+- If you enable ProjectAchilles test execution, set `PROJECTACHILLES_ALLOW_WRITE=true`
+  in `.env.projectachilles` — gated writes still require human confirmation.
+
+### Manual config merge (alternative)
+
+If you prefer to configure Hermes manually:
+
+1. **Install Hermes** and point its model backend at your local OpenAI-compatible
+   endpoint (vLLM / llama.cpp) per the Hermes config docs.
+
+2. **Copy the base identity**:
+   ```bash
+   cp integrations/hermes/distribution/SOUL.md ~/.hermes/SOUL.md
+   ```
+
+3. **Merge the config** — combine [`integrations/hermes/config.example.yaml`](../../../integrations/hermes/config.example.yaml)
+   into your `~/.hermes/config.yaml`, adjusting paths as needed. It wires:
+   - `mcp_servers` → the seven f0_sectools servers (defender, entra, limacharlie,
+     projectachilles, pa-actions, intune, tenable), launched via `uv run --directory`.
+   - `skills.external_dirs` → this repo's `skills/` (loaded **in place**, version-controlled).
    - `agent.personalities` → `ciso`, `threat-hunter`, `detection-engineer`,
      `security-engineer`.
 
