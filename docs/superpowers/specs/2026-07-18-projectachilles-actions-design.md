@@ -220,7 +220,7 @@ failure becomes a finding, never an exception:
 ### Layer B — evals
 
 `evals/projectachilles-actions/tasks.yaml`, ≥1 task per tool, analyst
-phrasing ("run the T1110 brute-force test on host sbl7203", "pause the
+phrasing ("run the T1110 brute-force test on host web-01", "pause the
 nightly schedule"). Register in `evals/test_eval_coverage.py` `SERVERS` and
 `evals/run.py` `SERVER_MODULES`. Bump `evals/test_combined.py`: union tool
 count 38 → 44; per-server task-count assertion + comment. This server is the

@@ -99,7 +99,7 @@ def _resolve_sensor(
     """Resolve a short hostname or FQDN to live sensor records.
 
     The platform lookup is a PREFIX match; a hostname is only accepted at a dot
-    boundary ("sbl8042" -> "sbl8042.supernet.gov.do", but "sbl80" matches nothing
+    boundary ("web-01" -> "web-01.corp.local", but "web-0" matches nothing
     exactly). Returns (boundary_matches, all_prefix_matches) — the latter feeds
     the disambiguation finding when the boundary match is empty or ambiguous.
     """
@@ -280,8 +280,10 @@ _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _DOMAIN_RE = re.compile(r"^[A-Za-z0-9.*_-]+$")
 _TAG_RE = re.compile(r"^[A-Za-z0-9:._-]+$")
 # Windows account names: DOMAIN\user, "NT AUTHORITY\NETWORK SERVICE" (spaces),
-# machine accounts ending in $. Backslash allowed so a qualified name passes.
-_USERNAME_RE = re.compile(r"^[A-Za-z0-9 ._$\\-]+$")
+# machine accounts ending in $. At most ONE backslash, and only interior
+# (DOMAIN\user) — a leading/trailing/doubled backslash could escape the closing
+# quote of the LCQL literal it is spliced into.
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9 ._$-]+(\\[A-Za-z0-9 ._$-]+)?$")
 
 
 def _username_clause(username: str) -> str:
@@ -384,7 +386,7 @@ def query_telemetry(
                 )
             ]
         # Sensors register their FULL hostname (often an FQDN); the LCQL selector is
-        # an exact match, so a short name like "sbl8042" silently selects ZERO sensors
+        # an exact match, so a short name like "web-01" silently selects ZERO sensors
         # — indistinguishable from a quiet host (live repro: 0 vs 954 real events).
         # Resolve the name the same way get_sensor does (prefix lookup, accepted only
         # at a dot boundary) and scope by the STORED hostname, which also covers

@@ -33,7 +33,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **LimaCharlie hostname scoping selected zero sensors** — `query_telemetry`
   exact-matched the caller's hostname while sensors register FQDNs, so a short
-  name ("sbl8042") silently returned 0 events on a host with ~1,000 real events
+  name ("web-01") silently returned 0 events on a host with ~1,000 real events
   in the window. Hostnames are now resolved (prefix lookup, accepted at a dot
   boundary) to the stored hostname before scoping; an unmatched or ambiguous
   name returns an explicit finding instead of a silent empty result.
