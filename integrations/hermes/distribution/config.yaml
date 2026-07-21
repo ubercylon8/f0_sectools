@@ -52,6 +52,10 @@ mcp_servers:
     command: uv
     args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-tenable-mcp]
     enabled: true
+  f0-purview:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-purview-mcp]
+    enabled: true
 
 skills:
   external_dirs:

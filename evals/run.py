@@ -39,6 +39,7 @@ SERVER_MODULES = {
     "intune": "f0_intune_mcp.server",
     "tenable": "f0_tenable_mcp.server",
     "projectachilles-actions": "f0_pa_actions_mcp.server",
+    "purview": "f0_purview_mcp.server",
 }
 
 

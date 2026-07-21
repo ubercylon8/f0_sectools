@@ -89,6 +89,7 @@ f0_sectools/
     projectachilles-actions-mcp/   # built + live-validated — gated writes
     intune-mcp/             # built + live-validated
     tenable-mcp/            # built + live-validated
+    purview-mcp/            # built — live validation pending (data risk: DLP, insider risk, labels, audit)
     # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
     #          sophos, misp, thehive, opencti (see Platform Integrations)
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
@@ -248,6 +249,7 @@ Targets (build incrementally — the six built servers below are the reference i
 | ProjectAchilles | Security validation (F0RT1KA) | `pa_` API key (Bearer) | defense score, test results, weak techniques, agents | run/schedule/pause/cancel test (actions server) |
 | Intune | Identity/Endpoint mgmt | Entra app | devices, compliance, policies | — |
 | Tenable | Vulnerability Management | API key (access+secret) | vulnerabilities, assets, scans | — |
+| Microsoft Purview | Data security/compliance | Entra app | DLP alerts, insider-risk alerts, sensitivity labels, unified-audit search | — |
 
 Each integration follows `.env.<platform>` and the thin-server pattern. Read tools first; gated writes only where operationally valuable and clearly worth the risk.
 

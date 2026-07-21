@@ -1,0 +1,31 @@
+# Small-model tool-calling eval task set — Purview server.
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every Purview tool has at least one task.
+
+- prompt: "How much data-loss pressure are we under this week?"
+  expect_tool: get_dlp_summary
+
+- prompt: "Give me the DLP alert rollup for the last 24 hours."
+  expect_tool: get_dlp_summary
+  expect_args_contains: { hours_back: 24 }
+
+- prompt: "Show me high-severity DLP alerts."
+  expect_tool: list_dlp_alerts
+  expect_args_contains: { severity_min: high }
+
+- prompt: "List recent insider risk alerts."
+  expect_tool: list_insider_risk_alerts
+
+- prompt: "What sensitivity labels do we have defined?"
+  expect_tool: list_sensitivity_labels
+
+- prompt: "Who deleted files in SharePoint in the last 24 hours?"
+  expect_tool: search_audit_log
+
+- prompt: "Search the audit log for activity by jsmith@corp.local today."
+  expect_tool: search_audit_log
+  expect_args_contains: { user: "jsmith@corp.local" }
+
+- prompt: "Get the results of audit query q-123."
+  expect_tool: get_audit_results
+  expect_args_contains: { audit_query_id: "q-123" }

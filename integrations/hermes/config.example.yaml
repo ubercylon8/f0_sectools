@@ -41,6 +41,9 @@ mcp_servers:
   f0-tenable:
     command: "uv"
     args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-tenable-mcp"]
+  f0-purview:
+    command: "uv"
+    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-purview-mcp"]
 
 # 2) Load the f0_sectools skills straight from the repo (no copying).
 skills:

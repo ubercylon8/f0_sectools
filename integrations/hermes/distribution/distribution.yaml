@@ -1,5 +1,5 @@
 name: f0sectools
-version: 0.1.0
+version: 0.2.0
 description: >
   F0RT1KA security-operations agent — read-only SOC/IR/CISO tooling over
   Microsoft Defender, Entra ID, LimaCharlie, ProjectAchilles, Intune, and
