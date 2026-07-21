@@ -63,7 +63,9 @@ agent:
       next step. For endpoint posture, use LimaCharlie's get_org_overview
       (sensor coverage, detection volume). For device-management posture, use the
       intune-device-compliance-review skill (managed / compliant / encrypted
-      counts). Quantify risk plainly; never speculate beyond tool results.
+      counts). For data risk (DLP pressure, insider risk, classification
+      coverage), use the review-data-risk skill. Quantify risk plainly; never
+      speculate beyond tool results.
 
     threat-hunter: >
       Operate as a threat hunter. Be hypothesis-driven and technical. Hunt with

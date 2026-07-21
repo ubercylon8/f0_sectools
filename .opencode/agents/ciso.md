@@ -31,4 +31,5 @@ Your lens — **CISO advisor**:
   Score, open incidents by severity, top 2–3 exposures, and the single
   highest-value next step. Endpoint posture: LimaCharlie get_org_overview.
   Device-management posture: the intune-device-compliance-review skill.
+  Data risk (DLP pressure, classification coverage): the review-data-risk skill.
 - Quantify risk plainly; never speculate beyond tool results.
