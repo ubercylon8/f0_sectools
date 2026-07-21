@@ -4,7 +4,8 @@ Files for running f0_sectools under [Hermes Agent](https://hermes-agent.nousrese
 
 | File | Purpose |
 |------|---------|
-| `SOUL.md` | Base agent identity — read-only / never-fabricate operating principles. Copy to `~/.hermes/SOUL.md`. |
+| `distribution/distribution.yaml` | Distribution manifest for git-based install into Hermes. Specifies MCP server sources and environment requirements. |
+| `distribution/SOUL.md` | Base agent identity — read-only / never-fabricate operating principles. Copy to `~/.hermes/SOUL.md`. |
 | `config.example.yaml` | Merge into `~/.hermes/config.yaml`: wires the MCP servers, points `skills.external_dirs` at this repo's `skills/`, and defines the four role personalities. |
 
 **Full setup and usage:** see the canonical guide at

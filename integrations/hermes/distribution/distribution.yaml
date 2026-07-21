@@ -1,0 +1,17 @@
+name: f0sectools
+version: 0.1.0
+description: >
+  F0RT1KA security-operations agent — read-only SOC/IR/CISO tooling over
+  Microsoft Defender, Entra ID, LimaCharlie, ProjectAchilles, Intune, and
+  Tenable, driven by a local small model. Gated writes for ProjectAchilles
+  validation runs (flag + human confirmation + audit).
+author: F0RT1KA Contributors
+license: Apache-2.0
+hermes_requires: ">=0.18.0"
+env_requires:
+  - name: F0_SECTOOLS_DIR
+    description: >
+      Absolute path to your uv-synced f0_sectools checkout. The MCP servers run
+      from here (uv run --directory) and load per-platform secrets from its
+      .env.<platform> files — no credentials are stored in Hermes.
+    required: true

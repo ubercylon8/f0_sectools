@@ -61,3 +61,16 @@ def test_templates_use_placeholder_paths_only():
             "(rendering happens locally, e.g. scripts/sync_pi_config.py)"
         )
         assert PLACEHOLDER in text, f"{rel} lost the {PLACEHOLDER} placeholder"
+
+
+def test_distribution_manifest_valid():
+    manifest = yaml.safe_load(
+        (ROOT / "integrations/hermes/distribution/distribution.yaml").read_text(encoding="utf-8")
+    )
+    assert manifest["name"] == "f0sectools"
+    assert manifest.get("version")
+    assert manifest.get("hermes_requires")
+    env_names = {e["name"] for e in manifest.get("env_requires", [])}
+    assert "F0_SECTOOLS_DIR" in env_names, "manifest must document F0_SECTOOLS_DIR"
+    # No platform secrets are ever documented as required env (they live in .env.<platform>).
+    assert not (env_names & {"DEFENDER_CLIENT_SECRET", "PROJECTACHILLES_API_KEY", "LC_API_KEY"})
