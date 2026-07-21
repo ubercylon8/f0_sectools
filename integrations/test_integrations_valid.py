@@ -66,13 +66,18 @@ def test_every_server_wired_into_distribution():
 
 
 def test_templates_use_placeholder_paths_only():
-    for rel in ("integrations/pi/mcp.json", "integrations/hermes/config.example.yaml", "integrations/hermes/distribution/mcp.json"):
+    for rel in (
+        "integrations/pi/mcp.json",
+        "integrations/hermes/config.example.yaml",
+        "integrations/hermes/distribution/mcp.json",
+    ):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "/home/" not in text, (
             f"{rel} leaks a real local path — use {PLACEHOLDER} or ${{F0_SECTOOLS_DIR}} "
             "(rendering happens locally, e.g. scripts/sync_pi_config.py)"
         )
-        # For distribution, accept ${F0_SECTOOLS_DIR} as the placeholder; for others, accept /ABSOLUTE/PATH/TO/sec-tools
+        # For distribution, accept ${F0_SECTOOLS_DIR} placeholder; for others, accept
+        # /ABSOLUTE/PATH/TO/sec-tools
         if rel == "integrations/hermes/distribution/mcp.json":
             assert "${F0_SECTOOLS_DIR}" in text, f"{rel} lost the ${{F0_SECTOOLS_DIR}} placeholder"
         else:
