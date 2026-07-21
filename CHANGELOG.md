@@ -16,8 +16,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the per-platform `.env` files. Live-validated end to end (fresh install →
   7 servers, 22 skills, a human-approved fleet-by-tag gated write).
 
+- **LimaCharlie sleeper visibility** — sensor tags are now surfaced:
+  `get_sensor` lists them (flagging dormant `lc:sleeper` sensors, which collect
+  no telemetry by design), a zero-event `query_telemetry` result diagnoses the
+  host's state (dormant / offline / online-but-quiet) instead of returning a
+  bare count, and `get_org_overview` reports a dormant-sleeper census (on the
+  validation fleet: 1,173 of 1,247 sensors).
+
 ### Fixed
 
+- **LimaCharlie hostname scoping selected zero sensors** — `query_telemetry`
+  exact-matched the caller's hostname while sensors register FQDNs, so a short
+  name ("sbl8042") silently returned 0 events on a host with ~1,000 real events
+  in the window. Hostnames are now resolved (prefix lookup, accepted at a dot
+  boundary) to the stored hostname before scoping; an unmatched or ambiguous
+  name returns an explicit finding instead of a silent empty result.
 - **ProjectAchilles fleet-by-tag routing** — sharpened `run_test`/`schedule_test`
   tool descriptions so a small model runs a whole tag by passing `tag=…` instead
   of trying to enumerate the hosts first (surfaced by the Hermes live run).

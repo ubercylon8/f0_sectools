@@ -30,6 +30,10 @@ from .errors import map_lc_error
 _MAX_ITEMS = 50
 _OVERVIEW_SCAN = 1000
 
+# Sensors carrying this tag are DORMANT: they stay enrolled/online but collect no
+# telemetry. Surfacing it is the only way to tell "dormant by design" from "quiet".
+_SLEEPER_TAG = "lc:sleeper"
+
 # LimaCharlie platform architecture constants -> human names.
 _PLATFORMS = {
     0x10000000: "windows",
@@ -54,28 +58,59 @@ def _platform_name(value: Any) -> str:
     return str(value)
 
 
-def _sensor_findings(sensors: list[dict[str, Any]], cap: int = _MAX_ITEMS) -> list[Finding]:
+def _sensor_findings(
+    sensors: list[dict[str, Any]],
+    cap: int = _MAX_ITEMS,
+    tags_by_sid: dict[str, list[str]] | None = None,
+) -> list[Finding]:
     out: list[Finding] = []
     for s in sensors[: min(cap, _MAX_ITEMS)]:
         host = _first(s, "hostname", "host_name", default="unknown")
         online = bool(_first(s, "is_online", "online", default=False))
         plat = _platform_name(_first(s, "platform", "plat", default="?"))
+        evidence = [
+            Evidence(key="platform", value=str(plat)),
+            Evidence(key="online", value=str(online)),
+        ]
+        state = "online" if online else "offline"
+        tags = (tags_by_sid or {}).get(str(_first(s, "sid", default="")))
+        if tags is not None:
+            evidence.append(Evidence(key="tags", value=", ".join(tags) or "none"))
+            if _SLEEPER_TAG in tags:
+                state += ", dormant sleeper — collects no telemetry"
         out.append(
             Finding(
                 source="limacharlie",
                 finding_type=FindingType.posture,
                 severity=Severity.info,
-                title=f"Sensor: {host} ({'online' if online else 'offline'})",
+                title=f"Sensor: {host} ({state})",
                 entity=Entity(
                     kind=EntityKind.host, id=str(_first(s, "sid", default="")), name=str(host)
                 ),
-                evidence=[
-                    Evidence(key="platform", value=str(plat)),
-                    Evidence(key="online", value=str(online)),
-                ],
+                evidence=evidence,
             )
         )
     return out
+
+
+def _resolve_sensor(
+    lc: Any, hostname: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Resolve a short hostname or FQDN to live sensor records.
+
+    The platform lookup is a PREFIX match; a hostname is only accepted at a dot
+    boundary ("sbl8042" -> "sbl8042.supernet.gov.do", but "sbl80" matches nothing
+    exactly). Returns (boundary_matches, all_prefix_matches) — the latter feeds
+    the disambiguation finding when the boundary match is empty or ambiguous.
+    """
+    prefix = [s for s in (lc.find_sensor(hostname) or []) if not s.get("is_del")]
+    exact = [
+        s
+        for s in prefix
+        if s.get("hostname") == hostname
+        or str(s.get("hostname", "")).startswith(hostname + ".")
+    ]
+    return exact, prefix
 
 
 def list_sensors(lc: Any, online_only: bool = False, limit: int = _MAX_ITEMS) -> list[Finding]:
@@ -110,7 +145,20 @@ def get_sensor(lc: Any, hostname: str) -> list[Finding]:
                 title=f"No sensor found for hostname '{hostname}'",
             )
         ]
-    return _sensor_findings(sensors)
+    # Tags need one extra call per sensor; get_sensor returns few, so bound at 5.
+    # A tags failure degrades to rendering without tags, never to an exception.
+    tags_by_sid: dict[str, list[str]] = {}
+    for s in sensors[:5]:
+        sid = str(_first(s, "sid", default=""))
+        if not sid:
+            continue
+        try:
+            fetched = lc.get_sensor_tags(sid)
+        except Exception:  # noqa: BLE001 — tags are enrichment, not the record
+            fetched = None
+        if fetched is not None:
+            tags_by_sid[sid] = fetched
+    return _sensor_findings(sensors, tags_by_sid=tags_by_sid)
 
 
 def list_dr_rules(lc: Any, namespace: str = "general", limit: int = _MAX_ITEMS) -> list[Finding]:
@@ -245,6 +293,7 @@ def query_telemetry(
     # value ("", which a small model may emit for an optional arg) means unset.
     scope_host = hostname if (hostname and lcql is None) else None
     scope_domain: str | None = None  # set to the base domain actually queried, below
+    resolved_sensor: dict[str, Any] | None = None  # the record scoping resolved to
     if not lcql:
         if hostname and not _HOSTNAME_RE.match(hostname):
             return [
@@ -270,7 +319,79 @@ def query_telemetry(
                     ),
                 )
             ]
-        sel = f'hostname == "{hostname}"' if hostname else "*"
+        # Sensors register their FULL hostname (often an FQDN); the LCQL selector is
+        # an exact match, so a short name like "sbl8042" silently selects ZERO sensors
+        # — indistinguishable from a quiet host (live repro: 0 vs 954 real events).
+        # Resolve the name the same way get_sensor does (prefix lookup, accepted only
+        # at a dot boundary) and scope by the STORED hostname, which also covers
+        # re-enrolled duplicate sensor records sharing that hostname.
+        if scope_host:
+            try:
+                exact, prefix = _resolve_sensor(lc, scope_host)
+            except Exception as e:
+                finding = map_lc_error(e, "LimaCharlie sensor lookup", "sensor.list")
+                if finding:
+                    return [finding]
+                raise
+            hostnames = sorted({str(s["hostname"]) for s in exact if s.get("hostname")})
+            if len(hostnames) == 1:
+                # The STORED hostname is live platform data (agent-side enrollment),
+                # not the validated caller argument — it must pass the same LCQL
+                # string-literal safety check before it is spliced into the selector.
+                if not _HOSTNAME_RE.match(hostnames[0]):
+                    return [
+                        Finding(
+                            source="limacharlie",
+                            finding_type=FindingType.posture,
+                            severity=Severity.info,
+                            title=f"Stored hostname for '{scope_host}' contains "
+                            "unsupported characters — telemetry query not run",
+                            recommended_action=RecommendedAction(
+                                summary="Inspect the sensor with get_sensor; its "
+                                "enrolled hostname cannot be queried safely.",
+                            ),
+                        )
+                    ]
+                # Prefer an online record for the later state/tags diagnosis.
+                resolved_sensor = next(
+                    (s for s in exact if _first(s, "is_online", "online", default=False)),
+                    exact[0],
+                )
+                scope_host = hostnames[0]
+            else:
+                candidates = sorted(
+                    {str(s["hostname"]) for s in prefix if s.get("hostname")}
+                )[:5]
+                if not candidates:
+                    return [
+                        Finding(
+                            source="limacharlie",
+                            finding_type=FindingType.posture,
+                            severity=Severity.info,
+                            title=f"No sensor matched hostname '{scope_host}' — "
+                            "telemetry query not run",
+                            recommended_action=RecommendedAction(
+                                summary="Check the spelling, or use list_sensors to "
+                                "see enrolled hostnames.",
+                            ),
+                        )
+                    ]
+                return [
+                    Finding(
+                        source="limacharlie",
+                        finding_type=FindingType.posture,
+                        severity=Severity.info,
+                        title=f"Hostname '{scope_host}' matches {len(candidates)} sensors "
+                        "— telemetry query not run",
+                        evidence=[
+                            Evidence(key="matching_hostnames", value=", ".join(candidates))
+                        ],
+                        recommended_action=RecommendedAction(
+                            summary="Re-run with one of the matching hostnames.",
+                        ),
+                    )
+                ]
+        sel = f'hostname == "{scope_host}"' if scope_host else "*"
         td = _time_descriptor(hours_back)
         # A leading "*." is a wildcard; strip it to the base domain. A base that is
         # empty or all-wildcard (domain="", "*", "*.") is NOT a meaningful filter —
@@ -317,22 +438,55 @@ def query_telemetry(
             value=f"boundary-anchored: exact {scope_domain} or a subdomain of it "
                   f"(lookalikes like {scope_domain}.evil.net are excluded)",
         ))
+    # A zero-result on a resolved host needs a DIAGNOSIS, not a bare count: on this
+    # class of fleet most sensors are lc:sleeper-dormant, and without saying so the
+    # agent invents wrong explanations ("recently rebooted"). Tags cost one extra
+    # call, spent only on the zero-result path; a tags failure just skips the note.
+    action = "Review the events; refine the hunt/hostname to investigate further."
+    title_note = ""
+    if total == 0 and resolved_sensor is not None:
+        online = bool(_first(resolved_sensor, "is_online", "online", default=False))
+        summary_evidence.append(Evidence(key="sensor_online", value=str(online)))
+        tags: list[str] | None
+        try:
+            tags = lc.get_sensor_tags(str(_first(resolved_sensor, "sid", default="")))
+        except Exception:  # noqa: BLE001 — diagnosis is best-effort enrichment
+            tags = None
+        if tags is not None:
+            summary_evidence.append(Evidence(key="tags", value=", ".join(tags) or "none"))
+        if tags is not None and _SLEEPER_TAG in tags:
+            title_note = " — host is dormant (lc:sleeper)"
+            action = (
+                "This sensor is tagged lc:sleeper: it is dormant and collects no "
+                "telemetry by design. Remove the tag in LimaCharlie to resume collection."
+            )
+        elif not online:
+            title_note = " — sensor is offline"
+            action = "The sensor is offline and reporting no telemetry; check the host."
+        else:
+            action = (
+                "No events in this window; the sensor is online. Widen hours_back "
+                "or try another hunt preset."
+            )
     out: list[Finding] = [
         Finding(
             source="limacharlie",
             finding_type=FindingType.hunt_result,
             severity=Severity.info,
             title=f"{total} telemetry event(s){scope}"
-            + (f" (showing first {limit})" if total > limit else ""),
+            + (f" (showing first {limit})" if total > limit else "")
+            + title_note,
             entity=(
-                Entity(kind=EntityKind.host, id=str(scope_host), name=str(scope_host))
+                Entity(
+                    kind=EntityKind.host,
+                    id=str(_first(resolved_sensor or {}, "sid", default=scope_host)),
+                    name=str(scope_host),
+                )
                 if scope_host
                 else None
             ),
             evidence=summary_evidence,
-            recommended_action=RecommendedAction(
-                summary="Review the events; refine the hunt/hostname to investigate further."
-            ),
+            recommended_action=RecommendedAction(summary=action),
         )
     ]
     for ev in events[:limit]:
@@ -378,7 +532,28 @@ def get_org_overview(lc: Any) -> list[Finding]:
     online = sum(1 for s in sensors if bool(_first(s, "is_online", "online", default=False)))
     n_rules = len(rules) if isinstance(rules, dict) else 0
     name = _first(info, "name", "oid", default="organization")
+    # Dormant (lc:sleeper) sensors collect NO telemetry — on some fleets that is
+    # most of the org, which reframes every other number here. Best-effort: a
+    # census failure (e.g. missing tag permission) just omits the line.
+    sleepers: int | None
+    try:
+        sleepers = lc.count_sensors_with_tag(_SLEEPER_TAG)
+    except Exception:  # noqa: BLE001 — census is enrichment, not the overview
+        sleepers = None
     title = f"Org '{name}': {len(sensors)} sensors, {len(detections)} detections (24h)"
+    if sleepers:
+        title = (
+            f"Org '{name}': {len(sensors)} sensors ({sleepers} dormant sleepers), "
+            f"{len(detections)} detections (24h)"
+        )
+    evidence = [
+        Evidence(key="sensors_total", value=str(len(sensors))),
+        Evidence(key="sensors_online", value=str(online)),
+        Evidence(key="dr_rules", value=str(n_rules)),
+        Evidence(key="detections_24h", value=str(len(detections))),
+    ]
+    if sleepers is not None:
+        evidence.insert(2, Evidence(key="sensors_dormant_sleepers", value=str(sleepers)))
     return [
         Finding(
             source="limacharlie",
@@ -386,15 +561,15 @@ def get_org_overview(lc: Any) -> list[Finding]:
             severity=Severity.info,
             title=title,
             entity=Entity(kind=EntityKind.tenant, id=str(_first(info, "oid", default="org"))),
-            evidence=[
-                Evidence(key="sensors_total", value=str(len(sensors))),
-                Evidence(key="sensors_online", value=str(online)),
-                Evidence(key="dr_rules", value=str(n_rules)),
-                Evidence(key="detections_24h", value=str(len(detections))),
-            ],
+            evidence=evidence,
             recommended_action=RecommendedAction(
                 summary="Review online vs offline sensors and recent activity; "
                 "investigate a notable endpoint, or check detection coverage."
+                + (
+                    " Note: dormant (lc:sleeper) sensors report no telemetry."
+                    if sleepers
+                    else ""
+                )
             ),
         )
     ]

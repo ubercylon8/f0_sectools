@@ -34,7 +34,16 @@ class FakeClient:
 
     def find_sensor(self, hostname):
         self._maybe_raise("find_sensor")
-        return self._data.get("find_sensor", {})
+        return self._data.get("find_sensor", [])
+
+    def get_sensor_tags(self, sid):
+        self._maybe_raise("get_sensor_tags")
+        self.tags_calls = getattr(self, "tags_calls", []) + [sid]
+        return self._data.get("tags", {}).get(sid, [])
+
+    def count_sensors_with_tag(self, tag):
+        self._maybe_raise("count_sensors_with_tag")
+        return self._data.get("tag_count", 0)
 
     def list_dr_rules(self, namespace="general"):
         self._maybe_raise("list_dr_rules")
@@ -111,6 +120,29 @@ def test_get_sensor_not_found():
     assert "No sensor found" in findings[0].title
 
 
+def test_get_sensor_surfaces_tags_and_sleeper_state():
+    # Tags live behind a separate endpoint; without them a dormant (lc:sleeper)
+    # host is indistinguishable from a quiet one.
+    lc = FakeClient(
+        find_sensor=[{"sid": "s1", "hostname": "sbl4825.supernet.gov.do",
+                      "plat": 0x10000000, "is_online": True}],
+        tags={"s1": ["lc:sleeper", "prueba"]},
+    )
+    findings = tools.get_sensor(lc, "sbl4825")
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert "lc:sleeper" in ev["tags"] and "prueba" in ev["tags"]
+    assert "dormant" in findings[0].title.lower()
+
+
+def test_get_sensor_tags_failure_degrades_gracefully():
+    lc = FakeClient(
+        find_sensor=[{"sid": "s1", "hostname": "web-01", "is_online": True}],
+        raise_on={"get_sensor_tags": RateLimitError("slow down")},
+    )
+    findings = tools.get_sensor(lc, "web-01")
+    assert findings[0].entity.name == "web-01"  # record still rendered, tags just absent
+
+
 # Live shape: lc.query returns result ENVELOPES; the events are nested under `.rows`.
 _ENVELOPE = [{
     "searchResultId": "1", "type": "events",
@@ -152,10 +184,153 @@ def test_query_telemetry_scopes_preset_to_hostname():
             captured["lcql"] = lcql
             return [{"rows": []}]
 
-    tools.query_telemetry(_Cap(), hunt="new_processes", hostname="sbl7203.supernet.gov.do")
+    lc = _Cap(find_sensor=[
+        {"sid": "s1", "hostname": "sbl7203.supernet.gov.do", "is_online": True},
+    ])
+    tools.query_telemetry(lc, hunt="new_processes", hostname="sbl7203.supernet.gov.do")
     assert 'hostname == "sbl7203.supernet.gov.do"' in captured["lcql"]
     assert "NEW_PROCESS" in captured["lcql"]
     assert " * " in f" {captured['lcql']} " or "|" in captured["lcql"]  # still valid LCQL shape
+
+
+def test_query_telemetry_resolves_short_hostname_to_full():
+    # Sensors register FQDNs (sbl8042.supernet.gov.do); operators & models say
+    # "sbl8042". Exact-matching the short name selected ZERO sensors and returned
+    # 0 events on a host with ~1000 real events (live repro 2026-07-21). The tool
+    # must resolve the short name to the stored hostname before scoping.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": [{"data": {"event/FILE_PATH": "C:\\a.exe"}}]}]
+
+    lc = _Cap(find_sensor=[
+        {"sid": "s1", "hostname": "sbl8042.supernet.gov.do", "is_online": True},
+    ])
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="sbl8042")
+    assert 'hostname == "sbl8042.supernet.gov.do"' in captured["lcql"]
+    # Scope label and entity carry the RESOLVED name, so the answer names the real host.
+    assert "sbl8042.supernet.gov.do" in findings[0].title
+    assert findings[0].entity.name == "sbl8042.supernet.gov.do"
+
+
+def test_query_telemetry_unmatched_hostname_says_so():
+    # No sensor matches -> an explicit finding, never a silent "0 events".
+    lc = FakeClient(find_sensor=[])
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="ghost-99")
+    assert findings[0].finding_type.value == "posture"
+    assert "no sensor" in findings[0].title.lower()
+    assert "ghost-99" in findings[0].title
+
+
+def test_query_telemetry_ambiguous_hostname_lists_candidates():
+    # A partial prefix matching several distinct hosts must ask for disambiguation,
+    # not silently pick one (or query none).
+    lc = FakeClient(find_sensor=[
+        {"sid": "s1", "hostname": "sbl4825.supernet.gov.do"},
+        {"sid": "s2", "hostname": "sbl4859.supernet.gov.do"},
+    ])
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="sbl48")
+    assert findings[0].finding_type.value == "posture"
+    title_and_evidence = findings[0].title + " ".join(e.value for e in findings[0].evidence)
+    assert "sbl4825.supernet.gov.do" in title_and_evidence
+    assert "sbl4859.supernet.gov.do" in title_and_evidence
+
+
+def test_query_telemetry_multi_sid_same_hostname_is_not_ambiguous():
+    # Re-enrolled agents leave several sensor records with the SAME hostname —
+    # hostname-scoping covers them all; that's a resolution, not an ambiguity.
+    captured = {}
+
+    class _Cap(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            captured["lcql"] = lcql
+            return [{"rows": []}]
+
+    lc = _Cap(find_sensor=[
+        {"sid": "s1", "hostname": "web-01.corp.local", "is_online": False},
+        {"sid": "s2", "hostname": "web-01.corp.local", "is_online": True},
+    ])
+    tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
+    assert 'hostname == "web-01.corp.local"' in captured["lcql"]
+
+
+def test_query_telemetry_zero_events_on_sleeper_host_says_dormant():
+    # 1,173 of 1,247 sensors in the live org are lc:sleeper-tagged (dormant by
+    # design). A zero-result on such a host must SAY so — the agent otherwise
+    # invents wrong explanations ("recently rebooted").
+    lc = FakeClient(
+        find_sensor=[{"sid": "s1", "hostname": "sbl4825.supernet.gov.do", "is_online": True}],
+        tags={"s1": ["lc:sleeper"]},
+        query=[{"rows": []}],
+    )
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="sbl4825")
+    assert "dormant" in findings[0].title.lower()
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert "lc:sleeper" in ev["tags"]
+    assert "sleeper" in findings[0].recommended_action.summary.lower()
+
+
+def test_query_telemetry_zero_events_active_host_notes_online_state():
+    lc = FakeClient(
+        find_sensor=[{"sid": "s1", "hostname": "web-01.corp.local", "is_online": True}],
+        tags={"s1": ["prueba"]},
+        query=[{"rows": []}],
+    )
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
+    assert "dormant" not in findings[0].title.lower()
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["sensor_online"] == "True"
+
+
+def test_query_telemetry_skips_tags_lookup_when_events_found():
+    # The tags call is diagnosis for a zero-result; don't spend an API call when
+    # events came back.
+    lc = FakeClient(
+        find_sensor=[{"sid": "s1", "hostname": "web-01.corp.local", "is_online": True}],
+        query=[{"rows": [{"data": {"event/FILE_PATH": "C:\\a.exe"}}]}],
+    )
+    tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
+    assert getattr(lc, "tags_calls", []) == []
+
+
+def test_query_telemetry_tags_lookup_failure_keeps_finding():
+    # A tags-endpoint failure must not break the zero-result finding (Rule: every
+    # failure becomes a finding, never an exception).
+    lc = FakeClient(
+        find_sensor=[{"sid": "s1", "hostname": "web-01.corp.local", "is_online": True}],
+        raise_on={"get_sensor_tags": PermissionDeniedError("denied")},
+        query=[{"rows": []}],
+    )
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
+    assert findings[0].finding_type.value == "hunt_result"
+    assert "0 telemetry event(s)" in findings[0].title
+
+
+def test_query_telemetry_rejects_unsafe_stored_hostname():
+    # The RESOLVED hostname comes from live platform data (agent-side enrollment),
+    # not the validated caller argument — it must pass the same LCQL-safety check
+    # before being spliced into the selector string, else a stored hostname with a
+    # quote breaks out of the string literal (CC review, PR #58).
+    class _NeverQuery(FakeClient):
+        def query(self, lcql, start, end, limit=50):
+            raise AssertionError("query must not run with an unsafe stored hostname")
+
+    lc = _NeverQuery(find_sensor=[
+        {"sid": "s1", "hostname": 'web-01.evil" | x', "is_online": True},
+    ])
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
+    assert findings[0].finding_type.value == "posture"
+    assert "hostname" in findings[0].title.lower()
+
+
+def test_query_telemetry_resolution_ignores_deleted_sensors():
+    lc = FakeClient(find_sensor=[
+        {"sid": "s1", "hostname": "web-01.corp.local", "is_del": True},
+    ])
+    findings = tools.query_telemetry(lc, hunt="new_processes", hostname="web-01")
+    assert "no sensor" in findings[0].title.lower()
 
 
 def test_query_telemetry_rejects_injection_in_hostname():
@@ -267,13 +442,14 @@ def test_query_telemetry_domain_filter_routes_to_dns_anchored():
             captured["lcql"] = lcql
             return [{"rows": []}]
 
-    tools.query_telemetry(_Cap(), hostname="web-01", domain="microsoft.com")
+    lc = _Cap(find_sensor=[{"sid": "s1", "hostname": "web-01.corp.local", "is_online": True}])
+    tools.query_telemetry(lc, hostname="web-01", domain="microsoft.com")
     q = captured["lcql"]
     assert "DNS_REQUEST" in q
     assert 'event/DOMAIN_NAME is "microsoft.com"' in q
     assert 'event/DOMAIN_NAME ends with ".microsoft.com"' in q
     assert 'contains "microsoft.com"' not in q  # anchored, not substring — no lookalike FPs
-    assert 'hostname == "web-01"' in q
+    assert 'hostname == "web-01.corp.local"' in q  # resolved, dot-boundary-safe
 
 
 def test_query_telemetry_domain_strips_leading_wildcard():
@@ -377,6 +553,28 @@ def test_get_org_overview_maps():
     findings = tools.get_org_overview(lc)
     assert findings[0].finding_type.value == "posture"
     assert "2" in findings[0].title or any("2" in e.value for e in findings[0].evidence)
+
+
+def test_get_org_overview_reports_sleeper_census():
+    # Live org: 1,173 of 1,247 sensors are lc:sleeper-dormant — the single most
+    # important posture fact about that fleet. The overview must surface it.
+    lc = FakeClient(
+        sensors=[{"sid": "s1", "is_online": True}, {"sid": "s2", "is_online": True}],
+        tag_count=1,
+    )
+    findings = tools.get_org_overview(lc)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["sensors_dormant_sleepers"] == "1"
+
+
+def test_get_org_overview_survives_tag_census_failure():
+    lc = FakeClient(
+        sensors=[{"sid": "s1", "is_online": True}],
+        raise_on={"count_sensors_with_tag": PermissionDeniedError("denied")},
+    )
+    findings = tools.get_org_overview(lc)
+    assert findings[0].finding_type.value == "posture"  # overview still renders
+    assert "sensors_dormant_sleepers" not in {e.key for e in findings[0].evidence}
 
 
 def test_list_sensors_permission_denied_degrades():
