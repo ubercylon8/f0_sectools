@@ -17,6 +17,7 @@ members = [
     "f0-limacharlie-mcp",
     "f0-projectachilles-actions-mcp",
     "f0-projectachilles-mcp",
+    "f0-purview-mcp",
     "f0-sectools",
     "f0-sectools-core",
     "f0-tenable-mcp",
@@ -432,6 +433,23 @@ requires-dist = [
 name = "f0-projectachilles-mcp"
 version = "0.0.1"
 source = { editable = "servers/projectachilles-mcp" }
+dependencies = [
+    { name = "f0-sectools-core" },
+    { name = "httpx" },
+    { name = "mcp" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "f0-sectools-core", editable = "core" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "mcp", specifier = ">=1.0" },
+]
+
+[[package]]
+name = "f0-purview-mcp"
+version = "0.0.1"
+source = { editable = "servers/purview-mcp" }
 dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },

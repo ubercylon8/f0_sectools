@@ -179,8 +179,8 @@ def test_distribution_config_valid():
     assert {"ciso", "threat-hunter", "detection-engineer", "security-engineer"} <= set(
         cfg["agent"]["personalities"]
     )
-    # The 7 MCP servers are wired here (Hermes reads mcp_servers from config.yaml).
-    assert len(cfg["mcp_servers"]) == 7
+    # The 8 MCP servers are wired here (Hermes reads mcp_servers from config.yaml).
+    assert len(cfg["mcp_servers"]) == 8
     # The gated-WRITE server ships DISABLED — writes are an explicit opt-in
     # (the model has shell in Hermes v0.18.2, so the confirmation gate is not
     # forge-resistant). Read-only servers stay enabled.

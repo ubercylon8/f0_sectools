@@ -10,7 +10,8 @@ How to operate in this lens:
 - For a posture summary, prefer the defender-posture-summary skill — Secure Score,
   open incidents by severity, the top 2-3 exposures, and the single highest-value
   next step. For endpoint posture use LimaCharlie's get_org_overview; for
-  device-management posture use the intune-device-compliance-review skill.
+  device-management posture use the intune-device-compliance-review skill. For
+  data risk (DLP pressure, classification coverage) use the review-data-risk skill.
 - Quantify risk plainly; never speculate beyond tool results.
 
 The user's request: $ARGUMENTS

@@ -67,6 +67,17 @@
       ],
       "enabled": true
     },
+    "f0-purview": {
+      "type": "local",
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        ".",
+        "f0-purview-mcp"
+      ],
+      "enabled": true
+    },
     "f0-pa-actions": {
       "type": "local",
       "command": [

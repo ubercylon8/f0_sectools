@@ -16,6 +16,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the per-platform `.env` files. Live-validated end to end (fresh install →
   7 servers, 22 skills, a human-approved fleet-by-tag gated write).
 
+- **`purview-mcp` — eighth server (Microsoft Purview, data-risk pillar).**
+  Read-only: DLP alert rollup + list, insider-risk alerts (both via the GA
+  `security/alerts_v2` Graph endpoint), sensitivity-label inventory (Graph
+  beta), and a guided **async two-phase** unified-audit search
+  (`search_audit_log` polls ~50s, hands back an `audit_query_id` for
+  `get_audit_results` when the tenant's query runs long). Explicit non-goal:
+  the Compliance Manager score (no public API). Wired into all runtime
+  templates (drift-guarded).
 - **opencode runtime** — [opencode](https://opencode.ai) (≥1.18) is wired as an
   in-repo project config: run `opencode` from the checkout and the 7 MCP
   servers, all 22 skills (via opencode's **native** SKILL.md loader — committed

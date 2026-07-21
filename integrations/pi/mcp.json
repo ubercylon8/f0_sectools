@@ -71,6 +71,17 @@
       "transport": "stdio",
       "lifecycle": "eager"
     },
+    "f0-purview": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/ABSOLUTE/PATH/TO/sec-tools",
+        "f0-purview-mcp"
+      ],
+      "transport": "stdio",
+      "lifecycle": "eager"
+    },
     "f0-pa-actions": {
       "command": "uv",
       "args": [
