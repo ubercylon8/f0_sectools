@@ -243,7 +243,44 @@ async def test_get_audit_results_fetches_completed_query():
 
 
 @pytest.mark.asyncio
-async def test_get_audit_results_running_says_retry():
+async def test_get_audit_results_block_polls_until_ready(monkeypatch):
+    # A small model has no timer, so it re-polls get_audit_results back-to-back
+    # (live opencode run: 5 polls in ~4s). get_audit_results must block-poll like
+    # search_audit_log — each call consumes real time and catches completion
+    # mid-poll instead of returning "notStarted" instantly.
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    statuses = iter([{"status": "notStarted"}, {"status": "running"}, _QUERY_DONE])
+
+    class _Prog(FakeGC):
+        async def get(self, path, params=None):
+            self.calls.append(("GET", path, params))
+            if "records" in path:
+                return _RECORDS
+            return next(statuses)
+
+    gc = _Prog()
+    findings = await tools.get_audit_results(gc, "q-123")
+    # It polled more than once (block-poll), then returned real records.
+    status_gets = [c for c in gc.calls if c[0] == "GET" and "records" not in c[1]]
+    assert len(status_gets) >= 2
+    assert any("FileDeleted" in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_get_audit_results_pending_after_deadline_tells_user_to_wait(monkeypatch):
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
+    gc = FakeGC(gets={"queries/q-9": {"id": "q-9", "status": "notStarted"}})
+    findings = await tools.get_audit_results(gc, "q-9")
+    assert findings[0].finding_type.value == "posture"
+    action = findings[0].recommended_action.summary.lower()
+    assert "minutes" in action and "wait" in action
+
+
+@pytest.mark.asyncio
+async def test_get_audit_results_running_says_retry(monkeypatch):
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
     gc = FakeGC(gets={"queries/q-9": {"id": "q-9", "status": "running"}})
     findings = await tools.get_audit_results(gc, "q-9")
     assert "running" in findings[0].title.lower()
@@ -265,7 +302,6 @@ async def test_search_audit_log_reuses_inflight_identical_search(monkeypatch):
     # POST again — it re-checks the existing query instead.
     monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
     monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
-    tools._RECENT_SEARCHES.clear()
     gc = FakeGC(posts={"auditLog/queries": {"id": "q-1", "status": "notStarted"}},
                 gets={"queries/q-1": {"id": "q-1", "status": "running"}})
     first = await tools.search_audit_log(gc, activity="FileDeleted")
@@ -277,21 +313,18 @@ async def test_search_audit_log_reuses_inflight_identical_search(monkeypatch):
     ev = {e.key: e.value for e in second[0].evidence}
     assert ev["audit_query_id"] == "q-1"
     assert {e.key: e.value for e in first[0].evidence}["audit_query_id"] == "q-1"
-    tools._RECENT_SEARCHES.clear()
 
 
 @pytest.mark.asyncio
 async def test_search_audit_log_different_filters_submit_fresh(monkeypatch):
     monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
     monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
-    tools._RECENT_SEARCHES.clear()
     gc = FakeGC(posts={"auditLog/queries": {"id": "q-2", "status": "notStarted"}},
                 gets={"queries": {"id": "q-2", "status": "running"}})
     await tools.search_audit_log(gc, activity="FileDeleted")
     await tools.search_audit_log(gc, activity="FileDownloaded")
     posts = [c for c in gc.calls if c[0] == "POST"]
     assert len(posts) == 2  # different filters = genuinely new search
-    tools._RECENT_SEARCHES.clear()
 
 
 @pytest.mark.asyncio
@@ -300,26 +333,24 @@ async def test_pending_finding_sets_honest_expectations(monkeypatch):
     # must state the real latency class and forbid resubmission.
     monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
     monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
-    tools._RECENT_SEARCHES.clear()
     gc = FakeGC(posts={"auditLog/queries": {"id": "q-3", "status": "notStarted"}},
                 gets={"queries/q-3": {"id": "q-3", "status": "running"}})
     findings = await tools.search_audit_log(gc, user="jsmith@corp.local")
-    action = findings[0].recommended_action.summary
-    assert "minutes" in action and "not" in action.lower() and "new search" in action.lower()
-    tools._RECENT_SEARCHES.clear()
+    action = findings[0].recommended_action.summary.lower()
+    # Honest latency + explicit "stop polling this turn" (the model was hammering).
+    assert "minutes" in action and "stop polling" in action
+    assert "again in this turn" in action
 
 
 @pytest.mark.asyncio
 async def test_search_audit_log_failed_terminal_state(monkeypatch):
     # Review #62 coverage gap: the failed/cancelled terminal branch.
     monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
-    tools._RECENT_SEARCHES.clear()
     gc = FakeGC(posts={"auditLog/queries": {"id": "q-4", "status": "notStarted"}},
                 gets={"queries/q-4": {"id": "q-4", "status": "failed"}})
     findings = await tools.search_audit_log(gc, activity="FileDeleted")
     assert findings[0].finding_type.value == "posture"
     assert "failed" in findings[0].title.lower()
-    tools._RECENT_SEARCHES.clear()
 
 
 @pytest.mark.asyncio

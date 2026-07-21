@@ -334,12 +334,28 @@ def _pending_finding(query_id: str, status: str, reused: bool = False) -> Findin
         title=f"Audit search {status} — results not ready yet",
         evidence=evidence,
         recommended_action=RecommendedAction(
-            summary="Audit queries typically take 5-15 minutes on large tenants. "
-            f"Later, call get_audit_results with audit_query_id '{query_id}'. "
-            "Do NOT submit a new search for the same question — it starts another "
-            "multi-minute query and does not speed anything up."
+            summary="Audit queries typically take 5-15 minutes on large tenants and "
+            "this tool already waited. STOP polling now: tell the user the search is "
+            f"running (audit_query_id '{query_id}') and that they should ask again in "
+            "a few minutes — then call get_audit_results ONCE when they do. Do not "
+            "call get_audit_results or search_audit_log again in this turn."
         ),
     )
+
+
+async def _poll_until_terminal(gc: Any, query_id: str, status: str) -> str:
+    """Block-poll the query up to the deadline. Returns the terminal status, or
+    the last non-terminal status if the deadline is hit first. A small model has
+    no timer, so both entry points poll HERE rather than returning instantly on a
+    not-ready query (which turned the model's retry loop into a tight hammer)."""
+    deadline = asyncio.get_event_loop().time() + _POLL_DEADLINE_S
+    while status not in ("succeeded", "failed", "cancelled"):
+        if asyncio.get_event_loop().time() >= deadline:
+            return status
+        await asyncio.sleep(_POLL_INTERVAL_S)
+        q = await gc.get(f"{_AUDIT_QUERIES_URL}/{query_id}")
+        status = str(q.get("status", "running"))
+    return status
 
 
 async def search_audit_log(
@@ -384,13 +400,9 @@ async def search_audit_log(
                 if len(_RECENT_SEARCHES) >= 32:
                     _RECENT_SEARCHES.pop(next(iter(_RECENT_SEARCHES)), None)
                 _RECENT_SEARCHES[key] = (query_id, now)
-        deadline = asyncio.get_event_loop().time() + _POLL_DEADLINE_S
-        while status not in ("succeeded", "failed", "cancelled"):
-            if asyncio.get_event_loop().time() >= deadline:
-                return [_pending_finding(query_id, status, reused=reused)]
-            await asyncio.sleep(_POLL_INTERVAL_S)
-            q = await gc.get(f"{_AUDIT_QUERIES_URL}/{query_id}")
-            status = str(q.get("status", "running"))
+        status = await _poll_until_terminal(gc, query_id, status)
+        if status not in ("succeeded", "failed", "cancelled"):
+            return [_pending_finding(query_id, status, reused=reused)]
         if status != "succeeded":
             return [
                 Finding(
@@ -421,9 +433,26 @@ async def get_audit_results(gc: Any, audit_query_id: str, limit: int = 25) -> li
     try:
         q = await gc.get(f"{_AUDIT_QUERIES_URL}/{audit_query_id}")
         status = str(q.get("status", "unknown"))
-        if status != "succeeded":
-            return [_pending_finding(audit_query_id, status)]
-        return await _audit_records(gc, audit_query_id, limit)
+        # Block-poll like search_audit_log so a timer-less model's repeated calls
+        # are paced and catch completion mid-poll instead of hammering instantly.
+        status = await _poll_until_terminal(gc, audit_query_id, status)
+        if status == "succeeded":
+            return await _audit_records(gc, audit_query_id, limit)
+        if status in ("failed", "cancelled"):
+            return [
+                Finding(
+                    source="purview",
+                    finding_type=FindingType.posture,
+                    severity=Severity.medium,
+                    title=f"Audit search {status}",
+                    evidence=[Evidence(key="audit_query_id", value=audit_query_id)],
+                    recommended_action=RecommendedAction(
+                        summary="Submit a fresh search with a narrower window; if it "
+                        "persists, check audit availability in the Purview portal."
+                    ),
+                )
+            ]
+        return [_pending_finding(audit_query_id, status)]
     except GraphError as e:
         finding = map_graph_error(e, "purview", _AUDIT_PERM, "audit.results")
         if finding:
