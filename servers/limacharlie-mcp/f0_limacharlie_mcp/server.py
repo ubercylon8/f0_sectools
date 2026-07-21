@@ -48,7 +48,9 @@ async def list_sensors(online_only: bool = False, limit: int = 50) -> list[dict[
 
 @mcp.tool()
 async def get_sensor(hostname: str) -> list[dict[str, Any]]:
-    """Get LimaCharlie sensor detail by hostname (prefix match): platform, online status, sid."""
+    """Get LimaCharlie sensor detail by hostname (prefix match): platform, online status, sid, tags.
+
+    Tags include lc:sleeper — a dormant sensor that collects no telemetry."""
     return _render(await asyncio.to_thread(tools.get_sensor, _client(), hostname))
 
 
@@ -87,7 +89,8 @@ async def query_telemetry(
     is LimaCharlie sensor telemetry only. Pick a `hunt` preset: new_processes,
     powershell_activity, dns_requests, or network_connections. hours_back bounds the
     window and may be fractional (0.25 = last 15 minutes). Set `hostname` to scope to
-    ONE sensor (e.g. "top processes on host X"). Set `domain` to check whether a host
+    ONE sensor (e.g. "top processes on host X") — a short name is fine; it is resolved
+    to the sensor's stored hostname. Set `domain` to check whether a host
     resolved a domain (e.g. "does host X connect to microsoft.com") — it routes to DNS
     lookups matching that domain exactly or as a subdomain (NETWORK_CONNECTIONS has IPs,
     not domains; lookalikes like microsoft.com.evil.net are excluded).

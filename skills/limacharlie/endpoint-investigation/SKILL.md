@@ -51,9 +51,14 @@ Base tool names (runtime may prefix — see the LimaCharlie server README):
 
 - An **offline** sensor has no live data, but historical telemetry may still be
   queryable (retention varies by org).
+- A sensor tagged **`lc:sleeper` is dormant**: it stays enrolled and online but
+  collects **no telemetry by design**. A zero-event result on such a host is
+  expected, not suspicious — `query_telemetry` and `get_sensor` say so; report
+  the dormant state instead of guessing at other explanations.
 - Busy hosts return large result sets — narrow the window and use a filter.
-- Hostnames must match what LimaCharlie has; if `get_sensor` finds nothing,
-  confirm the name with `list_sensors`.
+- Hostnames are fine as short names — `query_telemetry`/`get_sensor` resolve
+  them to the stored (often FQDN) hostname; if no sensor matches, confirm the
+  name with `list_sensors`.
 
 ## Verification
 
