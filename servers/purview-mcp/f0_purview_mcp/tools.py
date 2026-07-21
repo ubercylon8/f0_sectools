@@ -29,8 +29,10 @@ _ALERT_PERM = "SecurityAlert.Read.All"
 _AUDIT_PERM = "AuditLogsQuery.Read.All"
 _LABEL_PERM = "InformationProtectionPolicy.Read.All"
 
-# ASSUMPTION (live-verify): serviceSource enum values for the Purview providers.
-_DLP_SOURCE = "microsoftDataLossPrevention"
+# serviceSource enum constants, LIVE-CONFIRMED 2026-07-21: DLP is the
+# unprefixed 'dataLossPrevention' (the 'microsoft…' guess 400s as an invalid
+# enumeration constant); IRM is 'microsoftInsiderRiskManagement'.
+_DLP_SOURCE = "dataLossPrevention"
 _IRM_SOURCE = "microsoftInsiderRiskManagement"
 
 # Graph beta is required for the labels inventory only; GraphClient passes an

@@ -15,7 +15,7 @@ DLP_ALERT = {
     "severity": "high",
     "status": "new",
     "category": "dataLossPrevention",
-    "serviceSource": "microsoftDataLossPrevention",
+    "serviceSource": "dataLossPrevention",
     "createdDateTime": "2026-07-20T10:00:00Z",
     "actorDisplayName": None,
 }
