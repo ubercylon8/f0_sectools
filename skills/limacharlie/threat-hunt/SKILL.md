@@ -27,7 +27,8 @@ Base tool name (runtime may prefix — see the LimaCharlie server README):
 1. State the **hypothesis** in one sentence (what behaviour, on what platform,
    why it matters).
 2. Pick a `hunt` **preset** that matches — `new_processes`,
-   `powershell_activity`, `dns_requests`, or `network_connections` — and a bounded
+   `powershell_activity`, `dns_requests`, `network_connections`, or
+   `user_activity` (which users were seen, and on which host) — and a bounded
    `hours_back` / `limit`. (For a custom hunt, pass a raw `lcql` query instead;
    see `references/lcql-starters.md` for the shape and examples.)
 3. Call `query_telemetry` with the chosen preset (or `lcql`).

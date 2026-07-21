@@ -41,9 +41,16 @@ async def get_org_overview() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def list_sensors(online_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
-    """List LimaCharlie sensors (endpoints): hostname, platform, online status."""
-    return _render(await asyncio.to_thread(tools.list_sensors, _client(), online_only, limit))
+async def list_sensors(
+    online_only: bool = False, limit: int = 50, tag: str = ""
+) -> list[dict[str, Any]]:
+    """List LimaCharlie sensors (endpoints): hostname, platform, online status.
+
+    Set `tag` to list only sensors carrying that tag — e.g. tag="lc:sleeper" for
+    dormant sensors that collect no telemetry, or any operator tag."""
+    return _render(
+        await asyncio.to_thread(tools.list_sensors, _client(), online_only, limit, tag)
+    )
 
 
 @mcp.tool()
@@ -75,31 +82,38 @@ async def list_detections(
 @mcp.tool()
 async def query_telemetry(
     hunt: Literal[
-        "new_processes", "powershell_activity", "dns_requests", "network_connections"
+        "new_processes", "powershell_activity", "dns_requests", "network_connections",
+        "user_activity",
     ] = "new_processes",
     hours_back: float = 24,
     limit: int = 50,
     hostname: str | None = None,
     domain: str | None = None,
+    username: str | None = None,
     lcql: str | None = None,
 ) -> list[dict[str, Any]]:
     """Hunt LimaCharlie endpoint (EDR sensor) telemetry with a guided preset — no LCQL needed.
 
     For Microsoft Defender / KQL hunts, use run_hunting_query instead — this tool
     is LimaCharlie sensor telemetry only. Pick a `hunt` preset: new_processes,
-    powershell_activity, dns_requests, or network_connections. hours_back bounds the
+    powershell_activity, dns_requests, network_connections, or user_activity
+    ("what users were seen", with the host each was seen on). hours_back bounds the
     window and may be fractional (0.25 = last 15 minutes). Set `hostname` to scope to
     ONE sensor (e.g. "top processes on host X") — a short name is fine; it is resolved
     to the sensor's stored hostname. Set `domain` to check whether a host
     resolved a domain (e.g. "does host X connect to microsoft.com") — it routes to DNS
     lookups matching that domain exactly or as a subdomain (NETWORK_CONNECTIONS has IPs,
-    not domains; lookalikes like microsoft.com.evil.net are excluded).
+    not domains; lookalikes like microsoft.com.evil.net are excluded). Set `username`
+    to filter process/PowerShell/user activity by the acting user (e.g. "what did
+    jsmith run") — bare "jsmith" or qualified "DOMAIN\\jsmith"; not used for domain
+    lookups (DNS events carry no user).
     Returns a count plus one finding per event. Advanced: pass a raw `lcql` query to
     override the preset (shape: time | sensor-selector | event-types | filter | projection).
     """
     return _render(
         await asyncio.to_thread(
-            tools.query_telemetry, _client(), hunt, hours_back, limit, hostname, domain, lcql
+            tools.query_telemetry, _client(), hunt, hours_back, limit, hostname, domain,
+            username, lcql,
         )
     )
 

@@ -23,7 +23,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The gated-write server ships `enabled: false` (the model has shell, so the
   confirmation gate is not forge-resistant). Live-validated on opencode 1.18.4
   with a local Qwen3.5-9B.
-
+- **LimaCharlie tag view & user-focused queries** — `list_sensors` gains a
+  `tag` filter ("which hosts carry lc:sleeper / prueba"), and `query_telemetry`
+  gains a fifth `user_activity` hunt preset (USER_OBSERVED, with the host each
+  user was seen on) plus a `username` filter for process/PowerShell activity by
+  the acting user — boundary-anchored (`DOMAIN\user`-aware), so lookalike names
+  never match. Still 6 tools.
 - **LimaCharlie sleeper visibility** — sensor tags are now surfaced:
   `get_sensor` lists them (flagging dormant `lc:sleeper` sensors, which collect
   no telemetry by design), a zero-event `query_telemetry` result diagnoses the
@@ -35,7 +40,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **LimaCharlie hostname scoping selected zero sensors** — `query_telemetry`
   exact-matched the caller's hostname while sensors register FQDNs, so a short
-  name ("sbl8042") silently returned 0 events on a host with ~1,000 real events
+  name ("web-01") silently returned 0 events on a host with ~1,000 real events
   in the window. Hostnames are now resolved (prefix lookup, accepted at a dot
   boundary) to the stored hostname before scoping; an unmatched or ambiguous
   name returns an explicit finding instead of a silent empty result.

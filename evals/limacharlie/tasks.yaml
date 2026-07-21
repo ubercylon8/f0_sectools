@@ -36,3 +36,15 @@
 - prompt: "Did web-01 connect to microsoft.com in the last 15 minutes?"
   expect_tool: query_telemetry
   expect_args_contains: { domain: "microsoft.com" }
+
+- prompt: "Which LimaCharlie sensors carry the tag lc:sleeper?"
+  expect_tool: list_sensors
+  expect_args_contains: { tag: "lc:sleeper" }
+
+- prompt: "What users were seen on host web-01 in the last 24 hours?"
+  expect_tool: query_telemetry
+  expect_args_contains: { hunt: user_activity, hostname: "web-01" }
+
+- prompt: "What processes did the user jsmith run today?"
+  expect_tool: query_telemetry
+  expect_args_contains: { username: "jsmith" }
