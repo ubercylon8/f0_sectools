@@ -11,9 +11,10 @@ Read-only MCP server for **Microsoft Purview** — the data-risk pillar:
 | `search_audit_log` | Who did what? (guided unified-audit search, async) |
 | `get_audit_results` | Fetch results of a still-running audit search |
 
-All Microsoft Graph: DLP/IRM alerts via `security/alerts_v2` (GA), audit via
-the Purview Audit Search API (`security/auditLog/queries`, GA, async
-two-phase), labels via Graph **beta**. Credentials/permissions:
+All Microsoft Graph: DLP/IRM alerts via `security/alerts_v2` (GA); audit via
+the Purview Audit Search API (`security/auditLog/queries`, async two-phase —
+served on Graph **beta**: the documented v1.0 path 404s on real tenants);
+labels via Graph **beta**. Credentials/permissions:
 `.env.purview.example`.
 
 **Explicit non-goal:** the Compliance Manager compliance score has **no public

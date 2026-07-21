@@ -168,9 +168,13 @@ async def list_dlp_alerts(
             return [finding]
         raise
     floor = _SEV_ORDER.index(severity_min) if severity_min in _SEV_ORDER else 0
-    kept = [a for a in alerts
-            if _SEV_ORDER.index(str(a.get("severity")).lower())
-            >= floor if str(a.get("severity")).lower() in _SEV_ORDER]
+    # Membership check MUST run before .index(): Graph's severity enum also has
+    # 'informational'/'unknown', which are excluded from the floor filter.
+    kept = [
+        a for a in alerts
+        if str(a.get("severity")).lower() in _SEV_ORDER
+        and _SEV_ORDER.index(str(a.get("severity")).lower()) >= floor
+    ]
     if not kept:
         return [
             Finding(

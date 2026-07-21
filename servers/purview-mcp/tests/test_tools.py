@@ -112,6 +112,21 @@ async def test_list_dlp_alerts_severity_min_filters():
 
 
 @pytest.mark.asyncio
+async def test_list_dlp_alerts_tolerates_informational_and_missing_severity():
+    # Graph's real severity enum includes 'informational'/'unknown' (our own
+    # _sev() maps them); a chained-if comprehension evaluated .index() BEFORE
+    # the membership filter and crashed on them (CC review, PR #62). They must
+    # be silently excluded from the floor filter, never raise.
+    gc = FakeGC(gets={"alerts_v2": {"value": [
+        DLP_ALERT,
+        {**DLP_ALERT, "id": "i1", "severity": "informational"},
+        {**DLP_ALERT, "id": "i2", "severity": None},
+    ]}})
+    findings = await tools.list_dlp_alerts(gc, severity_min="low")
+    assert len(findings) == 1 and findings[0].severity.value == "high"
+
+
+@pytest.mark.asyncio
 async def test_list_dlp_alerts_bounded_with_more_note():
     alerts = [{**DLP_ALERT, "id": str(i)} for i in range(30)]
     gc = FakeGC(gets={"alerts_v2": {"value": alerts}})
