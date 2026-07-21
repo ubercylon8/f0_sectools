@@ -100,6 +100,12 @@ If you prefer to configure Hermes manually:
    - `agent.personalities` → `ciso`, `threat-hunter`, `detection-engineer`,
      `security-engineer`.
 
+   > **Security:** as in the distribution, `f0-pa-actions` (gated writes) ships
+   > `enabled: false` in `config.example.yaml` — leave it disabled and keep
+   > `PROJECTACHILLES_ALLOW_WRITE=false` unless you accept that a shell-capable
+   > model can bypass the confirmation gate under Hermes v0.18.2 (see the Security
+   > notes above).
+
 ## Skills
 
 Hermes loads skills with **progressive disclosure**: names and descriptions

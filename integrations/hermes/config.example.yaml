@@ -13,9 +13,11 @@
 # 1) Connect the f0_sectools MCP servers.
 #    Credentials are NOT here — each server loads its own .env.<platform>
 #    from the repo root via `uv run --directory`. F0_SECTOOLS_DIR is expanded
-#    at runtime from your profile's .env. f0-pa-actions is the gated-write
-#    ProjectAchilles companion — its write tools stay inert unless you also set
-#    PROJECTACHILLES_ALLOW_WRITE=true.
+#    at runtime from your profile's .env. f0-pa-actions is the gated-WRITE
+#    ProjectAchilles companion — it ships `enabled: false` here (opt-in). Under
+#    Hermes v0.18.2 the model has shell, so the confirmation gate is NOT
+#    forge-resistant; keep PROJECTACHILLES_ALLOW_WRITE=false unless you accept a
+#    shell-capable model could self-authorize a write (see the runtime guide).
 mcp_servers:
   f0-defender:
     command: "uv"
@@ -32,6 +34,7 @@ mcp_servers:
   f0-pa-actions:
     command: "uv"
     args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-projectachilles-actions-mcp"]
+    enabled: false  # gated-WRITE server — opt-in (see the note above)
   f0-intune:
     command: "uv"
     args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-intune-mcp"]
