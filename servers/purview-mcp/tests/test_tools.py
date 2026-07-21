@@ -92,6 +92,18 @@ async def test_dlp_summary_filters_by_service_source_and_time():
     assert "serviceSource" in filt and "createdDateTime ge " in filt
 
 
+@pytest.mark.asyncio
+async def test_dlp_summary_headline_severity_is_case_insensitive():
+    # Review #62 nit: the max() key compared raw strings; a mixed-case "High"
+    # silently misranked the rollup headline.
+    gc = FakeGC(gets={"alerts_v2": {"value": [
+        {**DLP_ALERT, "severity": "High"},
+        {**DLP_ALERT, "id": "x", "severity": "low"},
+    ]}})
+    findings = await tools.get_dlp_summary(gc)
+    assert findings[0].severity.value == "high"
+
+
 # ---------- DLP alert list ----------
 
 @pytest.mark.asyncio
@@ -243,6 +255,71 @@ async def test_get_audit_results_rejects_unsafe_id():
     findings = await tools.get_audit_results(gc, "q/../etc")
     assert findings[0].finding_type.value == "posture"
     assert gc.calls == []
+
+
+@pytest.mark.asyncio
+async def test_search_audit_log_reuses_inflight_identical_search(monkeypatch):
+    # Live opencode run: the model resubmitted the SAME search when results
+    # weren't ready, spawning a new ~15-min server-side query each time. An
+    # identical search (same filters/window) within the reuse TTL must NOT
+    # POST again — it re-checks the existing query instead.
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
+    tools._RECENT_SEARCHES.clear()
+    gc = FakeGC(posts={"auditLog/queries": {"id": "q-1", "status": "notStarted"}},
+                gets={"queries/q-1": {"id": "q-1", "status": "running"}})
+    first = await tools.search_audit_log(gc, activity="FileDeleted")
+    posts = [c for c in gc.calls if c[0] == "POST"]
+    assert len(posts) == 1
+    second = await tools.search_audit_log(gc, activity="FileDeleted")
+    posts = [c for c in gc.calls if c[0] == "POST"]
+    assert len(posts) == 1, "identical search must reuse the in-flight query, not resubmit"
+    ev = {e.key: e.value for e in second[0].evidence}
+    assert ev["audit_query_id"] == "q-1"
+    assert {e.key: e.value for e in first[0].evidence}["audit_query_id"] == "q-1"
+    tools._RECENT_SEARCHES.clear()
+
+
+@pytest.mark.asyncio
+async def test_search_audit_log_different_filters_submit_fresh(monkeypatch):
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
+    tools._RECENT_SEARCHES.clear()
+    gc = FakeGC(posts={"auditLog/queries": {"id": "q-2", "status": "notStarted"}},
+                gets={"queries": {"id": "q-2", "status": "running"}})
+    await tools.search_audit_log(gc, activity="FileDeleted")
+    await tools.search_audit_log(gc, activity="FileDownloaded")
+    posts = [c for c in gc.calls if c[0] == "POST"]
+    assert len(posts) == 2  # different filters = genuinely new search
+    tools._RECENT_SEARCHES.clear()
+
+
+@pytest.mark.asyncio
+async def test_pending_finding_sets_honest_expectations(monkeypatch):
+    # "in a minute or two" misled the model into resubmitting; the guidance
+    # must state the real latency class and forbid resubmission.
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
+    tools._RECENT_SEARCHES.clear()
+    gc = FakeGC(posts={"auditLog/queries": {"id": "q-3", "status": "notStarted"}},
+                gets={"queries/q-3": {"id": "q-3", "status": "running"}})
+    findings = await tools.search_audit_log(gc, user="jsmith@corp.local")
+    action = findings[0].recommended_action.summary
+    assert "minutes" in action and "not" in action.lower() and "new search" in action.lower()
+    tools._RECENT_SEARCHES.clear()
+
+
+@pytest.mark.asyncio
+async def test_search_audit_log_failed_terminal_state(monkeypatch):
+    # Review #62 coverage gap: the failed/cancelled terminal branch.
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    tools._RECENT_SEARCHES.clear()
+    gc = FakeGC(posts={"auditLog/queries": {"id": "q-4", "status": "notStarted"}},
+                gets={"queries/q-4": {"id": "q-4", "status": "failed"}})
+    findings = await tools.search_audit_log(gc, activity="FileDeleted")
+    assert findings[0].finding_type.value == "posture"
+    assert "failed" in findings[0].title.lower()
+    tools._RECENT_SEARCHES.clear()
 
 
 @pytest.mark.asyncio

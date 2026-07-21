@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -52,8 +53,16 @@ _ACTIVITY_RE = re.compile(r"^[A-Za-z0-9 ._-]{1,64}$")
 _UPN_RE = re.compile(r"^[A-Za-z0-9@._-]{1,128}$")
 _QUERY_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
-_POLL_DEADLINE_S = 50.0
+# Poll briefly, then hand back the query id: real tenant audit queries take
+# 5-15+ minutes, so a long blocking poll only produced "timed out" UX (live
+# opencode run 2026-07-21) without ever completing in-call.
+_POLL_DEADLINE_S = 15.0
 _POLL_INTERVAL_S = 5.0
+# Small models resubmit identical searches when results aren't ready, spawning
+# a fresh multi-minute server-side query each time. Dedupe: an identical
+# search (same filters/window) within the TTL reuses the in-flight query.
+_RECENT_SEARCHES: dict[tuple[str, str, float], tuple[str, float]] = {}
+_REUSE_TTL_S = 1800.0
 _FETCH_CAP = 100  # single bounded page for summaries/lists
 
 
@@ -141,8 +150,8 @@ async def get_dlp_summary(gc: Any, hours_back: float = 168) -> list[Finding]:
             source="purview",
             finding_type=FindingType.posture,
             severity=Severity.info if not alerts else _sev(
-                max(alerts, key=lambda a: _SEV_ORDER.index(str(a.get("severity")))
-                    if str(a.get("severity")) in _SEV_ORDER else 0).get("severity")),
+                max(alerts, key=lambda a: _SEV_ORDER.index(str(a.get("severity")).lower())
+                    if str(a.get("severity")).lower() in _SEV_ORDER else 0).get("severity")),
             title=f"{len(alerts)} DLP alert(s) in the last {hours_back:g}h"
             + (f" (showing counts for first {_FETCH_CAP})" if len(alerts) >= _FETCH_CAP else ""),
             evidence=[
@@ -310,17 +319,25 @@ async def _audit_records(gc: Any, query_id: str, limit: int) -> list[Finding]:
     return [summary] + [_audit_record_finding(r) for r in records[:limit]]
 
 
-def _pending_finding(query_id: str, status: str) -> Finding:
+def _pending_finding(query_id: str, status: str, reused: bool = False) -> Finding:
+    evidence = [Evidence(key="audit_query_id", value=query_id),
+                Evidence(key="status", value=status)]
+    if reused:
+        evidence.append(Evidence(
+            key="note",
+            value="identical search already in flight — reusing it, no new query created",
+        ))
     return Finding(
         source="purview",
         finding_type=FindingType.posture,
         severity=Severity.info,
-        title=f"Audit search still {status} — results not ready yet",
-        evidence=[Evidence(key="audit_query_id", value=query_id),
-                  Evidence(key="status", value=status)],
+        title=f"Audit search {status} — results not ready yet",
+        evidence=evidence,
         recommended_action=RecommendedAction(
-            summary=f"Call get_audit_results with audit_query_id '{query_id}' "
-            "in a minute or two."
+            summary="Audit queries typically take 5-15 minutes on large tenants. "
+            f"Later, call get_audit_results with audit_query_id '{query_id}'. "
+            "Do NOT submit a new search for the same question — it starts another "
+            "multi-minute query and does not speed anything up."
         ),
     )
 
@@ -348,14 +365,29 @@ async def search_audit_log(
         body["operationFilters"] = [activity]
     if user:
         body["userPrincipalNameFilters"] = [user]
+    key = (activity, user, round(hours_back, 2))
+    now = time.monotonic()
+    cached = _RECENT_SEARCHES.get(key)
+    reused = bool(cached and now - cached[1] < _REUSE_TTL_S)
     try:
-        created = await gc.post(_AUDIT_QUERIES_URL, json_body=body)
-        query_id = str(created.get("id", ""))
+        if reused and cached:
+            query_id = cached[0]
+            status = "running"
+        else:
+            created = await gc.post(_AUDIT_QUERIES_URL, json_body=body)
+            query_id = str(created.get("id", ""))
+            status = str(created.get("status", "notStarted"))
+            if query_id:
+                for k, (_, ts) in list(_RECENT_SEARCHES.items()):
+                    if now - ts >= _REUSE_TTL_S:
+                        _RECENT_SEARCHES.pop(k, None)
+                if len(_RECENT_SEARCHES) >= 32:
+                    _RECENT_SEARCHES.pop(next(iter(_RECENT_SEARCHES)), None)
+                _RECENT_SEARCHES[key] = (query_id, now)
         deadline = asyncio.get_event_loop().time() + _POLL_DEADLINE_S
-        status = str(created.get("status", "notStarted"))
         while status not in ("succeeded", "failed", "cancelled"):
             if asyncio.get_event_loop().time() >= deadline:
-                return [_pending_finding(query_id, status)]
+                return [_pending_finding(query_id, status, reused=reused)]
             await asyncio.sleep(_POLL_INTERVAL_S)
             q = await gc.get(f"{_AUDIT_QUERIES_URL}/{query_id}")
             status = str(q.get("status", "running"))

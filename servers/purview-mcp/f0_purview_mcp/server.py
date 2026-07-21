@@ -80,9 +80,13 @@ async def search_audit_log(
 ) -> list[dict[str, Any]]:
     """Search the Microsoft 365 unified audit log: who did what, when.
 
-    Optional flat filters: activity (an operation name like "FileDeleted") and
-    user (a UPN). The search is asynchronous — if it is still running after
-    ~50s this returns an audit_query_id; fetch later with get_audit_results."""
+    Optional flat filters: activity (an EXACT operation name like "FileDeleted",
+    "FileDownloaded", "MailItemsAccessed" — when unsure, search once with no
+    activity filter and read the operation names that return) and user (a UPN).
+    The search is asynchronous and typically takes 5-15 MINUTES: this call polls
+    briefly, then returns an audit_query_id — fetch later with
+    get_audit_results. NEVER resubmit the same search while one is running
+    (identical resubmissions are deduplicated to the in-flight query)."""
     async with _client() as gc:
         return _render(await tools.search_audit_log(gc, activity, user, hours_back, limit))
 
