@@ -53,8 +53,11 @@ async def list_conditional_access_policies() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def list_privileged_role_assignments(limit: int = 100) -> list[dict[str, Any]]:
-    """List directory role assignments, highlighting critical privileged roles."""
+async def list_privileged_role_assignments(limit: int = 25) -> list[dict[str, Any]]:
+    """List directory role assignments, highlighting critical privileged roles.
+
+    Critical roles first; returns one bounded page with a "more available" note.
+    """
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
         return _render(await tools.list_privileged_role_assignments(gc, limit))
