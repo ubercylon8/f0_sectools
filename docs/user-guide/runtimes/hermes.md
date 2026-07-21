@@ -35,12 +35,15 @@ Hermes profiles let you install f0_sectools in one command. The recommended path
 
 2. **Create credential files** at the repo root, one per platform:
    ```bash
-   # Copy the templates and fill in your API credentials
-   cp .env.defender.example .env.defender
-   cp .env.entra.example .env.entra
-   # ... repeat for limacharlie, projectachilles, intune, tenable
+   # Copy the templates from each server directory and fill in your API credentials
+   cp servers/defender-mcp/.env.defender.example .env.defender
+   cp servers/entra-mcp/.env.entra.example .env.entra
+   cp servers/limacharlie-mcp/.env.limacharlie.example .env.limacharlie
+   cp servers/projectachilles-mcp/.env.projectachilles.example .env.projectachilles
+   cp servers/intune-mcp/.env.intune.example .env.intune
+   cp servers/tenable-mcp/.env.tenable.example .env.tenable
    ```
-   No credentials are stored in Hermes — the MCP servers load them from these files.
+   No credentials are stored in Hermes — the MCP servers load them from these files at the repo root.
 
 3. **Install the f0sectools profile** into Hermes:
    ```bash
@@ -72,9 +75,8 @@ Hermes profiles let you install f0_sectools in one command. The recommended path
    (Hermes alias for `hermes -p f0sectools chat`.)
 
 **Security notes:**
-- All tools are read-only by default; no gated write actions are exposed.
-- If you enable ProjectAchilles test execution, set `PROJECTACHILLES_ALLOW_WRITE=true`
-  in `.env.projectachilles` — gated writes still require human confirmation.
+- Read-only tools are the default and are always available.
+- The `f0-pa-actions` MCP server exposes gated-write tools for ProjectAchilles (run/schedule tests, cancel tasks). These tools are **inert by default** — they do nothing without the `PROJECTACHILLES_ALLOW_WRITE=true` flag set in `.env.projectachilles`. Even when enabled, each action requires explicit human confirmation (watcher approval or a single-use token) before execution. No action runs autonomously.
 
 ### Manual config merge (alternative)
 
