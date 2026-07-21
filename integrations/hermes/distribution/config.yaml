@@ -1,55 +1,62 @@
-# f0_sectools — Hermes Agent integration (example).
+# f0_sectools distribution config. Preserved on update, so operator overrides
+# (model/provider, extra personas) persist. Set your local model with
+# `hermes -p f0sectools model`; set F0_SECTOOLS_DIR in this profile's .env
+# (points at your uv-synced checkout).
 #
-# Merge these blocks into ~/.hermes/config.yaml (or $HERMES_HOME/config.yaml).
-# Set F0_SECTOOLS_DIR in your profile's .env (points at your uv-synced checkout).
-# Docs: https://hermes-agent.nousresearch.com/docs/
+# NOTE: a security-only toolset lockdown (dropping the general shell/file tools)
+# is NOT shipped in v0.1.0 — Hermes v0.18.2 keeps `terminal`/`read_file` as core
+# tools that `disabled_toolsets` cannot remove from the default bundle. Tracked
+# for a future version.
 #
-# For a turnkey packaged distribution, install the Hermes distribution package
-# instead (see integrations/hermes/distribution/distribution.yaml).
-# Point Hermes' model backend at your local OpenAI-compatible endpoint
-# (vLLM / llama.cpp) per the Hermes configuration docs — any OpenAI-compatible
-# endpoint works.
+# SECURITY: because the model retains shell access (above), the gated-write
+# confirmation is NOT forge-resistant here — a model with the terminal tool could
+# run scripts/confirm_action.py to self-authorize a write. So the gated-write
+# server `f0-pa-actions` ships `enabled: false` (opt-in) and the agent is
+# read-only by default. Enable pa-actions + PROJECTACHILLES_ALLOW_WRITE=true ONLY
+# if you accept that a shell-capable model could bypass the confirmation gate.
+# See docs/user-guide/runtimes/hermes.md.
 
-# 1) Connect the f0_sectools MCP servers.
-#    Credentials are NOT here — each server loads its own .env.<platform>
-#    from the repo root via `uv run --directory`. F0_SECTOOLS_DIR is expanded
-#    at runtime from your profile's .env. f0-pa-actions is the gated-WRITE
-#    ProjectAchilles companion — it ships `enabled: false` here (opt-in). Under
-#    Hermes v0.18.2 the model has shell, so the confirmation gate is NOT
-#    forge-resistant; keep PROJECTACHILLES_ALLOW_WRITE=false unless you accept a
-#    shell-capable model could self-authorize a write (see the runtime guide).
+# The 7 f0_sectools MCP servers. Hermes v0.18.2 reads servers from config.yaml's
+# `mcp_servers` (a distribution mcp.json is copied but not auto-loaded by the
+# CLI). `uv run --directory ${F0_SECTOOLS_DIR}` runs each server from the
+# operator's checkout; ${F0_SECTOOLS_DIR} is set in this profile's .env.
 mcp_servers:
   f0-defender:
-    command: "uv"
-    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-defender-mcp"]
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-defender-mcp]
+    enabled: true
   f0-entra:
-    command: "uv"
-    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-entra-mcp"]
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-entra-mcp]
+    enabled: true
   f0-limacharlie:
-    command: "uv"
-    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-limacharlie-mcp"]
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-limacharlie-mcp]
+    enabled: true
   f0-projectachilles:
-    command: "uv"
-    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-projectachilles-mcp"]
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-projectachilles-mcp]
+    enabled: true
+  # Gated-WRITE server — ships DISABLED (opt-in). The model has shell in Hermes
+  # v0.18.2, so the confirmation gate is not forge-resistant; see the SECURITY
+  # note above before enabling.
   f0-pa-actions:
-    command: "uv"
-    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-projectachilles-actions-mcp"]
-    enabled: false  # gated-WRITE server — opt-in (see the note above)
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-projectachilles-actions-mcp]
+    enabled: false
   f0-intune:
-    command: "uv"
-    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-intune-mcp"]
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-intune-mcp]
+    enabled: true
   f0-tenable:
-    command: "uv"
-    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-tenable-mcp"]
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-tenable-mcp]
+    enabled: true
 
-# 2) Load the f0_sectools skills straight from the repo (no copying).
 skills:
   external_dirs:
     - ${F0_SECTOOLS_DIR}/skills
 
-# 3) Role profiles. Switch at runtime with: /personality <name>
-#    (A security-only toolset lockdown is not achievable from config in Hermes
-#    v0.18.2 — terminal/read_file are core tools; see distribution/config.yaml.)
 agent:
   personalities:
     ciso: >

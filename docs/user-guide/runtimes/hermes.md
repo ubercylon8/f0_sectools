@@ -22,27 +22,89 @@ credentials + verify).
 
 ## Setup
 
-1. **Install Hermes** and point its model backend at your local OpenAI-compatible
-   endpoint (vLLM / llama.cpp) per the Hermes config docs — any compliant endpoint
-   works.
+Hermes profiles let you install f0_sectools in one command. The recommended path:
 
-2. **Base identity** — copy the shared identity into place:
+### Install the distribution (recommended)
+
+1. **Clone and sync** the f0_sectools repo:
    ```bash
-   cp integrations/hermes/SOUL.md ~/.hermes/SOUL.md
+   git clone https://github.com/ubercylon8/f0_sectools.git
+   cd f0_sectools
+   uv sync --all-packages
    ```
-   It defines the read-only / never-fabricate operating principles that always
-   apply.
 
-3. **Config** — merge [`integrations/hermes/config.example.yaml`](../../../integrations/hermes/config.example.yaml)
-   into `~/.hermes/config.yaml` and adjust the absolute paths (`which uv`, your
-   checkout). It wires:
-   - `mcp_servers` → `f0-defender`, `f0-entra` (stdio, launched via
-     `uv run --directory`). Add the other servers the same way
-     (`f0-limacharlie`, `f0-projectachilles`, `f0-intune`, `f0-tenable`).
-   - `skills.external_dirs` → this repo's `skills/` (loaded **in place** — no
-     copying, version-controlled with the code).
+2. **Create credential files** at the repo root, one per platform:
+   ```bash
+   # Copy the templates from each server directory and fill in your API credentials
+   cp servers/defender-mcp/.env.defender.example .env.defender
+   cp servers/entra-mcp/.env.entra.example .env.entra
+   cp servers/limacharlie-mcp/.env.limacharlie.example .env.limacharlie
+   cp servers/projectachilles-mcp/.env.projectachilles.example .env.projectachilles
+   cp servers/intune-mcp/.env.intune.example .env.intune
+   cp servers/tenable-mcp/.env.tenable.example .env.tenable
+   ```
+   No credentials are stored in Hermes — the MCP servers load them from these files at the repo root.
+
+3. **Install the f0sectools profile** into Hermes:
+   ```bash
+   hermes profile install ./integrations/hermes/distribution
+   ```
+   This creates `~/.hermes/profiles/f0sectools/` with:
+   - `SOUL.md` (base identity: read-only / never-fabricate principles)
+   - `config.yaml` (the seven MCP servers — defender, entra, limacharlie,
+     projectachilles, pa-actions, intune, tenable — under `mcp_servers`, plus
+     personas and skills). Hermes reads MCP servers from `config.yaml`, not a
+     separate `mcp.json`.
+
+4. **Set the checkout path** in the profile's environment:
+   ```bash
+   echo "F0_SECTOOLS_DIR=$(pwd)" >> ~/.hermes/profiles/f0sectools/.env
+   ```
+   The MCP servers use this to load your `.env.<platform>` files and run tools via
+   `uv run --directory`.
+
+5. **Point Hermes at your model**:
+   ```bash
+   hermes -p f0sectools model
+   ```
+   Enter the URL of your local OpenAI-compatible endpoint (vLLM, llama.cpp, etc.).
+
+6. **Launch the chat**:
+   ```bash
+   f0sectools chat
+   ```
+   (Hermes alias for `hermes -p f0sectools chat`.)
+
+**Security notes:**
+- Read-only tools are the default and are always available.
+- The `f0-pa-actions` MCP server (gated-write tools for ProjectAchilles — run/schedule tests, cancel tasks) ships **`enabled: false`** in the distribution. Write capability is an explicit opt-in: enable the server *and* set `PROJECTACHILLES_ALLOW_WRITE=true` in `.env.projectachilles`.
+- **The confirmation gate is not forge-resistant under Hermes v0.18.2.** The gated-write flow normally depends on an out-of-band human confirmation (`scripts/confirm_action.py` — watcher approval or a single-use token). But Hermes keeps `terminal` as a core tool the model can drive, and `confirm_action.py` has no operator authentication of its own — so a shell-capable model could run it to self-authorize a write and bypass the human step. Per CLAUDE.md's gating rule, *in a runtime where the model has shell access, treat the approval CLI as operator-only and keep write flags off.* **Keep `PROJECTACHILLES_ALLOW_WRITE=false`** unless you accept that risk; the opt-in chat-confirm mode is model-forgeable by design and only suits a supervised session you watch every turn.
+
+### Manual config merge (alternative)
+
+If you prefer to configure Hermes manually:
+
+1. **Install Hermes** and point its model backend at your local OpenAI-compatible
+   endpoint (vLLM / llama.cpp) per the Hermes config docs.
+
+2. **Copy the base identity**:
+   ```bash
+   cp integrations/hermes/distribution/SOUL.md ~/.hermes/SOUL.md
+   ```
+
+3. **Merge the config** — combine [`integrations/hermes/config.example.yaml`](../../../integrations/hermes/config.example.yaml)
+   into your `~/.hermes/config.yaml`, adjusting paths as needed. It wires:
+   - `mcp_servers` → the seven f0_sectools servers (defender, entra, limacharlie,
+     projectachilles, pa-actions, intune, tenable), launched via `uv run --directory`.
+   - `skills.external_dirs` → this repo's `skills/` (loaded **in place**, version-controlled).
    - `agent.personalities` → `ciso`, `threat-hunter`, `detection-engineer`,
      `security-engineer`.
+
+   > **Security:** as in the distribution, `f0-pa-actions` (gated writes) ships
+   > `enabled: false` in `config.example.yaml` — leave it disabled and keep
+   > `PROJECTACHILLES_ALLOW_WRITE=false` unless you accept that a shell-capable
+   > model can bypass the confirmation gate under Hermes v0.18.2 (see the Security
+   > notes above).
 
 ## Skills
 
@@ -92,8 +154,10 @@ tool selection**. Hermes gives you the knobs:
   server to the two or three tools a task actually calls.
 - **`agent.reasoning_effort`** — raise it for multi-step correlation, lower it for
   simple lookups.
-- **`agent.disabled_toolsets`** — drop built-in toolsets you don't want competing
-  for the model's attention.
+- **`agent.disabled_toolsets`** — drop built-in *non-core* toolsets you don't want
+  competing for the model's attention. Note: core tools (`terminal`, `read_file`)
+  can't be removed this way in Hermes v0.18.2, so a full "security-only" lockdown
+  isn't achievable from config alone yet.
 
 Keeping the live tool count small is the single highest-leverage thing you can do
 for reliability on a local model.
