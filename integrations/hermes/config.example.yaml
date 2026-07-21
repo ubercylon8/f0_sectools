@@ -44,8 +44,9 @@ skills:
   external_dirs:
     - ${F0_SECTOOLS_DIR}/skills
 
-# 3) Security-only lockdown: disable general shell/file/browser toolsets
-#    that a read-only analyst does not need.
+# 3) Role profiles. Switch at runtime with: /personality <name>
+#    (A security-only toolset lockdown is not achievable from config in Hermes
+#    v0.18.2 — terminal/read_file are core tools; see distribution/config.yaml.)
 agent:
   personalities:
     ciso: >

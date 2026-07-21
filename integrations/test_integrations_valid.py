@@ -2,10 +2,11 @@
 
 The uv workspace is the single source of truth for which servers exist
 (every ``servers/*/pyproject.toml`` declares one ``[project.scripts]`` entry).
-These tests fail CI whenever a runtime template — pi's mcp.json or the Hermes
-example config — is missing a server, references one that no longer exists,
-or leaks a real local path instead of the placeholder. Adding server #8
-without wiring it into every runtime becomes a red build, not silent drift.
+These tests fail CI whenever a runtime template — pi's mcp.json, the Hermes
+example config, or the Hermes distribution config.yaml — is missing a server,
+references one that no longer exists, or leaks a real local path instead of
+the placeholder. Adding server #8 without wiring it into every runtime becomes
+a red build, not silent drift.
 """
 from __future__ import annotations
 
@@ -69,23 +70,26 @@ def test_every_server_wired_into_distribution():
 
 def test_templates_use_placeholder_paths_only():
     # Files that should use ${F0_SECTOOLS_DIR}
-    distribution_files = {
+    placeholder_required_files = {
         "integrations/hermes/config.example.yaml",
         "integrations/hermes/distribution/config.yaml",
     }
     # Files that should use /ABSOLUTE/PATH/TO/sec-tools
     legacy_placeholder_files = {"integrations/pi/mcp.json"}
+    # Files that should not leak real paths but don't require a specific placeholder
+    no_real_paths_files = {"integrations/hermes/distribution/distribution.yaml"}
 
-    for rel in distribution_files | legacy_placeholder_files:
+    for rel in placeholder_required_files | legacy_placeholder_files | no_real_paths_files:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "/home/" not in text, (
             f"{rel} leaks a real local path — use {PLACEHOLDER} or ${{F0_SECTOOLS_DIR}} "
             "(rendering happens locally, e.g. scripts/sync_pi_config.py)"
         )
-        if rel in distribution_files:
+        if rel in placeholder_required_files:
             assert "${F0_SECTOOLS_DIR}" in text, f"{rel} lost the ${{F0_SECTOOLS_DIR}} placeholder"
-        else:
+        elif rel in legacy_placeholder_files:
             assert PLACEHOLDER in text, f"{rel} lost the {PLACEHOLDER} placeholder"
+        # no_real_paths_files: only check for absence of /home/, no specific placeholder required
 
 
 def test_distribution_manifest_valid():
