@@ -80,7 +80,10 @@ def test_templates_use_placeholder_paths_only():
     # Files that should use /ABSOLUTE/PATH/TO/sec-tools
     legacy_placeholder_files = {"integrations/pi/mcp.json"}
     # Files that should not leak real paths but don't require a specific placeholder
-    no_real_paths_files = {"integrations/hermes/distribution/distribution.yaml"}
+    no_real_paths_files = {
+        "integrations/hermes/distribution/distribution.yaml",
+        "opencode.json",  # in-repo project config: relative paths only
+    }
 
     for rel in placeholder_required_files | legacy_placeholder_files | no_real_paths_files:
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -94,6 +97,26 @@ def test_templates_use_placeholder_paths_only():
         elif rel in legacy_placeholder_files:
             assert PLACEHOLDER in text, f"{rel} lost the {PLACEHOLDER} placeholder"
         # no_real_paths_files: only check for absence of /home/, no specific placeholder required
+
+
+def test_every_server_wired_into_opencode_config():
+    # opencode reads the project config from the repo root; commands are RELATIVE
+    # (`uv run --directory . <script>`) because the config lives in the checkout.
+    cfg = json.loads((ROOT / "opencode.json").read_text(encoding="utf-8"))
+    # opencode uses a single `command` ARRAY (not the command+args split the
+    # Hermes/pi templates use), so derive the script name from its last element.
+    wired = {s["command"][-1] for s in cfg["mcp"].values()}
+    assert wired == _server_scripts(), (
+        "opencode.json mcp is out of sync with servers/* (recipe step 11)"
+    )
+    for name, s in cfg["mcp"].items():
+        assert s["type"] == "local", name
+        assert s["command"][:4] == ["uv", "run", "--directory", "."], name
+    # The gated-WRITE server ships DISABLED — the opencode model has shell, so
+    # the confirmation gate is not forge-resistant; writes are an explicit opt-in.
+    assert cfg["mcp"]["f0-pa-actions"]["enabled"] is False
+    # Never touch the operator's model/provider setup from the project config.
+    assert "model" not in cfg and "provider" not in cfg
 
 
 def _skill_names_to_dirs() -> dict[str, Path]:
