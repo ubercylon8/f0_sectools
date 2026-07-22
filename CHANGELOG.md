@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CISO risk-rollup skill** (`skills/cross-platform/ciso-risk-rollup`) — one
+  executive playbook that pulls a headline posture number from each of the six
+  platforms (Secure Score, ProjectAchilles defense score, Tenable exposure,
+  Intune compliance, Purview data-risk, LimaCharlie endpoint coverage), ranks
+  the top risks by actual severity, and reports a partial rollup gracefully when
+  a platform is dark (unlicensed / no permission). Wired into the CISO persona
+  across all runtimes.
+
 - **Hermes profile distribution** (`integrations/hermes/distribution/`) — a
   git-installable Hermes Agent profile: `hermes profile install
   ./integrations/hermes/distribution` stands up the f0_sectools security agent

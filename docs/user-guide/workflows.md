@@ -12,6 +12,19 @@ The agent calls `get_secure_score` and `list_incidents`, then returns a short
 rollup: Secure Score %, open incidents by severity, the top 2–3 exposures, and
 one recommended focus. No IDs or raw JSON.
 
+## Whole-posture risk rollup (CISO) — all platforms
+
+> **Prompt:** "As a CISO, give me our overall risk posture across everything."
+
+The `ciso-risk-rollup` (a.k.a. `roll-up-ciso-risk`) skill pulls one headline
+number from each of the six platforms — Microsoft Secure Score, ProjectAchilles
+defense score, Tenable exposure, Intune compliance, Purview data-risk, and
+LimaCharlie endpoint coverage — ranks the top 1–3 risks by their actual
+severity, and names one highest-value next step. If a platform is dark
+(unlicensed, no permission), it is reported as **"not assessed"** and the rollup
+continues, so the coverage of the picture is always explicit. Favour a capable
+local model — it is six sequential calls plus synthesis.
+
 ## Incident triage (SOC analyst / threat hunter)
 
 > **Prompt:** "Triage our active high-severity incidents."
