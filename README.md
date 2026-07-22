@@ -146,9 +146,10 @@ flowchart TB
     servers <-->|credentials never leave host| API
 ```
 
-> Full architecture and the shared-core rule: [docs/architecture.md](docs/architecture.md).
+> Full architecture and the shared-core rule: [docs/explanation/architecture.md](docs/explanation/architecture.md).
+> The trust story — threat model, gating, redaction, audit: [docs/explanation/security-model.md](docs/explanation/security-model.md).
 
-See [CLAUDE.md](CLAUDE.md) for the full architecture and house rules.
+See the [documentation hub](docs/README.md) for all docs, and [CLAUDE.md](CLAUDE.md) for the house rules.
 
 ## Roadmap (planned platforms)
 
