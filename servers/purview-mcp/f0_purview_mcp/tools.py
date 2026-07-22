@@ -60,8 +60,10 @@ _POLL_DEADLINE_S = 15.0
 _POLL_INTERVAL_S = 5.0
 # Small models resubmit identical searches when results aren't ready, spawning
 # a fresh multi-minute server-side query each time. Dedupe: an identical
-# search (same filters/window) within the TTL reuses the in-flight query.
-_RECENT_SEARCHES: dict[tuple[str, str, float], tuple[str, float]] = {}
+# search (same filters/window) within the TTL reuses the in-flight query. The
+# stored (query_id, monotonic_ts, window_str) lets a reuse report the ORIGINAL
+# queried window, not a freshly recomputed one.
+_RECENT_SEARCHES: dict[tuple[str, str, float], tuple[str, float, str]] = {}
 _REUSE_TTL_S = 1800.0
 _FETCH_CAP = 100  # single bounded page for summaries/lists
 
@@ -319,9 +321,13 @@ async def _audit_records(gc: Any, query_id: str, limit: int) -> list[Finding]:
     return [summary] + [_audit_record_finding(r) for r in records[:limit]]
 
 
-def _pending_finding(query_id: str, status: str, reused: bool = False) -> Finding:
+def _pending_finding(
+    query_id: str, status: str, reused: bool = False, window: str = ""
+) -> Finding:
     evidence = [Evidence(key="audit_query_id", value=query_id),
                 Evidence(key="status", value=status)]
+    if window:
+        evidence.append(Evidence(key="window", value=window))
     if reused:
         evidence.append(Evidence(
             key="note",
@@ -372,10 +378,11 @@ async def search_audit_log(
         return [_invalid("activity", activity)]
     if user and not _UPN_RE.match(user):
         return [_invalid("user", user)]
+    window_start, window_end = _since_iso(hours_back), _since_iso(0)
     body: dict[str, Any] = {
         "displayName": "f0_sectools audit search",
-        "filterStartDateTime": _since_iso(hours_back),
-        "filterEndDateTime": _since_iso(0),
+        "filterStartDateTime": window_start,
+        "filterEndDateTime": window_end,
     }
     if activity:
         body["operationFilters"] = [activity]
@@ -383,26 +390,31 @@ async def search_audit_log(
         body["userPrincipalNameFilters"] = [user]
     key = (activity, user, round(hours_back, 2))
     now = time.monotonic()
+    # No lock between this read and the write below: MCP-over-stdio is single-
+    # flight per session, so two truly concurrent identical calls (the only way
+    # to race) don't occur in practice; the dedupe targets sequential retries.
     cached = _RECENT_SEARCHES.get(key)
     reused = bool(cached and now - cached[1] < _REUSE_TTL_S)
     try:
         if reused and cached:
             query_id = cached[0]
+            window = cached[2]  # the ORIGINAL queried window, not a fresh one
             status = "running"
         else:
+            window = f"{window_start} to {window_end}"
             created = await gc.post(_AUDIT_QUERIES_URL, json_body=body)
             query_id = str(created.get("id", ""))
             status = str(created.get("status", "notStarted"))
             if query_id:
-                for k, (_, ts) in list(_RECENT_SEARCHES.items()):
+                for k, (_, ts, _w) in list(_RECENT_SEARCHES.items()):
                     if now - ts >= _REUSE_TTL_S:
                         _RECENT_SEARCHES.pop(k, None)
                 if len(_RECENT_SEARCHES) >= 32:
                     _RECENT_SEARCHES.pop(next(iter(_RECENT_SEARCHES)), None)
-                _RECENT_SEARCHES[key] = (query_id, now)
+                _RECENT_SEARCHES[key] = (query_id, now, window)
         status = await _poll_until_terminal(gc, query_id, status)
         if status not in ("succeeded", "failed", "cancelled"):
-            return [_pending_finding(query_id, status, reused=reused)]
+            return [_pending_finding(query_id, status, reused=reused, window=window)]
         if status != "succeeded":
             return [
                 Finding(
