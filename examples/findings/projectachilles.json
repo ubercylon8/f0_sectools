@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "projectachilles",
+  "finding_type": "risk",
+  "severity": "high",
+  "title": "Weak technique: T1055 Process Injection — 2 of 6 validation tests blocked",
+  "entity": { "kind": "rule", "id": "T1055", "name": "Process Injection" },
+  "evidence": [
+    { "key": "tests_run", "value": "6" },
+    { "key": "blocked", "value": "2" },
+    { "key": "detected_not_blocked", "value": "1" }
+  ],
+  "recommended_action": {
+    "summary": "Review EDR policy for injection prevention; re-run the failing tests after tuning.",
+    "gated_action": "run_test",
+    "confidence": "high"
+  },
+  "references": [ { "type": "mitre", "id": "T1055", "url": null } ],
+  "observed_at": "2026-06-27T22:00:00Z"
+}

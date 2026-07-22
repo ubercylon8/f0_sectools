@@ -58,3 +58,20 @@ credentials. The example file documents the required read permissions, the
 ```bash
 uv run f0-defender-mcp   # stdio MCP server
 ```
+
+## Reference & validation
+
+Full parameter details:
+[generated tool reference](../../docs/reference/tools/defender.md); gated-write
+operator walkthrough:
+[gated actions guide](../../docs/user-guide/gated-actions.md).
+
+✅ Live-validated against a real tenant:
+
+```bash
+uv run python scripts/live_smoke_defender.py
+```
+
+Skills: `triage-defender-incident` (default focus),
+`defender-posture-summary`, `defender-threat-hunt` — see the
+[skills catalog](../../docs/reference/skills.md#defender).

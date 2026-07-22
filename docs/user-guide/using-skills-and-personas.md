@@ -6,22 +6,15 @@ Two complementary mechanisms shape how the agent uses the tools.
 
 Skills are step-by-step procedures the agent follows for a task. They live in
 [`skills/`](../../skills/) as portable [agentskills.io](https://agentskills.io)
-`SKILL.md` packages and work in any skills-aware runtime (Hermes, Claude Code).
+`SKILL.md` packages and work in any skills-aware runtime (Hermes, Claude Code,
+pi, opencode).
 
-| Skill | Use it for | Tools |
-|-------|-----------|-------|
-| `triage-defender-incident` | Investigate an incident: gather alerts, summarize, recommend | `list_incidents`, `list_alerts` |
-| `defender-posture-summary` | Leadership rollup: secure score + open incidents | `get_secure_score`, `list_incidents` |
-| `defender-threat-hunt` | Guided KQL hunting (last 30 days) with safe starters | `run_hunting_query` |
-| `review-entra-identity-risk` | Review ID Protection risky users + detections (P2) | `list_risky_users`, `list_risk_detections` |
-| `audit-conditional-access` | Audit CA policies; flag disabled/report-only | `list_conditional_access_policies` |
-| `review-privileged-access` | Review privileged role holders; flag admin sprawl | `list_privileged_role_assignments` |
-| `investigate-lc-endpoint` | Investigate a sensor: status + telemetry (default) | `get_sensor`, `list_sensors`, `query_telemetry` |
-| `review-detection-coverage` | D&R coverage vs recent detections (the loop) | `get_org_overview`, `list_dr_rules`, `list_detections` |
-| `limacharlie-threat-hunt` | Guided LCQL telemetry hunting | `query_telemetry` |
-| `review-defense-posture` | Defense score + trend + weak techniques | `get_defense_score` (`over_time`), `get_weak_techniques` |
-| `analyze-coverage-gaps` | Weak techniques + unblocked tests → fixes | `get_weak_techniques`, `list_test_executions` |
-| `review-validation-fleet` | Test agents + fleet health + accepted risk | `get_fleet_health`, `list_agents`, `list_risk_acceptances` |
+**The full, always-current list is the [skills catalog](../reference/skills.md)**
+— all 25 skills by platform, generated from their `SKILL.md` frontmatter (so it
+cannot drift). Each platform has a default-focus skill (e.g. Defender's
+incident triage, Intune's compliance review, Tenable's exposure-posture
+review); the [tool reference](../reference/tools/README.md) shows the inverse
+mapping — which skills drive each tool.
 
 In skills-aware runtimes they activate automatically by description, when you
 name them, or via `/skill-name`. In non-skill UIs (LM Studio, Open WebUI) the

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "projectachilles",
+  "finding_type": "action",
+  "severity": "info",
+  "title": "INTENT (not executed): run_test T1566-phish-sim on host web-01",
+  "entity": { "kind": "host", "id": "web-01", "name": "web-01" },
+  "evidence": [
+    { "key": "action", "value": "run_test" },
+    { "key": "confirmation_target", "value": "T1566-phish-sim|web-01" },
+    { "key": "status", "value": "awaiting operator confirmation (watcher or token)" }
+  ],
+  "recommended_action": {
+    "summary": "Operator: approve in `confirm_action.py --watch`, then repeat the identical call.",
+    "gated_action": "run_test",
+    "confidence": "high"
+  },
+  "references": [ { "type": "mitre", "id": "T1566", "url": null } ],
+  "observed_at": "2026-06-28T12:00:00Z"
+}

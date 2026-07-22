@@ -11,6 +11,11 @@ and the tool definitions.
 - Write actions route through `core/gating/` (config flag + confirmation token).
 - Ship `.env.<platform>.example`, contract tests, and an `evals/` task set.
 
-Planned: `wazuh-mcp` (reference), `elastic-mcp`, `splunk-mcp`, `sentinel-mcp`,
-`defender-mcp`, `crowdstrike-mcp`, `sentinelone-mcp`, `sophos-mcp`, `entra-mcp`,
-`misp-mcp`, `thehive-mcp`, `opencti-mcp`.
+**Built & live-validated (8):** `defender-mcp`, `entra-mcp`, `limacharlie-mcp`,
+`projectachilles-mcp`, `projectachilles-actions-mcp` (gated writes),
+`intune-mcp`, `tenable-mcp`, `purview-mcp`. Each server's README documents its
+tools, required credentials/permissions, and smoke test.
+
+Planned: `wazuh-mcp`, `elastic-mcp`, `splunk-mcp`, `sentinel-mcp`,
+`crowdstrike-mcp`, `sentinelone-mcp`, `sophos-mcp`, `misp-mcp`, `thehive-mcp`,
+`opencti-mcp`.

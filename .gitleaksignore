@@ -1,0 +1,10 @@
+# Fingerprints of known-false-positive gitleaks findings, pinned to the exact
+# commit + file + line. Same philosophy as .gitleaks.toml: narrow, documented
+# exceptions only — anything new must still trip the scanner.
+#
+# Fictional audit-log example in the gated-write transcript: the illustrative
+# `token_ref` value ("a1b2c3d4e5f60718") is a made-up 16-hex SHA-256 prefix,
+# not a credential. The live file now truncates the value so the pattern can't
+# recur; this entry only clears the historical commit, which gitleaks re-scans
+# on every PR containing it.
+c63fb2b6d3c1de0ab5ee62b5ce60051889282021:examples/transcripts/gated-run-test.md:generic-api-key:105
