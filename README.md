@@ -23,7 +23,7 @@ Eight MCP servers — **all live-validated against a real tenant** — exposing 
 | `f0-purview-mcp` | ✅ live-validated | 6 | DLP alert summary + alerts, insider-risk alerts, sensitivity labels, unified-audit search (async two-phase) |
 | `f0-projectachilles-actions-mcp` | ✅ live-validated | 7 (3 read + 4 gated) | list schedules, task status, list tasks; gated `run_test` / `schedule_test` (a single host **or a whole tag/fleet**) / `set_schedule_status` / `cancel_tasks` (one task or a bulk filter) |
 
-**51 registered tools.** Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 25 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
+**51 registered tools** ([full tool reference](docs/reference/tools/README.md) — generated from code, drift-guarded in CI). Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 25 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
 
 ## For security teams
 

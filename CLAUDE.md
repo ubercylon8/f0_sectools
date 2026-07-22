@@ -115,7 +115,7 @@ f0_sectools/
 
 ## The Findings Schema
 
-Every tool returns a normalized finding (or a list of them). This is the source of truth; human-readable views are rendered from it.
+Every tool returns a normalized finding (or a list of them). This is the source of truth; human-readable views are rendered from it. Full field/enum reference and lifecycle: [docs/explanation/findings-schema.md](docs/explanation/findings-schema.md).
 
 ```jsonc
 {
@@ -170,7 +170,7 @@ How a local model actually drives these tools. The mechanism differs by runtime,
 
 Skills live in `skills/` as **[agentskills.io](https://agentskills.io) `SKILL.md`** packages (the open standard, originally Anthropic's, now adopted by Hermes, Claude Code, Goose, OpenHands, Cursor, …). A skill is a directory with a `SKILL.md` (YAML frontmatter: `name`, `description` ≤60 chars, `version`, optional `metadata.hermes`) plus `## When to Use / Procedure / Pitfalls / Verification`, and optional `references/`. Loaded via progressive disclosure. The same files work in **every** skills-aware runtime — never fork them per runtime (Critical Rule 9). Each skill refers to tools by **base name** (`list_incidents`); runtimes prefix differently (Hermes `mcp_f0-defender_list_incidents`, Claude Code `mcp__f0-defender__list_incidents`).
 
-Current skills: `defender/{triage-incident,posture-summary,threat-hunt}`, `entra/{identity-risk-review,conditional-access-audit,privileged-access-review}`, `limacharlie/{endpoint-investigation,detection-coverage-review,threat-hunt}` (endpoint investigation is the LimaCharlie default focus), `projectachilles/{defense-posture-review,coverage-gap-analysis,validation-fleet-review,explore-test-catalog,run-validation-test}`, `intune/{device-compliance-review,coverage-gap-review,device-triage}` (device-compliance review is the Intune default focus), `tenable/{exposure-posture-review,host-vulnerability-triage,scan-coverage-review}` (exposure-posture review is the Tenable default focus), `purview/{data-risk-review,dlp-alert-triage,audit-investigation}` (data-risk review is the Purview default focus), and `cross-platform/{triage-incident-cross-platform,validation-coverage-loop}` (multi-server correlation playbooks — favour a capable local model). A test (`skills/test_skills_valid.py`) enforces valid frontmatter and the ≤60-char description limit on every `SKILL.md`.
+The full skill list lives in the **generated catalog** [`docs/reference/skills.md`](docs/reference/skills.md) (25 skills across 8 platform categories; regenerate with `uv run python scripts/gen_docs.py` — do not hand-list skills here or anywhere else). Default focuses: LimaCharlie → endpoint investigation, Intune → device-compliance review, Tenable → exposure-posture review, Purview → data-risk review; the cross-platform correlation playbooks favour a capable local model. A test (`skills/test_skills_valid.py`) enforces valid frontmatter and the ≤60-char description limit on every `SKILL.md`.
 
 ### Personas (four role lenses)
 
@@ -190,7 +190,7 @@ CISO, threat hunter, detection engineer, security engineer — each a behavioura
 
 ## Gated Write Actions
 
-Any tool that changes state on a live platform is **read-only-by-default and gated**. The pattern, implemented once in `core/gating/`:
+Any tool that changes state on a live platform is **read-only-by-default and gated**. The operator-facing trust story (threat model, state machine, verification steps) is [docs/explanation/security-model.md](docs/explanation/security-model.md) — keep it in sync with this section. The pattern, implemented once in `core/gating/`:
 
 1. **Disabled unless enabled.** The action is unavailable unless the operator sets the platform's write flag (e.g. `DEFENDER_ALLOW_WRITE=true` in `.env.defender`).
 2. **Dry-run / intent first.** When invoked, the tool returns the *intended* action as a finding (`finding_type: "action"`) describing exactly what it will do and to which target — it does **not** execute yet.
@@ -271,7 +271,7 @@ The four built servers (`defender`, `entra`, `limacharlie`, `projectachilles`) f
 8. **Smoke script** — `scripts/live_smoke_<platform>.py`.
 9. **Live-test** — create `.env.<platform>` at the repo root (gitignored), run the smoke script **with network/sandbox enabled**, and fix-forward field-name/shape mismatches (this step always finds 1–3 — mocks encode assumptions; the live API is truth). Mark live-validated once clean.
 10. **Skills** (after the server is validated) — three `SKILL.md` under `skills/<platform>/` (a posture/coverage skill, a gap/investigation skill, a platform-native one). Pick a default focus and say so. Wire into Hermes personas if relevant.
-11. **Docs & runtime wiring** — update the Platform Integrations table + Architecture tree here, the README status, the user-guide support matrix + workflows, **and the runtime integration templates** (`integrations/pi/mcp.json`, `integrations/hermes/config.example.yaml`, `integrations/hermes/distribution/config.yaml`). The templates are drift-guarded: `integrations/test_integrations_valid.py` derives the server list from the workspace `[project.scripts]` entries and fails CI if any template is missing a server, references a removed one, or leaks a real local path (placeholders only — operators render locally, e.g. `scripts/sync_pi_config.py`).
+11. **Docs & runtime wiring** — regenerate the reference docs (`uv run python scripts/gen_docs.py` — the tool pages and skills catalog are generated, and `scripts/tests/test_gen_docs.py` fails CI if they drift), then update the Platform Integrations table + Architecture tree here, the README status, the user-guide support matrix + workflows, **and the runtime integration templates** (`integrations/pi/mcp.json`, `integrations/hermes/config.example.yaml`, `integrations/hermes/distribution/config.yaml`). The templates are drift-guarded: `integrations/test_integrations_valid.py` derives the server list from the workspace `[project.scripts]` entries and fails CI if any template is missing a server, references a removed one, or leaks a real local path (placeholders only — operators render locally, e.g. `scripts/sync_pi_config.py`).
 12. **Verify & ship** — `uv run pytest`, `uv run ruff check .`, markdown link check, secret scan (no real `.env` staged), commit (conventional, with the Co-Authored-By/session trailers), **push only on explicit instruction**.
 
 **Auth models already handled** (none required a `core/` change): Microsoft Graph OAuth client-credentials, a synchronous vendor SDK (LimaCharlie), and a static `Bearer` REST key (ProjectAchilles). See the Quick Reference table for the one-liners.

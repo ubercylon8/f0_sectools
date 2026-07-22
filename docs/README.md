@@ -38,10 +38,15 @@ flowchart LR
 
 ## Look it up (reference)
 
+- **[Tool reference](reference/tools/README.md)** — all 51 tools across the
+  8 servers: descriptions, parameters, enums, defaults, gated-write badges.
+  *Generated from the live tool registries; CI fails if it drifts.*
+- **[Skills catalog](reference/skills.md)** — all 25 portable skills, by
+  platform. *Generated from `SKILL.md` frontmatter.*
 - **[Glossary](reference/glossary.md)** — every term, defined once.
 - **[Eval scorecard](../evals/SCORECARD.md)** — measured model × server
   callability matrix; [agentic eval](../evals/AGENTIC.md) for multi-step runs.
-- Per-server tool details: each server's README under
+- Credentials & permissions per platform: each server's README under
   [`servers/`](../servers/README.md) and its `.env.<platform>.example`.
 
 ## House rules & history
