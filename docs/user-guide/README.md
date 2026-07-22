@@ -54,7 +54,6 @@ gated actions) are live-validated today — see the support matrix below.
 | Microsoft Intune | `f0-intune-mcp` | ✅ live-validated | managed devices, compliance summary, stale devices, compliance policies, config profiles |
 | Tenable Vulnerability Management | `f0-tenable-mcp` | ✅ live-validated | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans, plugin affected-hosts |
 | ProjectAchilles (actions) | `f0-projectachilles-actions-mcp` | ✅ live-validated | gated `run_test` / `schedule_test` on a single host **or a whole tag/fleet**, `set_schedule_status`, `cancel_tasks` (single task or bulk status/search filter); reads `list_schedules`, `get_task_status`, `list_tasks` (needs a read-write `pa_` key + `PROJECTACHILLES_ALLOW_WRITE=true`; driven by the `run-validation-test` skill, alongside the other ProjectAchilles skills) |
-
 | Microsoft Purview | `f0-purview-mcp` | ✅ live-validated | DLP alert summary + list, insider-risk alerts, sensitivity labels, unified-audit search (async two-phase) — needs `AuditLogsQuery.Read.All`; DLP/IRM content needs Purview licensing |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph
