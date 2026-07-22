@@ -24,3 +24,24 @@ Management Activity API) is also out of scope.
 
 Findings-schema output, core redaction at the boundary, graceful
 permission/licensing degradation — same contract as every f0_sectools server.
+Full parameter details:
+[generated tool reference](../../docs/reference/tools/purview.md).
+
+## Run
+
+```bash
+uv run f0-purview-mcp   # stdio MCP server
+```
+
+## Live validation
+
+✅ Live-validated against a real tenant (this run is what surfaced the
+Graph-beta quirks documented above):
+
+```bash
+uv run python scripts/live_smoke_purview.py
+```
+
+Skills: `review-data-risk` (default focus), `triage-dlp-alerts`,
+`investigate-audit-activity` — see the
+[skills catalog](../../docs/reference/skills.md#purview).

@@ -21,7 +21,9 @@ back whether they fired) and fleet-wide **LCQL threat hunting**.
 | `query_telemetry` | Guided telemetry hunt — `hunt` preset, or raw `lcql` |
 
 Every tool returns `f0_sectools_core` findings and degrades gracefully (auth /
-permission / rate-limit issues become a posture finding, not a crash).
+permission / rate-limit issues become a posture finding, not a crash). Full
+parameter details:
+[generated tool reference](../../docs/reference/tools/limacharlie.md).
 
 ## Configuration
 
@@ -33,6 +35,19 @@ a read-capable API key. See the example for details.
 ```bash
 uv run f0-limacharlie-mcp   # stdio MCP server
 ```
+
+## Live validation
+
+✅ Live-validated against a real org (uses the official `limacharlie` Python
+SDK, wrapped for async via `asyncio.to_thread`):
+
+```bash
+uv run python scripts/live_smoke_limacharlie.py
+```
+
+Skills: `investigate-lc-endpoint` (default focus),
+`review-detection-coverage`, `limacharlie-threat-hunt` — see the
+[skills catalog](../../docs/reference/skills.md#limacharlie).
 
 ## Relationship to the official server
 

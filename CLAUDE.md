@@ -93,18 +93,17 @@ f0_sectools/
     # planned: wazuh, elastic, splunk, sentinel, crowdstrike, sentinelone,
     #          sophos, misp, thehive, opencti (see Platform Integrations)
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
-    defender/               # triage-incident, posture-summary, threat-hunt
-    entra/                  # identity-risk-review, conditional-access-audit, privileged-access-review
-    limacharlie/            # endpoint-investigation, detection-coverage-review, threat-hunt
-    tenable/                # exposure-posture-review, host-vulnerability-triage, scan-coverage-review
+    defender/ entra/ limacharlie/ projectachilles/ intune/ tenable/ purview/
     cross-platform/         # multi-server correlation: incident triage, offensive<->defensive loop
+                            # (full catalog: docs/reference/skills.md — generated)
   integrations/             # runtime-specific wiring (NO skill content — see rule 9)
     hermes/                 # config.example.yaml (manual-merge) + distribution/ (installable profile: distribution.yaml + config.yaml + SOUL.md)
     pi/                     # mcp.json + AGENTS.md + persona prompt templates
     opencode/               # README only — the wiring is in-repo: /opencode.json + /.opencode/{skills,agents}
   prompts/                  # portable system prompts for non-skill UIs (LM Studio, Open WebUI)
   evals/                    # small-model tool-calling eval harness + task sets
-  docs/
+  examples/                 # sample findings (CI-validated), transcripts, persona renders
+  docs/                     # hub (README) + explanation/ + reference/ (generated) + user-guide/
 ```
 
 **The rule:** a server defines its tools and calls its platform's API. *Everything else* — auth, redaction, schema normalization, pagination, gating, rendering — it gets from `core/`. This keeps the safety guarantees enforceable in one auditable place and prevents drift across a dozen integrations.
@@ -115,46 +114,13 @@ f0_sectools/
 
 ## The Findings Schema
 
-Every tool returns a normalized finding (or a list of them). This is the source of truth; human-readable views are rendered from it. Full field/enum reference and lifecycle: [docs/explanation/findings-schema.md](docs/explanation/findings-schema.md).
+Every tool returns a normalized finding (or a list of them). This is the source of truth; human-readable views are rendered from it. **The authoritative reference is [docs/explanation/findings-schema.md](docs/explanation/findings-schema.md)** (full fields, enums, lifecycle, error-as-finding builders) and the code is `core/f0_sectools_core/schema/findings.py` — do not restate the field list here or anywhere else; an earlier inline copy of the schema in this file drifted from the code (wrong enums) and misled agents.
 
-```jsonc
-{
-  "schema_version": "1.0",
-  "source": "wazuh",                 // which platform produced this
-  "finding_type": "alert",           // alert | misconfig | risk | ioc | posture | action_result
-  "severity": "high",                // low | medium | high | critical | info
-  "title": "Brute-force authentication against host web-01",
-  "entity": {                        // what this is about
-    "kind": "host",                  // host | user | file | ip | account | rule | tenant
-    "id": "web-01",
-    "name": "web-01.corp.local"
-  },
-  "evidence": [                      // bounded, redacted supporting facts
-    { "key": "failed_logins", "value": "142 in 5m" }
-  ],
-  "recommended_action": {
-    "summary": "Isolate host and reset affected credentials",
-    "gated_action": "defender.isolate_host",   // null if read-only/no action
-    "confidence": "medium"
-  },
-  "references": [                    // MITRE ATT&CK, KB articles, source IDs
-    { "type": "mitre", "id": "T1110" }
-  ],
-  "observed_at": "2026-06-28T10:00:00Z"
-}
-```
+Shape at a glance: `schema_version` · `source` · `finding_type` (8-value enum incl. `posture` for graceful degradations and `action` for gated-write intents/results) · `severity` (info→critical) · `title` · optional `entity {kind, id, name}` · flat `evidence [{key, value}]` · optional `recommended_action {summary, gated_action, confidence}` · `references` · `observed_at`. Sample findings for every server (schema-validated in CI): [examples/findings/](examples/findings/README.md).
 
 ### Persona renderers
 
-The same finding is rendered differently per audience via `core/renderers/`:
-
-- **SOC analyst** — per-incident, tactical: what happened, evidence, next triage step.
-- **Security engineer** — config-level: the misconfig/coverage gap and the fix.
-- **CISO / risk leader** — aggregated rollups, risk scoring, exec-framed summaries.
-- **Threat hunter / IR** — timeline, pivots, case-building across MISP/TheHive/OpenCTI.
-- **Detection engineer** — alert quality and coverage: findings grouped by ATT&CK technique, unmapped findings flagged.
-
-Tools always emit the structured finding; the persona view is a presentation layer, never a different data contract.
+`core/renderers/` renders the same finding per audience (SOC analyst, security engineer, CISO, threat hunter, detection engineer) — deterministic, model-free, presentation only, never a different data contract. Reference + real rendered examples: [findings-schema.md § renderers](docs/explanation/findings-schema.md#persona-renderers-corerenderers) and [examples/personas/](examples/personas/README.md).
 
 > **Two persona layers, don't confuse them.** `core/renderers/` (above) shapes how a *finding's text* is presented. The **agent personas** in [Skills, Personas & Runtimes](#skills-personas--runtimes) shape the *agent's behaviour* — which skills/tools it favours and how it frames a whole response. They compose; the renderer is optional polish, the agent persona is the primary mechanism today.
 
