@@ -94,7 +94,11 @@ async def search_audit_log(
 @mcp.tool()
 async def get_audit_results(audit_query_id: str, limit: int = 25) -> list[dict[str, Any]]:
     """Fetch the results of a previously submitted audit search (the
-    audit_query_id returned by search_audit_log when it was still running)."""
+    audit_query_id returned by search_audit_log when it was still running).
+
+    May pause briefly (~15s) polling the query before returning; if it is still
+    not ready, returns a 'still running' finding — wait a few minutes and call
+    this ONCE more, do not loop on it."""
     async with _client() as gc:
         return _render(await tools.get_audit_results(gc, audit_query_id, limit))
 

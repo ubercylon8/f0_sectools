@@ -2,12 +2,13 @@
 
 # Skills catalog
 
-**25 portable [agentskills.io](https://agentskills.io) skills** — one set, loaded unmodified by every skills-aware runtime (Hermes, Claude Code, pi, opencode). Each links to its `SKILL.md` playbook. See [using skills & personas](../user-guide/using-skills-and-personas.md) for how to invoke them.
+**26 portable [agentskills.io](https://agentskills.io) skills** — one set, loaded unmodified by every skills-aware runtime (Hermes, Claude Code, pi, opencode). Each links to its `SKILL.md` playbook. See [using skills & personas](../user-guide/using-skills-and-personas.md) for how to invoke them.
 
 ## cross-platform
 
 | Skill | Description | Version | Tags |
 |---|---|---|---|
+| [`roll-up-ciso-risk`](../../skills/cross-platform/ciso-risk-rollup/SKILL.md) | Executive risk rollup across all security platforms | 1.0.0 | security, ciso, risk, posture, cross-platform, executive |
 | [`triage-incident-cross-platform`](../../skills/cross-platform/triage-incident-cross-platform/SKILL.md) | Triage a Defender incident across Entra, LimaCharlie & PA | 1.0.0 | security, soc, incident-response, cross-platform, correlation |
 | [`validation-coverage-loop`](../../skills/cross-platform/validation-coverage-loop/SKILL.md) | Weak techniques -> LC coverage -> retest recommendation | 1.0.0 | security, detection-engineering, projectachilles, limacharlie, cross-platform |
 

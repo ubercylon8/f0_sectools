@@ -15,7 +15,7 @@ or Secure Score (use get_secure_score). hours_back may be fractional.
 |---|---|---|
 | `hours_back` | `number` | `168` |
 
-Used by skills: [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md), [`triage-dlp-alerts`](../../../skills/purview/dlp-alert-triage/SKILL.md)
+Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md), [`triage-dlp-alerts`](../../../skills/purview/dlp-alert-triage/SKILL.md)
 
 ## `list_dlp_alerts`
 
@@ -77,6 +77,10 @@ Used by skills: [`investigate-audit-activity`](../../../skills/purview/audit-inv
 
 Fetch the results of a previously submitted audit search (the
 audit_query_id returned by search_audit_log when it was still running).
+
+May pause briefly (~15s) polling the query before returning; if it is still
+not ready, returns a 'still running' finding — wait a few minutes and call
+this ONCE more, do not loop on it.
 
 | Parameter | Type | Default |
 |---|---|---|

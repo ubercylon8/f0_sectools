@@ -230,6 +230,7 @@ Each integration follows `.env.<platform>` and the thin-server pattern. Read too
 - **TDD each code step** — write the contract test (fake client) before the implementation.
 - Step 9 (live-test) needs **network/sandbox enabled** and explicit user confirmation (live platform rule) — this step always finds 1–3 field-name mismatches; fix forward.
 - Step 11's generated docs (`uv run python scripts/gen_docs.py`) and the integration templates (`integrations/test_integrations_valid.py`) are both drift-guarded — CI fails if either is stale. Also update the Platform Integrations table + Architecture tree *here* and wire Hermes personas if relevant.
+- **The `gen_docs` drift guard fires on ANY change, not just new platforms.** Any edit to a tool, a tool docstring/signature, or a skill makes `docs/reference/` stale — rerun `uv run python scripts/gen_docs.py` and commit the result before pushing, or CI's `test_gen_docs.py` fails. Same reflex as the `integrations/` templates: change code → regenerate → commit.
 - Step 12 ships with a conventional commit + the Co-Authored-By/session trailers, and **push only on explicit instruction**.
 
 **Auth models already handled** (none required a `core/` change): Microsoft Graph OAuth client-credentials, a synchronous vendor SDK (LimaCharlie), and a static `Bearer` REST key (ProjectAchilles). See the Quick Reference table for the one-liners.

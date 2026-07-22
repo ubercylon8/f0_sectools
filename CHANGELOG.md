@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CISO risk-rollup skill** (`skills/cross-platform/ciso-risk-rollup`) — one
+  executive playbook that pulls a headline posture number from each of the six
+  platforms (Secure Score, ProjectAchilles defense score, Tenable exposure,
+  Intune compliance, Purview data-risk, LimaCharlie endpoint coverage), ranks
+  the top risks by actual severity, and reports a partial rollup gracefully when
+  a platform is dark (unlicensed / no permission). Wired into the CISO persona
+  across all runtimes.
 - **Documentation overhaul** (per the accepted
   [proposal](docs/proposals/2026-07-22-documentation-overhaul.md)). New
   `docs/explanation/` layer — [architecture](docs/explanation/architecture.md)

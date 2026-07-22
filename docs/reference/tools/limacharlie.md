@@ -13,7 +13,7 @@ The LimaCharlie endpoint/detection deployment — not Microsoft tenant config
 
 *No parameters.*
 
-Used by skills: [`review-detection-coverage`](../../../skills/limacharlie/detection-coverage-review/SKILL.md), [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md)
+Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`review-detection-coverage`](../../../skills/limacharlie/detection-coverage-review/SKILL.md), [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md)
 
 ## `list_sensors`
 

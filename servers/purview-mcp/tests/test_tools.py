@@ -316,6 +316,24 @@ async def test_search_audit_log_reuses_inflight_identical_search(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pending_finding_surfaces_the_queried_window(monkeypatch):
+    # A reused search returns results for the ORIGINAL window, not "last
+    # hours_back from now" — surface the actual queried window so the caller
+    # knows what the eventual results cover (CC review #63).
+    monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)
+    gc = FakeGC(posts={"auditLog/queries": {"id": "q-w", "status": "notStarted"}},
+                gets={"queries/q-w": {"id": "q-w", "status": "running"}})
+    first = await tools.search_audit_log(gc, activity="FileDeleted", hours_back=4)
+    ev1 = {e.key: e.value for e in first[0].evidence}
+    assert "window" in ev1 and "T" in ev1["window"]  # an ISO range
+    # Reuse: same window reported, not a freshly recomputed one.
+    second = await tools.search_audit_log(gc, activity="FileDeleted", hours_back=4)
+    ev2 = {e.key: e.value for e in second[0].evidence}
+    assert ev2["window"] == ev1["window"]
+
+
+@pytest.mark.asyncio
 async def test_search_audit_log_different_filters_submit_fresh(monkeypatch):
     monkeypatch.setattr(tools.asyncio, "sleep", _no_sleep)
     monkeypatch.setattr(tools, "_POLL_DEADLINE_S", 0.01)

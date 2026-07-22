@@ -18,7 +18,7 @@ returns the TREND over the period — use it for any "improving", "declining",
 | `over_time` | `boolean` | `False` |
 | `interval` | `string` | `"day"` |
 
-Used by skills: [`review-defense-posture`](../../../skills/projectachilles/defense-posture-review/SKILL.md), [`run-validation-test`](../../../skills/projectachilles/run-validation-test/SKILL.md)
+Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`review-defense-posture`](../../../skills/projectachilles/defense-posture-review/SKILL.md), [`run-validation-test`](../../../skills/projectachilles/run-validation-test/SKILL.md)
 
 ## `get_weak_techniques`
 

@@ -13,7 +13,7 @@ Returns one posture finding with per-severity instance counts.
 
 *No parameters.*
 
-Used by skills: [`review-exposure-posture`](../../../skills/tenable/exposure-posture-review/SKILL.md)
+Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`review-exposure-posture`](../../../skills/tenable/exposure-posture-review/SKILL.md)
 
 ## `list_top_vulnerabilities`
 

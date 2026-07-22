@@ -64,8 +64,12 @@ change. Do it in this order, TDD-ing each code step. (Background:
     the platform table in CLAUDE.md, the README status, the user-guide
     support matrix, and the runtime templates in `integrations/`
     (drift-guarded by `integrations/test_integrations_valid.py`).
-12. **Verify** — `uv run pytest`, `uv run ruff check .`, no real `.env`
-    staged, conventional commit.
+12. **Verify** — `uv run pytest`, `uv run ruff check .`, `uv run mypy .`, no
+    real `.env` staged, conventional commit. **If you changed any tool, tool
+    docstring/signature, or skill** (not just when adding a platform), rerun
+    `uv run python scripts/gen_docs.py` and commit the regenerated
+    `docs/reference/` — the CI drift guard (`scripts/tests/test_gen_docs.py`)
+    fails on stale reference docs.
 
 Gated write actions (only where operationally worth the risk) route through
 `core/gating/` — never a hand-rolled confirmation. Study

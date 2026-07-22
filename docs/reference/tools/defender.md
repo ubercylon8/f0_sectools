@@ -15,7 +15,7 @@ Microsoft tenant configuration only — not the LimaCharlie endpoint deployment
 
 *No parameters.*
 
-Used by skills: [`defender-posture-summary`](../../../skills/defender/posture-summary/SKILL.md), [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md)
+Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`defender-posture-summary`](../../../skills/defender/posture-summary/SKILL.md), [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md)
 
 ## `list_incidents`
 

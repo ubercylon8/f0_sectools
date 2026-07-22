@@ -23,7 +23,7 @@ Intune device-compliance rollup: how many managed devices are compliant vs not.
 
 *No parameters.*
 
-Used by skills: [`intune-coverage-gap-review`](../../../skills/intune/coverage-gap-review/SKILL.md), [`intune-device-compliance-review`](../../../skills/intune/device-compliance-review/SKILL.md)
+Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`intune-coverage-gap-review`](../../../skills/intune/coverage-gap-review/SKILL.md), [`intune-device-compliance-review`](../../../skills/intune/device-compliance-review/SKILL.md)
 
 ## `get_managed_device`
 
