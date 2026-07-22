@@ -102,8 +102,11 @@ call.
 
 ```json
 {"action": "projectachilles.run_test", "target": "3f9d…|web-01",
- "actor": "f0-pa-actions", "method": "approval", "token_ref": "a1b2c3d4e5f60718"}
+ "actor": "f0-pa-actions", "method": "approval", "token_ref": "a1b2c3d4…"}
 ```
+
+*(`token_ref` is the first 16 hex chars of a SHA-256 — truncated here so the
+fictional example doesn't trip secret scanners.)*
 
 ---
 
