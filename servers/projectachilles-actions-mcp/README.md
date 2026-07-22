@@ -86,3 +86,22 @@ retry a failed execution.
 ## Run
 
     uv run f0-projectachilles-actions-mcp
+
+## Reference & validation
+
+Full parameter details:
+[generated tool reference](../../docs/reference/tools/projectachilles-actions.md).
+Operator walkthrough of the gate:
+[gated actions guide](../../docs/user-guide/gated-actions.md); a full annotated
+session: [gated-run-test transcript](../../examples/transcripts/gated-run-test.md).
+
+✅ Live-validated on a real tenant with a read-write-scope `pa_` key
+(single-host and tag/fleet runs, count-bound bulk cancel):
+
+```bash
+uv run python scripts/live_smoke_projectachilles_actions.py            # intents only
+uv run python scripts/live_smoke_projectachilles_actions.py --execute  # with tokens
+```
+
+Driven by the `run-validation-test` skill — see the
+[skills catalog](../../docs/reference/skills.md#projectachilles).

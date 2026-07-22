@@ -23,7 +23,12 @@ the underlying results, and the test-agent fleet to a local model.
 | `get_test` | Full detail for one catalog test by uuid or name — description, OS, techniques, tactics |
 
 Every tool returns `f0_sectools_core` findings and degrades gracefully (auth /
-permission / rate-limit issues become a posture finding, not a crash).
+permission / rate-limit issues become a posture finding, not a crash). Full
+parameter details:
+[generated tool reference](../../docs/reference/tools/projectachilles.md).
+Write actions (run/schedule/pause/cancel tests) live in the separate
+[`projectachilles-actions-mcp`](../projectachilles-actions-mcp/README.md)
+server, gated.
 
 ## Configuration
 
@@ -36,3 +41,16 @@ org is embedded in the key.
 ```bash
 uv run f0-projectachilles-mcp   # stdio MCP server
 ```
+
+## Live validation
+
+✅ Live-validated against a real tenant (note: the API lives on the `agent`
+subdomain — `https://<org>.agent.projectachilles.io`, not the web-UI host):
+
+```bash
+uv run python scripts/live_smoke_projectachilles.py
+```
+
+Skills: `review-defense-posture`, `analyze-coverage-gaps`,
+`review-validation-fleet`, `explore-test-catalog` — see the
+[skills catalog](../../docs/reference/skills.md#projectachilles).

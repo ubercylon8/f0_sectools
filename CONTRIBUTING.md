@@ -21,15 +21,55 @@ These mirror the Critical Rules in [CLAUDE.md](CLAUDE.md):
    per server, bounded/paginated output. See the "Designing Tools for Small
    Models" section in CLAUDE.md.
 
-## Adding a platform server
+## Adding a platform server — the recipe
 
-1. Create `servers/<platform>-mcp/` and import `core/`.
-2. Define read tools first (target ≤ ~8 flat tools per server).
-3. Add `.env.<platform>.example` documenting required credentials (no secrets).
-4. Write **contract tests** against mocked platform APIs (schema shape,
-   redaction, pagination, gating refusal without flag/token).
-5. Add at least one **eval task set** in `evals/` so the tools' callability by a
-   local model is measured.
+The eight built servers follow an **identical pattern**; `core/` does not
+change. Do it in this order, TDD-ing each code step. (Background:
+[architecture](docs/explanation/architecture.md#the-server-pattern).)
+
+1. **Config** — add `<Platform>Config` (dataclass + `from_env(prefix=...)`,
+   required vars, optional `verify_tls`/`allow_write`, secrets never logged)
+   to `core/auth/config.py`, with a test in `core/tests/test_config.py`.
+2. **Scaffold** `servers/<platform>-mcp/`: `pyproject.toml` (deps
+   `f0-sectools-core`, `mcp`, + the platform's client lib), `README.md`
+   (follow [`servers/_TEMPLATE.md`](servers/_TEMPLATE.md)),
+   `.env.<platform>.example` (document the exact required
+   permissions/scopes), `f0_<platform>_mcp/__init__.py`, `tests/`. Then
+   `uv sync --all-packages`.
+3. **Client** (`client.py`) — thin wrapper exposing only the read methods
+   needed. Async `httpx` for REST (static Bearer or OAuth); for a
+   **synchronous vendor SDK**, wrap it and run tools via `asyncio.to_thread`.
+4. **Errors** (`errors.py`) — `map_<platform>_error(...)`: auth → posture
+   finding, `403` → `Finding.permission_missing`, `429` →
+   `Finding.rate_limited`, gateway `502/503/504` → "API unavailable".
+   **Every failure becomes a finding, never an exception.**
+5. **Tools** (`tools.py`) — ≤ ~8 flat read tools returning `list[Finding]`;
+   write the contract tests first (fake client) — live data validates real
+   field names later.
+6. **Server** (`server.py`) — `FastMCP`, one `@mcp.tool()` per tool, build the
+   client from config, **redact at the boundary** (`redact_obj(f.model_dump())`).
+7. **Evals** — `evals/<platform>/tasks.yaml` (≥1 task per tool) + add the
+   server to `SERVERS` in `evals/test_eval_coverage.py` and `SERVER_MODULES`
+   in `evals/run.py`.
+8. **Smoke script** — `scripts/live_smoke_<platform>.py`.
+9. **Live-test** — create `.env.<platform>` at the repo root (gitignored), run
+   the smoke script, and fix-forward field-name/shape mismatches (this step
+   always finds 1–3 — mocks encode assumptions; the live API is truth). Mark
+   live-validated once clean.
+10. **Skills** — three `SKILL.md` under `skills/<platform>/` (a
+    posture/coverage skill, a gap/investigation skill, a platform-native
+    one). Pick a default focus and say so.
+11. **Docs & wiring** — regenerate the reference
+    (`uv run python scripts/gen_docs.py` — CI fails if stale), then update
+    the platform table in CLAUDE.md, the README status, the user-guide
+    support matrix, and the runtime templates in `integrations/`
+    (drift-guarded by `integrations/test_integrations_valid.py`).
+12. **Verify** — `uv run pytest`, `uv run ruff check .`, no real `.env`
+    staged, conventional commit.
+
+Gated write actions (only where operationally worth the risk) route through
+`core/gating/` — never a hand-rolled confirmation. Study
+`projectachilles-actions-mcp` as the reference consumer.
 
 ## Development workflow
 

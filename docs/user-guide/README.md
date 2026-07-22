@@ -37,9 +37,15 @@ gated actions) are live-validated today — see the support matrix below.
 4. **[Prompting](prompting.md)** — how to phrase requests so a small local model
    reliably drives the tools (matters a lot — read this).
 5. **[Workflows](workflows.md)** — example end-to-end tasks (posture, triage,
-   hunt) with the prompts to use.
-6. **[Troubleshooting](troubleshooting.md)** — throttling, missing permissions,
-   tools not firing.
+   hunt) with the prompts to use; annotated real-flow
+   [transcripts](../../examples/transcripts/README.md) show what a session
+   looks like.
+6. **[Gated actions](gated-actions.md)** — enabling write actions, running
+   the approval watcher, and reading the audit trail (only if you need
+   writes; everything is read-only until you do this).
+7. **[Troubleshooting](troubleshooting.md)** — throttling, missing permissions,
+   tools not firing — and the **[FAQ](faq.md)** for evaluator questions
+   (privacy, hardware, licensing).
 
 ## Support matrix (living — update as the project grows)
 
@@ -54,7 +60,6 @@ gated actions) are live-validated today — see the support matrix below.
 | Microsoft Intune | `f0-intune-mcp` | ✅ live-validated | managed devices, compliance summary, stale devices, compliance policies, config profiles |
 | Tenable Vulnerability Management | `f0-tenable-mcp` | ✅ live-validated | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans, plugin affected-hosts |
 | ProjectAchilles (actions) | `f0-projectachilles-actions-mcp` | ✅ live-validated | gated `run_test` / `schedule_test` on a single host **or a whole tag/fleet**, `set_schedule_status`, `cancel_tasks` (single task or bulk status/search filter); reads `list_schedules`, `get_task_status`, `list_tasks` (needs a read-write `pa_` key + `PROJECTACHILLES_ALLOW_WRITE=true`; driven by the `run-validation-test` skill, alongside the other ProjectAchilles skills) |
-
 | Microsoft Purview | `f0-purview-mcp` | ✅ live-validated | DLP alert summary + list, insider-risk alerts, sensitivity labels, unified-audit search (async two-phase) — needs `AuditLogsQuery.Read.All`; DLP/IRM content needs Purview licensing |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph

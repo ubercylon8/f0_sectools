@@ -52,7 +52,19 @@ normalized finding:
 ]
 ```
 
-Every tool returns this same [findings schema](../CLAUDE.md#the-findings-schema),
+Every tool returns this same [findings schema](explanation/findings-schema.md),
 so an agent — and a small local model especially — parses and chains results
 predictably. On the [scorecard](../evals/SCORECARD.md), every tested model drives
 these tools at 100%/100% per server.
+
+## More demonstrations (no tenant needed)
+
+- **[Sample findings, one per server](../examples/findings/README.md)** — the
+  same normalized shape across all eight platforms; schema-validated in CI.
+- **[Annotated triage transcript](../examples/transcripts/defender-triage.md)** —
+  a small model driving a full incident triage, step by step.
+- **[Gated-write transcript](../examples/transcripts/gated-run-test.md)** —
+  refusal → intent → out-of-band approval → audited execution.
+- **[Persona renders](../examples/personas/README.md)** — the same findings at
+  five altitudes; reproduce with
+  `uv run python examples/personas/render_example.py`.

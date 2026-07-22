@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "source": "tenable",
+  "finding_type": "misconfig",
+  "severity": "critical",
+  "title": "Tenable: Apache Log4j Remote Code Execution (Log4Shell) (plugin 155999)",
+  "entity": { "kind": "rule", "id": "155999", "name": "Apache Log4j Remote Code Execution (Log4Shell)" },
+  "evidence": [
+    { "key": "affected_hosts", "value": "12" },
+    { "key": "cvss", "value": "10.0" }
+  ],
+  "recommended_action": {
+    "summary": "Review affected hosts and remediate; see get_vulnerability_info for the fix.",
+    "gated_action": null,
+    "confidence": "medium"
+  },
+  "references": [ { "type": "tenable_plugin", "id": "155999", "url": null } ],
+  "observed_at": null
+}

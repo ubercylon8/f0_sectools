@@ -2,7 +2,10 @@
 
 End-to-end tasks you can run today, with the prompts to use. These work in any
 runtime; in Hermes prefix with `/personality <name>` to set the lens, elsewhere
-say "as a <role>".
+say "as a <role>". To see what a session actually looks like before running
+one, read the annotated
+[transcripts](../../examples/transcripts/README.md) (incident triage; a gated
+write end-to-end).
 
 ## Morning posture check (CISO)
 

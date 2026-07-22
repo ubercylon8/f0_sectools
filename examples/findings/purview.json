@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "purview",
+  "finding_type": "alert",
+  "severity": "high",
+  "title": "DLP alert: credit-card numbers shared externally via OneDrive",
+  "entity": { "kind": "user", "id": "c7aa0000-0000-0000-0000-000000000000", "name": "j.doe@corp.local" },
+  "evidence": [
+    { "key": "policy", "value": "PCI-DSS external sharing" },
+    { "key": "matches", "value": "14" },
+    { "key": "workload", "value": "OneDrive" }
+  ],
+  "recommended_action": {
+    "summary": "Review the shared file and revoke the external link; confirm with the data owner.",
+    "gated_action": null,
+    "confidence": "medium"
+  },
+  "references": [],
+  "observed_at": "2026-06-28T08:45:00Z"
+}
