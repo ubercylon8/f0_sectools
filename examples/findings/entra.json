@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "entra",
+  "finding_type": "risk",
+  "severity": "medium",
+  "title": "Risky user: svc-backup (risk state atRisk, unfamiliar sign-in features)",
+  "entity": { "kind": "user", "id": "8f2c1a9e-0000-4000-a000-000000000000", "name": "svc-backup@corp.local" },
+  "evidence": [
+    { "key": "risk_state", "value": "atRisk" },
+    { "key": "risk_level", "value": "medium" },
+    { "key": "last_detection", "value": "unfamiliarFeatures" }
+  ],
+  "recommended_action": {
+    "summary": "Review recent sign-ins; reset credentials and revoke sessions if unexplained.",
+    "gated_action": null,
+    "confidence": "medium"
+  },
+  "references": [ { "type": "mitre", "id": "T1078", "url": null } ],
+  "observed_at": "2026-06-28T10:02:00Z"
+}

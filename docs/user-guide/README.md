@@ -37,9 +37,15 @@ gated actions) are live-validated today — see the support matrix below.
 4. **[Prompting](prompting.md)** — how to phrase requests so a small local model
    reliably drives the tools (matters a lot — read this).
 5. **[Workflows](workflows.md)** — example end-to-end tasks (posture, triage,
-   hunt) with the prompts to use.
-6. **[Troubleshooting](troubleshooting.md)** — throttling, missing permissions,
-   tools not firing.
+   hunt) with the prompts to use; annotated real-flow
+   [transcripts](../../examples/transcripts/README.md) show what a session
+   looks like.
+6. **[Gated actions](gated-actions.md)** — enabling write actions, running
+   the approval watcher, and reading the audit trail (only if you need
+   writes; everything is read-only until you do this).
+7. **[Troubleshooting](troubleshooting.md)** — throttling, missing permissions,
+   tools not firing — and the **[FAQ](faq.md)** for evaluator questions
+   (privacy, hardware, licensing).
 
 ## Support matrix (living — update as the project grows)
 

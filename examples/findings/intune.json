@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "intune",
+  "finding_type": "misconfig",
+  "severity": "medium",
+  "title": "Stale managed device: lt-frontdesk-3 (no check-in for 47 days)",
+  "entity": { "kind": "device", "id": "d41f0000-0000-0000-0000-000000000000", "name": "lt-frontdesk-3" },
+  "evidence": [
+    { "key": "last_sync", "value": "2026-05-12T08:30:00Z" },
+    { "key": "compliance_state", "value": "noncompliant" },
+    { "key": "os", "value": "Windows 11" }
+  ],
+  "recommended_action": {
+    "summary": "Locate the device; retire or force a sync — stale devices evade policy and patching.",
+    "gated_action": null,
+    "confidence": "high"
+  },
+  "references": [],
+  "observed_at": "2026-06-28T09:00:00Z"
+}

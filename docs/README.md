@@ -34,7 +34,13 @@ flowchart LR
   tool-calling model with vLLM / llama.cpp.
 - **[Runtime performance](runtime-performance.md)** — choosing a serving
   stack and model: Ollama vs vLLM vs llama.cpp benchmarks.
-- **[Demo](demo.md)** — a full tool call end-to-end, offline, in 30 seconds.
+- **[Gated actions how-to](user-guide/gated-actions.md)** — enable, approve
+  (watcher/token/chat), and audit the write actions.
+- **[FAQ](user-guide/faq.md)** — privacy, hardware, licensing, platform
+  coverage, "can the AI act alone?".
+- **[Demo](demo.md)** — a full tool call end-to-end, offline, in 30 seconds;
+  more artifacts in [`examples/`](../examples/README.md) (sample findings,
+  annotated transcripts, persona renders).
 
 ## Look it up (reference)
 

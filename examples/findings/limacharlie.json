@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "limacharlie",
+  "finding_type": "alert",
+  "severity": "high",
+  "title": "LimaCharlie detection: suspicious PowerShell download cradle on ws-042",
+  "entity": { "kind": "host", "id": "6b1e0000-0000-0000-0000-000000000000", "name": "ws-042" },
+  "evidence": [
+    { "key": "rule", "value": "susp-powershell-download" },
+    { "key": "command_line", "value": "powershell -enc <truncated>" },
+    { "key": "parent_process", "value": "winword.exe" }
+  ],
+  "recommended_action": {
+    "summary": "Investigate the sensor timeline around the event; check for follow-on execution.",
+    "gated_action": null,
+    "confidence": "medium"
+  },
+  "references": [ { "type": "mitre", "id": "T1059.001", "url": null } ],
+  "observed_at": "2026-06-28T11:14:37Z"
+}

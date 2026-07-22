@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "defender",
+  "finding_type": "incident",
+  "severity": "high",
+  "title": "Defender incident: Multi-stage attack on web-01 (3 correlated alerts)",
+  "entity": { "kind": "host", "id": "web-01", "name": "web-01.corp.local" },
+  "evidence": [
+    { "key": "alerts", "value": "3" },
+    { "key": "first_activity", "value": "2026-06-28T09:55:12Z" },
+    { "key": "classification", "value": "truePositive" }
+  ],
+  "recommended_action": {
+    "summary": "Triage the correlated alerts; isolate the host if activity is ongoing.",
+    "gated_action": "isolate_host",
+    "confidence": "medium"
+  },
+  "references": [ { "type": "mitre", "id": "T1110", "url": null } ],
+  "observed_at": "2026-06-28T10:00:00Z"
+}
