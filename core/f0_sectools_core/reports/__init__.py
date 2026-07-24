@@ -16,6 +16,7 @@ from .content import (
     ScopeMeta,
     Section,
 )
+from .pdf import ReportsPdfUnavailable, to_pdf
 
 __all__ = [
     "BlockKind",
@@ -25,4 +26,6 @@ __all__ = [
     "ReportContent",
     "ReportOutput",
     "build_report",
+    "ReportsPdfUnavailable",
+    "to_pdf",
 ]
