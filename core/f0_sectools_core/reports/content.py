@@ -1,11 +1,13 @@
 """Intermediate representation for a report.
 
 One model, two emitters (emit.to_markdown / emit.to_html) that stay structurally
-in step. Finding rows are report-owned and tier-aware: executive tier renders
-compact one-liners with no evidence/MITRE, operational tier renders dense rows
-(source · ATT&CK ids + all evidence pairs) — Markdown and HTML share the same
-tier logic, so the two formats stay in step. A Section carries exactly one
-payload shape, selected by its kind.
+in step. Finding rows are report-owned and tier-aware: executive tier
+(finding_rollup) renders a compact one-liner per finding with no MITRE and no
+evidence sub-bullets (a single evidence-derived grounding phrase may still
+appear, e.g. "— cvss: 9.8"); operational tier (finding_table) renders dense
+rows — source · ATT&CK ids + every evidence pair as a sub-bullet. Markdown and
+HTML share the same tier logic, so the two formats stay in step. A Section
+carries exactly one payload shape, selected by its kind.
 """
 from __future__ import annotations
 

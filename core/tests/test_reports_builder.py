@@ -90,10 +90,19 @@ def test_operational_report_renders_evidence_and_mitre():
     assert "account: CORP\\jsmith" in md
 
 
-def test_ciso_report_has_no_evidence_or_mitre_rows():
+def test_ciso_executive_tier_suppresses_mitre_and_evidence_bullets():
+    # Run MITRE-bearing, multi-evidence findings (normally rendered dense under
+    # the operational tier) through the CISO persona instead. If a regression
+    # ever routed CISO through the operational finding_table path, these
+    # findings' T1059/ATT&CK/evidence sub-bullets would leak into the output —
+    # unlike _findings() (findings_ciso.json), which carries no MITRE refs and
+    # so can't catch that regression.
     narrative = (FIX / "narrative_ciso_en.md").read_text()
-    out = build_report("ciso", "en", narrative, _findings(), _scope())
-    assert "ATT&CK" not in out.markdown           # executive tier stays compact
+    out = build_report("ciso", "en", narrative, _detection_findings(), _scope())
+    md = out.markdown
+    assert "ATT&CK" not in md                     # executive tier stays compact
+    assert "T1059" not in md                      # technique id must not leak either
+    assert "\n  - account:" not in md              # no evidence sub-bullet lines
 
 
 def test_golden_detection_en_frozen():
