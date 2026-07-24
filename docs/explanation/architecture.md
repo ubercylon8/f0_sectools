@@ -120,6 +120,7 @@ flowchart LR
       SM["smallmodel/ — scope_ok / search_ok guards"]
       GATE["gating/ — tokens, approvals, audit"]
       REND["renderers/ — 5 persona renderers"]
+      REP["reports/ — posture report engine (MD/PDF)"]
     end
     EV["evals/ — callability harness"]
     SC["scripts/ — smoke tests, confirm_action.py"]
@@ -147,6 +148,7 @@ What each core package owns:
 | `smallmodel/` | Shared input-validation predicates | `scope_ok` (strict, 1–128 chars, bounded charset — gated-write targets), `search_ok` (permissive read-side bound) |
 | `gating/` | The write-action hard stop + audit trail | Flag + single-use out-of-band confirmation; see [security model](security-model.md#gated-write-actions) |
 | `renderers/` | Persona-shaped Markdown views of findings | Deterministic, model-free; output re-redacted as defense in depth |
+| `reports/` | Persona posture report engine — Markdown / HTML / PDF | Model-free and platform-free; tier-aware finding rows, en/es i18n, WeasyPrint PDF (`[reports]` extra); consumed by `scripts/gen_report.py`, not the servers |
 
 ## The server pattern
 

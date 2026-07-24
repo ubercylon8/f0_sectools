@@ -28,6 +28,36 @@ severity, and names one highest-value next step. If a platform is dark
 continues, so the coverage of the picture is always explicit. Favour a capable
 local model — it is six sequential calls plus synthesis.
 
+## Generate a posture report (any persona) — Markdown + PDF, EN/ES
+
+> **Prompt:** "As a CISO, generate my posture report." · "Genera mi informe de
+> postura." · (or invoke the `generate-report` skill)
+
+The `generate-report` skill produces a **shareable deliverable** — a
+conversation starter, not a chat answer. The agent gathers the persona's
+findings (for the CISO, via the risk-rollup above), authors the narrative
+(executive summary, per-risk framing, and **open questions for you to answer**)
+in the chosen language, then runs the deterministic engine — which re-gathers
+the data itself so every number is code-sourced and redacted, never transcribed
+by the model:
+
+```bash
+uv run python scripts/gen_report.py \
+  --persona ciso --lang en --narrative narrative.md \
+  --window-hours 168 --tenant-label "Contoso" --out report [--pdf]
+```
+
+`--persona` is one of `ciso`, `detection-engineer`, `threat-hunter`,
+`security-engineer`; `--lang` is `en` or `es`. It writes `report.md` (always)
+and, with `--pdf`, `report.pdf`. A dark platform degrades to **"not assessed"**
+and the report still generates. The **CISO** report is executive-restrained
+(big-number posture at a glance + compact one-line top risks); the
+**operational** personas (detection engineer / threat hunter / security
+engineer) get dense finding rows with evidence and MITRE technique references.
+Every report ends with a coverage note and open questions for the operator. PDF
+needs the optional `[reports]` extra — see
+[getting started](getting-started.md#optional-pdf-reports).
+
 ## Incident triage (SOC analyst / threat hunter)
 
 > **Prompt:** "Triage our active high-severity incidents."
