@@ -37,3 +37,25 @@ def test_gather_collects_healthy_pillar(monkeypatch):
     findings, meta = asyncio.run(report_gather.gather("ciso", 168))
     assert "Config hardening" in meta.assessed
     assert any("62%" in f.title for f in findings)
+
+
+def test_gather_redacts_secret_hinting_evidence_from_findings(monkeypatch):
+    # A pillar tool that emits a secret-hinting evidence key with a short,
+    # non-token value must have it redacted before it can reach the shared report.
+    from f0_sectools_core.schema.findings import Evidence
+
+    async def leaky(window_hours):
+        return [Finding(
+            source="defender", finding_type=FindingType.posture, severity=Severity.info,
+            title="Secure Score: 62%",
+            evidence=[
+                Evidence(key="secure_score_pct", value="62"),
+                Evidence(key="client_secret", value="hunter2pw"),  # must be redacted
+            ],
+        )]
+
+    monkeypatch.setattr(report_gather, "_PILLAR_FACTORIES", {"Config hardening": leaky})
+    findings, _meta = asyncio.run(report_gather.gather("ciso", 168))
+    ev = {e.key: e.value for f in findings for e in f.evidence}
+    assert ev["client_secret"] == "«redacted»"
+    assert ev["secure_score_pct"] == "62"

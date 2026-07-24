@@ -70,3 +70,10 @@ exclude = [
     '^scripts/',
     '^skills/',
 ]
+
+# WeasyPrint is an optional extra ([reports]); it has no type stubs and is not
+# installed in CI. Ignore it uniformly so the typecheck passes whether or not the
+# extra is present (absent -> import-not-found; present -> import-untyped).
+[[tool.mypy.overrides]]
+module = ["weasyprint"]
+ignore_missing_imports = true

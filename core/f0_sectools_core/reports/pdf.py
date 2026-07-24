@@ -13,7 +13,7 @@ class ReportsPdfUnavailable(RuntimeError):
 
 def to_pdf(html: str) -> bytes:
     try:
-        import weasyprint  # type: ignore[import-untyped]
+        import weasyprint
     except ModuleNotFoundError as e:
         raise ReportsPdfUnavailable(
             "PDF export needs WeasyPrint. Install it with: "

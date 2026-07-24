@@ -39,3 +39,51 @@ def test_redacts_camelcase_secret_keys():
     assert out["privateKey"] == "«redacted»"
     assert out["clientSecret"] == "«redacted»"
     assert out["host"] == "web-01"
+
+
+def test_redact_finding_blanks_secret_hinting_evidence_value():
+    # Evidence is a flat {key, value} list, so redact_obj's dict-key check never
+    # sees the evidence key name — redact_finding closes that gap. A short,
+    # non-token secret under a secret-hinting evidence key must be blanked.
+    from f0_sectools_core.redaction.redact import redact_finding
+    from f0_sectools_core.schema.findings import (
+        Evidence,
+        Finding,
+        FindingType,
+        Severity,
+    )
+
+    f = Finding(
+        source="defender", finding_type=FindingType.posture, severity=Severity.info,
+        title="pillar",
+        evidence=[
+            Evidence(key="client_secret", value="hunter2pw"),   # secret-hinting key
+            Evidence(key="score", value="62"),                  # benign
+        ],
+    )
+    red = redact_finding(f)
+    ev = {e.key: e.value for e in red.evidence}
+    assert ev["client_secret"] == "«redacted»"
+    assert ev["score"] == "62"
+    # Original finding is untouched (new Finding returned).
+    assert f.evidence[0].value == "hunter2pw"
+
+
+def test_redact_finding_still_applies_value_patterns():
+    # redact_finding must also catch token-shaped values under a benign key
+    # (the redact_obj/redact_text pass), not only secret-hinting keys.
+    from f0_sectools_core.redaction.redact import redact_finding
+    from f0_sectools_core.schema.findings import (
+        Evidence,
+        Finding,
+        FindingType,
+        Severity,
+    )
+
+    f = Finding(
+        source="defender", finding_type=FindingType.alert, severity=Severity.high,
+        title="token in evidence",
+        evidence=[Evidence(key="note", value="token eyJ0eStuffLongEnoughToMatch1234567")],
+    )
+    red = redact_finding(f)
+    assert "«redacted»" in red.evidence[0].value

@@ -8,7 +8,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 from dotenv import load_dotenv
-from f0_sectools_core.redaction.redact import redact_text
+from f0_sectools_core.redaction.redact import redact_finding, redact_text
 from f0_sectools_core.reports.content import MetricCard, ScopeMeta
 from f0_sectools_core.reports.sections import is_not_assessed
 from f0_sectools_core.schema.findings import Evidence, Finding, FindingType, Severity
@@ -118,9 +118,13 @@ def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
 
 async def _run_pillar(pillar: str, factory, window_hours: int) -> tuple[str, list[Finding]]:
     try:
-        return pillar, await factory(window_hours)
+        findings = await factory(window_hours)
     except Exception as exc:  # noqa: BLE001 — any platform failure degrades, never aborts
         return pillar, [_degraded(pillar, str(exc))]
+    # The report is a shared artifact — apply the same structural redaction every
+    # server's _render does (plus evidence-key-aware blanking), not just the
+    # value-pattern net the emitters use. See core.redaction.redact.redact_finding.
+    return pillar, [redact_finding(f) for f in findings]
 
 
 async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeMeta]:
