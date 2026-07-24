@@ -52,3 +52,24 @@ def test_planted_secret_is_redacted_in_both_emitters():
     html = to_html(c)
     assert "SECRETPAYLOAD" not in md
     assert "SECRETPAYLOAD" not in html
+
+
+def test_metric_state_is_redacted_and_escaped_in_html_class_attr():
+    """A MetricCard.state is used to build a CSS class name in _metric_card.
+
+    That copy must go through the same redact-then-escape path as every other
+    emitted string — an unredacted/unescaped state could both leak a secret
+    and break out of the class attribute into live HTML.
+    """
+    breakout = 'x"><script>alert(1)</script'
+    metric = MetricCard("Config hardening", "62%",
+                         breakout + " eyJhbGSECRETPAYLOAD0123456789abcdef")
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Report", subtitle="Sub",
+        sections=[Section(BlockKind.metric_grid, "Posture", "executive", metrics=[metric])],
+    )
+    html = to_html(content)
+    assert "<script>" not in html
+    assert '"><script' not in html
+    assert "SECRETPAYLOAD" not in html

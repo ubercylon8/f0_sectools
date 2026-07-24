@@ -105,7 +105,7 @@ def _html_body(s: Section, content: ReportContent) -> list[str]:
 
 
 def _metric_card(m: MetricCard) -> str:
-    state = m.state.replace(" ", "-")
+    state = _e(m.state).replace(" ", "-")
     return (
         f'<div><div class="metric__value">{_e(m.value)}</div>'
         f'<div class="metric__label">{_e(m.label)} · '
