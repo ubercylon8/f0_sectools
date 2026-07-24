@@ -1,7 +1,9 @@
 """Intermediate representation for a report.
 
-One model, two emitters (emit.to_markdown / emit.to_html) so Markdown and PDF
-never drift. A Section carries exactly one payload shape, selected by its kind.
+One model, two emitters (emit.to_markdown / emit.to_html) that stay structurally
+in step, though finding-section density differs by format: Markdown renders the
+full persona finding-rollup aggregate, HTML/PDF renders compact finding rows. A
+Section carries exactly one payload shape, selected by its kind.
 """
 from __future__ import annotations
 

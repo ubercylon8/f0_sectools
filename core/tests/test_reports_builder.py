@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from f0_sectools_core.reports import build_report
 from f0_sectools_core.reports.content import MetricCard, ScopeMeta
 from f0_sectools_core.schema.findings import Finding
@@ -37,6 +38,7 @@ def test_ciso_en_report_structure():
     assert "62%" in md
     assert "Not assessed: Insider risk (not licensed)" in md
     assert "2026-07-24 14:22" in md
+    assert "fastest single reduction" in md  # risk_framing prose rendered in Top risks
     assert out.html.startswith("<!doctype html>")
 
 
@@ -58,3 +60,8 @@ def test_golden_ciso_en_frozen():
     out = build_report("ciso", "en", narrative, _findings(), _scope())
     expected = (FIX / "golden_ciso_en.md").read_text()
     assert out.markdown == expected
+
+
+def test_unknown_persona_raises_value_error():
+    with pytest.raises(ValueError):
+        build_report("nonsense", "en", "", [], _scope())

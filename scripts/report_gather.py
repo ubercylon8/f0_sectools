@@ -8,9 +8,10 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 from dotenv import load_dotenv
+from f0_sectools_core.redaction.redact import redact_text
 from f0_sectools_core.reports.content import MetricCard, ScopeMeta
 from f0_sectools_core.reports.sections import is_not_assessed
-from f0_sectools_core.schema.findings import Finding, FindingType, Severity
+from f0_sectools_core.schema.findings import Evidence, Finding, FindingType, Severity
 
 
 def _degraded(pillar: str, detail: str) -> Finding:
@@ -19,7 +20,7 @@ def _degraded(pillar: str, detail: str) -> Finding:
         finding_type=FindingType.posture,
         severity=Severity.info,
         title=f"{pillar} not configured — pillar not assessed",
-        recommended_action=None,
+        evidence=[Evidence(key="reason", value=redact_text(detail)[:300])],
     )
 
 
@@ -123,7 +124,6 @@ async def _run_pillar(pillar: str, factory, window_hours: int) -> tuple[str, lis
 
 
 async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeMeta]:
-    persona = persona.replace("-", "_")
     # v1: all personas gather the six pillars (shared engine); operational personas
     # additionally could gather detail tools — extend GATHER_MAP later.
     results = await asyncio.gather(*[

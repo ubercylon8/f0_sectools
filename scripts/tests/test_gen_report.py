@@ -2,8 +2,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-import pytest  # noqa: F401 — fixture-providing import (monkeypatch), kept for pytest conventions
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/ importable
 import report_gather  # noqa: E402
 from f0_sectools_core.reports.content import ScopeMeta  # noqa: E402
@@ -23,6 +21,10 @@ def test_gather_degrades_when_platform_unconfigured(monkeypatch):
     assert meta.assessed == []  # nothing came back healthy
     # every dark pillar still produced a posture finding
     assert all(f.finding_type is FindingType.posture for f in findings)
+    # the failure cause survives as redacted evidence, not silently dropped
+    for f in findings:
+        reasons = [e.value for e in f.evidence if e.key == "reason"]
+        assert reasons and reasons[0]
 
 
 def test_gather_collects_healthy_pillar(monkeypatch):

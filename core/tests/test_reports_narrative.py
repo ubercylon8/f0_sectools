@@ -35,3 +35,15 @@ def test_open_questions_without_list_markers_split_by_line():
 def test_empty_input_yields_empty_narrative():
     n = parse_narrative("")
     assert n == Narrative(executive_summary="", risk_framing="", open_questions=[])
+
+
+def test_spanish_headers_use_es_aliases():
+    text = (
+        "## Resumen Ejecutivo\n"
+        "Nuestra postura es moderada y estable.\n\n"
+        "## Preguntas Abiertas\n"
+        "- ¿Es aceptable un 61% de cumplimiento de dispositivos?\n"
+    )
+    n = parse_narrative(text)
+    assert "moderada y estable" in n.executive_summary
+    assert n.open_questions == ["¿Es aceptable un 61% de cumplimiento de dispositivos?"]

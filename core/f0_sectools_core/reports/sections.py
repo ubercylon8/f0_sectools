@@ -98,10 +98,14 @@ def is_not_assessed(f: Finding) -> bool:
 def group_findings(findings: list[Finding], persona: str) -> dict[FindingGroup, list[Finding]]:
     """Bucket findings for a persona's data sections.
 
-    v1 keeps this simple: every real (non-degradation) finding lands in the
-    `all`, `top_risks`, and the persona's primary operational group so a
-    section always has something to render. Degradation findings are excluded
-    from data buckets (they surface only in the coverage section).
+    Bucketing is uniform across personas — driven by `finding.source` and
+    `finding_type`, not by which persona is asking. Every real
+    (non-degradation) finding lands in `all`, `top_risks`, and its
+    source-derived group (exposure/identity/compliance/telemetry/detections)
+    so a section always has something to render; each persona then selects
+    which of those buckets it renders via `SECTION_MAPS`. Degradation
+    findings are excluded from data buckets (they surface only in the
+    coverage section).
     """
     real = [f for f in findings if not is_not_assessed(f)]
     buckets: dict[FindingGroup, list[Finding]] = {g: [] for g in FindingGroup}

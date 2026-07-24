@@ -12,6 +12,8 @@ Our posture is moderate and stable. Two risks are live this week: internet-expos
 
 ## Top risks
 
+The critical vulnerabilities are the fastest single reduction in breach likelihood; the compliance gap is the largest attack surface.
+
 ## Security posture rollup
 Total findings: 2
 By severity: 1 critical, 1 high

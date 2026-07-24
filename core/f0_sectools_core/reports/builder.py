@@ -77,7 +77,8 @@ def build_report(
             sections.append(Section(spec.kind, title, spec.tier, metrics=metrics))
         elif spec.kind in (BlockKind.finding_rollup, BlockKind.finding_table):
             group = grouped[spec.group] if spec.group is not None else []
-            sections.append(Section(spec.kind, title, spec.tier, findings=list(group)))
+            sections.append(Section(spec.kind, title, spec.tier,
+                                    text=parsed.risk_framing, findings=list(group)))
         elif spec.kind is BlockKind.coverage:
             items = _coverage_items(language, scope_meta)
             sections.append(Section(spec.kind, title, spec.tier, items=items))

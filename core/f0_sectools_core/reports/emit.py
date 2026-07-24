@@ -48,9 +48,15 @@ def _md_body(s: Section, content: ReportContent) -> list[str]:
     if s.kind is BlockKind.metric_grid:
         return [f"- **{_r(m.label)}:** {_r(m.value)} ({_r(m.state)})" for m in s.metrics]
     if s.kind in (BlockKind.finding_rollup, BlockKind.finding_table):
+        lines: list[str] = []
+        if s.text.strip():
+            lines.append(_r(s.text))
+            lines.append("")
         if not s.findings:
-            return ["_No findings in this window._"]
-        return [render_findings(s.findings, _persona(content))]
+            lines.append("_No findings in this window._")
+        else:
+            lines.append(render_findings(s.findings, _persona(content)))
+        return lines
     if s.kind is BlockKind.open_questions:
         return [f"{i}. {_r(q)}" for i, q in enumerate(s.items, 1)]
     if s.kind is BlockKind.coverage:
@@ -91,9 +97,14 @@ def _html_body(s: Section, content: ReportContent) -> list[str]:
         cards = "".join(_metric_card(m) for m in s.metrics)
         return [f'<div class="metric-grid">{cards}</div>']
     if s.kind in (BlockKind.finding_rollup, BlockKind.finding_table):
+        out: list[str] = []
+        if s.text.strip():
+            out.append(f"<p>{_e(s.text)}</p>")
         if not s.findings:
-            return ['<p><em>No findings in this window.</em></p>']
-        return [_finding_row(f) for f in _sorted(s.findings)]
+            out.append('<p><em>No findings in this window.</em></p>')
+        else:
+            out.extend(_finding_row(f) for f in _sorted(s.findings))
+        return out
     if s.kind is BlockKind.open_questions:
         return [f'<div class="oq"><b>{i}.</b> {_e(q)}</div>' for i, q in enumerate(s.items, 1)]
     if s.kind is BlockKind.coverage:

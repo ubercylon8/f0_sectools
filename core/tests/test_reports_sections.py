@@ -48,3 +48,4 @@ def test_group_findings_buckets_exposure_for_security_engineer():
                    severity=Severity.critical, title="3 critical vulns exposed")
     grouped = group_findings([vuln], "security_engineer")
     assert vuln in grouped[FindingGroup.all]
+    assert vuln in grouped[FindingGroup.exposure]
