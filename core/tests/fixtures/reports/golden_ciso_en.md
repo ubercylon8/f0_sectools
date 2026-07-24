@@ -14,14 +14,8 @@ Our posture is moderate and stable. Two risks are live this week: internet-expos
 
 The critical vulnerabilities are the fastest single reduction in breach likelihood; the compliance gap is the largest attack surface.
 
-## Security posture rollup
-Total findings: 2
-By severity: 1 critical, 1 high
-By source: 1 intune, 1 tenable
-Top findings:
-- [CRITICAL] 3 internet-exposed critical vulnerabilities — unspecified target
-- [HIGH] 39% of managed devices non-compliant — unspecified target
-Risk posture: 2 critical/high finding(s) require attention.
+- **[CRITICAL]** 3 internet-exposed critical vulnerabilities — cvss: 9.8
+- **[HIGH]** 39% of managed devices non-compliant
 
 ## Scope & coverage
 

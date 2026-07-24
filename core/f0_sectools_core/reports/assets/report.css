@@ -45,6 +45,7 @@ body {
 .finding--low { border-left-color: var(--sev-low); }
 .finding__title { font-size: 11pt; font-weight: 700; }
 .finding__meta { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9pt; color: #666; margin-top: 2px; }
+.finding__evidence { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9pt; color: #555; margin-top: 1px; }
 .oq { border-left: 3px solid var(--gold); background: #fdf8ef; padding: 10px 14px; margin: 8px 0; }
 .coverage { background: #f8f9fb; }
 .provenance { font-size: 9pt; color: #8892a6; }

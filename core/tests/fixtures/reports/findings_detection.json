@@ -1,0 +1,10 @@
+[
+  {"source": "defender", "finding_type": "incident", "severity": "high",
+   "title": "Suspicious PowerShell on web-01.corp.local",
+   "evidence": [{"key": "device", "value": "web-01.corp.local"}, {"key": "account", "value": "CORP\\jsmith"}],
+   "references": [{"type": "mitre", "id": "T1059"}]},
+  {"source": "limacharlie", "finding_type": "hunt_result", "severity": "medium",
+   "title": "Outbound beacon pattern to rare domain",
+   "evidence": [{"key": "domain", "value": "rare.example.test"}, {"key": "count", "value": "42"}],
+   "references": [{"type": "mitre", "id": "T1071"}, {"type": "mitre", "id": "T1571"}]}
+]
