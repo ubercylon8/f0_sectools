@@ -25,6 +25,8 @@ Eight MCP servers — **all live-validated against a real tenant** — exposing 
 
 **51 registered tools** ([full tool reference](docs/reference/tools/README.md) — generated from code, drift-guarded in CI). Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 27 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
 
+**Persona posture reports** — the `generate-report` skill (+ `scripts/gen_report.py`) turns gathered findings into a shareable **Markdown + PDF** deliverable in **English or Spanish**: an executive briefing for the CISO or a dense operational report (with evidence + MITRE) for the other personas, ending with open questions for the operator. Grounded in real, redacted data and produced entirely on the host. See [example workflows](docs/user-guide/workflows.md).
+
 ## For security teams
 
 - **Read-only by default.** Every platform query is read-only. Any state-changing action (isolate a host, disable a user, close an incident) is **gated** behind an explicit config flag **and** a fresh single-use human confirmation token, and is audited. A local model can never trigger one alone. Defender's `isolate_host` / `release_host` are the working example.

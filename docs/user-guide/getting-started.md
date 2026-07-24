@@ -19,6 +19,18 @@ cd f0_sectools
 uv sync --all-packages          # installs core + every server (editable)
 ```
 
+### Optional: PDF reports
+
+Report generation (the `generate-report` skill / `scripts/gen_report.py`) always
+writes Markdown out of the box. For **PDF** export, install the optional
+`[reports]` extra, which pulls in WeasyPrint — it needs the system libraries
+**pango** and **cairo** on the host (`apt install libpango-1.0-0 libcairo2`, or
+the equivalent for your OS):
+
+```bash
+uv pip install 'f0-sectools-core[reports]'
+```
+
 ## 2. Configure credentials (never committed)
 
 Each server reads its own `.env.<platform>` from the repo root. These are
