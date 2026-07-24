@@ -5,7 +5,15 @@ from f0_sectools_core.reports.content import (
     Section,
 )
 from f0_sectools_core.reports.emit import to_html, to_markdown
-from f0_sectools_core.schema.findings import Finding, FindingType, Severity
+from f0_sectools_core.schema.findings import (
+    Entity,
+    EntityKind,
+    Evidence,
+    Finding,
+    FindingType,
+    Reference,
+    Severity,
+)
 
 
 def _content() -> ReportContent:
@@ -73,3 +81,67 @@ def test_metric_state_is_redacted_and_escaped_in_html_class_attr():
     assert "<script>" not in html
     assert '"><script' not in html
     assert "SECRETPAYLOAD" not in html
+
+
+def _op_finding() -> Finding:
+    return Finding(
+        source="tenable", finding_type=FindingType.risk, severity=Severity.critical,
+        title="3 internet-exposed critical vulnerabilities",
+        evidence=[Evidence(key="cvss", value="9.8"), Evidence(key="exposed_assets", value="3")],
+        references=[Reference(type="mitre", id="T1190"), Reference(type="cve", id="CVE-2026-1")],
+    )
+
+
+def _op_content() -> ReportContent:
+    return ReportContent(
+        persona="detection_engineer", language="en", tier="operational",
+        title="Security Operations Report", subtitle="Prepared for Detection Engineering",
+        sections=[Section(BlockKind.finding_table, "Findings", "operational",
+                          findings=[_op_finding()])],
+    )
+
+
+def _exec_content() -> ReportContent:
+    f = Finding(source="intune", finding_type=FindingType.risk, severity=Severity.high,
+                title="Device compliance gap",
+                entity=Entity(kind=EntityKind.tenant, id="t1", name="39% of devices non-compliant"))
+    return ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Executive Risk Briefing", subtitle="Prepared for the CISO",
+        sections=[Section(BlockKind.finding_rollup, "Top risks", "executive", findings=[f])],
+    )
+
+
+def test_operational_rows_carry_source_mitre_and_all_evidence_md():
+    md = to_markdown(_op_content())
+    assert ("**[CRITICAL]** 3 internet-exposed critical vulnerabilities — "
+            "tenable · ATT&CK: T1190") in md
+    assert "cvss: 9.8" in md
+    assert "exposed_assets: 3" in md          # unbounded — every evidence pair present
+
+
+def test_operational_rows_carry_evidence_and_mitre_html():
+    html = to_html(_op_content())
+    assert "finding--critical" in html
+    assert "ATT&amp;CK: T1190" in html   # _e() HTML-escapes; "&" must stay escaped
+    assert "finding__evidence" in html
+    assert "cvss: 9.8" in html
+
+
+def test_executive_rows_are_compact_no_evidence_no_mitre():
+    md = to_markdown(_exec_content())
+    html = to_html(_exec_content())
+    # one grounded line, using the entity name as the clause
+    assert "**[HIGH]** Device compliance gap — 39% of devices non-compliant" in md
+    # executive tier shows neither evidence keys nor ATT&CK
+    assert "ATT&CK" not in md and "ATT&CK" not in html
+    # the CSS class name itself is always present in the inlined <style> block
+    # (report.css is shared across tiers) — check the rendered body, not the head
+    body_html = html.split("</style>", 1)[-1]
+    assert "finding__evidence" not in body_html
+
+
+def test_no_chat_aggregate_heading_leaks_into_report():
+    # The old render_findings(ciso) path injected a "## Security posture rollup"
+    # heading inside the section body; report-owned rows must not.
+    assert "Security posture rollup" not in to_markdown(_exec_content())

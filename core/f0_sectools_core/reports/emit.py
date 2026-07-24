@@ -1,16 +1,15 @@
 """Emit a ReportContent as Markdown or self-contained HTML.
 
 Every string written passes through redact_text (narrative prose included).
-Finding bodies reuse the persona renderers so presentation stays DRY. The HTML
-inlines the theme CSS so the page — and the PDF WeasyPrint renders from it — has
-no external dependencies (the local-only guarantee).
+Finding rows are report-owned and tier-aware, so Markdown and HTML stay in step.
+The HTML inlines the theme CSS so the page — and the PDF WeasyPrint renders from
+it — has no external dependencies (the local-only guarantee).
 """
 from __future__ import annotations
 
 import html as _html
 
 from f0_sectools_core.redaction.redact import redact_text
-from f0_sectools_core.renderers import Persona, render_findings
 from f0_sectools_core.schema.findings import Finding
 
 from .content import BlockKind, MetricCard, ReportContent, Section
@@ -29,22 +28,18 @@ def _r(text: str) -> str:
     return redact_text(text)
 
 
-def _persona(content: ReportContent) -> Persona:
-    return Persona(content.persona)
-
-
 # ── Markdown ─────────────────────────────────────────────────────────
 def to_markdown(content: ReportContent) -> str:
     lines: list[str] = [f"# {_r(content.title)}", "", f"*{_r(content.subtitle)}*", ""]
     for s in content.sections:
         lines.append(f"## {_r(s.title)}")
         lines.append("")
-        lines.extend(_md_body(s, content))
+        lines.extend(_md_body(s))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _md_body(s: Section, content: ReportContent) -> list[str]:
+def _md_body(s: Section) -> list[str]:
     if s.kind is BlockKind.metric_grid:
         return [f"- **{_r(m.label)}:** {_r(m.value)} ({_r(m.state)})" for m in s.metrics]
     if s.kind in (BlockKind.finding_rollup, BlockKind.finding_table):
@@ -55,7 +50,7 @@ def _md_body(s: Section, content: ReportContent) -> list[str]:
         if not s.findings:
             lines.append("_No findings in this window._")
         else:
-            lines.append(render_findings(s.findings, _persona(content)))
+            lines.extend(_md_findings(s.findings, s.tier))
         return lines
     if s.kind is BlockKind.open_questions:
         return [f"{i}. {_r(q)}" for i, q in enumerate(s.items, 1)]
@@ -78,7 +73,7 @@ def to_html(content: ReportContent) -> str:
     for s in content.sections:
         body.append('<section class="report__section">')
         body.append(f'<div class="report__h">{_e(s.title)}</div>')
-        body.extend(_html_body(s, content))
+        body.extend(_html_body(s))
         body.append("</section>")
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -92,7 +87,7 @@ def _e(text: str) -> str:
     return _html.escape(_r(text))
 
 
-def _html_body(s: Section, content: ReportContent) -> list[str]:
+def _html_body(s: Section) -> list[str]:
     if s.kind is BlockKind.metric_grid:
         cards = "".join(_metric_card(m) for m in s.metrics)
         return [f'<div class="metric-grid">{cards}</div>']
@@ -103,7 +98,7 @@ def _html_body(s: Section, content: ReportContent) -> list[str]:
         if not s.findings:
             out.append('<p><em>No findings in this window.</em></p>')
         else:
-            out.extend(_finding_row(f) for f in _sorted(s.findings))
+            out.extend(_html_findings(s.findings, s.tier))
         return out
     if s.kind is BlockKind.open_questions:
         return [f'<div class="oq"><b>{i}.</b> {_e(q)}</div>' for i, q in enumerate(s.items, 1)]
@@ -124,16 +119,64 @@ def _metric_card(m: MetricCard) -> str:
     )
 
 
-def _finding_row(f: Finding) -> str:
-    sev = _SEV_CLASS.get(f.severity.value, "info")
-    meta = f"{f.source} · {f.severity.value}"
-    return (
-        f'<div class="finding finding--{sev}">'
-        f'<div class="finding__title">{_e(f.title)}</div>'
-        f'<div class="finding__meta">{_e(meta)}</div></div>'
-    )
-
-
 def _sorted(findings: list[Finding]) -> list[Finding]:
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     return sorted(findings, key=lambda f: order.get(f.severity.value, 99))
+
+
+def _sev_tag(f: Finding) -> str:
+    return f.severity.value.upper()
+
+
+def _mitre_ids(f: Finding) -> list[str]:
+    return [r.id for r in f.references if r.type == "mitre"]
+
+
+def _grounding_clause(f: Finding) -> str:
+    """One short grounding phrase for an executive row: entity name, else the
+    first evidence key: value, else empty."""
+    if f.entity is not None and f.entity.name:
+        return f.entity.name
+    if f.evidence:
+        return f"{f.evidence[0].key}: {f.evidence[0].value}"
+    return ""
+
+
+def _md_findings(findings: list[Finding], tier: str) -> list[str]:
+    lines: list[str] = []
+    for f in _sorted(findings):
+        if tier == "executive":
+            clause = _grounding_clause(f)
+            suffix = f" — {clause}" if clause else ""
+            lines.append(_r(f"- **[{_sev_tag(f)}]** {f.title}{suffix}"))
+        else:
+            mitre = _mitre_ids(f)
+            meta = f.source + (f" · ATT&CK: {', '.join(mitre)}" if mitre else "")
+            lines.append(_r(f"- **[{_sev_tag(f)}]** {f.title} — {meta}"))
+            lines.extend(_r(f"  - {ev.key}: {ev.value}") for ev in f.evidence)
+    return lines
+
+
+def _html_findings(findings: list[Finding], tier: str) -> list[str]:
+    out: list[str] = []
+    for f in _sorted(findings):
+        sev = _SEV_CLASS.get(f.severity.value, "info")
+        parts = [
+            f'<div class="finding finding--{sev}">',
+            f'<div class="finding__title">[{_e(_sev_tag(f))}] {_e(f.title)}</div>',
+        ]
+        if tier == "executive":
+            clause = _grounding_clause(f)
+            if clause:
+                parts.append(f'<div class="finding__meta">{_e(clause)}</div>')
+        else:
+            mitre = _mitre_ids(f)
+            meta = f.source + (f" · ATT&CK: {', '.join(mitre)}" if mitre else "")
+            parts.append(f'<div class="finding__meta">{_e(meta)}</div>')
+            parts.extend(
+                f'<div class="finding__evidence">{_e(f"{ev.key}: {ev.value}")}</div>'
+                for ev in f.evidence
+            )
+        parts.append("</div>")
+        out.append("".join(parts))
+    return out
