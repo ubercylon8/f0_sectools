@@ -46,7 +46,8 @@ big-number posture grid above; each risk is one grounded line:
   clause.
 
 The grounding clause is the finding's `entity` name if present, else the first
-evidence `value`, else omitted. **No evidence list, no MITRE** at this tier.
+evidence as `key: value` (e.g. `cvss: 9.8`), else omitted. **No evidence list,
+no MITRE** at this tier.
 
 ### Operational tier — `finding_table`, dense per finding
 
@@ -87,7 +88,7 @@ Changes are confined to one module + tests + goldens.
     executive = compact, operational = dense with meta + evidence).
   - Add small helpers: `_mitre_ids(f) -> list[str]` (ids of `type=="mitre"`
     references) and `_grounding_clause(f) -> str` (entity name → first evidence
-    value → "").
+    `key: value` → "").
   - `render_findings` / `Persona` imports are dropped from `emit.py` if no longer
     used (the report no longer routes findings through the chat renderer).
 - **`core/tests/test_reports_emit.py`** — assertions for both tiers (executive =
