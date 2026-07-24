@@ -1,0 +1,51 @@
+/* f0_sectools report theme — two tiers share brand + severity palette. */
+:root {
+  --navy: #0f1830;
+  --gold: #d4a24e;
+  --ink: #1a1f2b;
+  --muted: #667;
+  --rule: #eef0f4;
+  --sev-critical: #a11;
+  --sev-high: #a6641b;
+  --sev-medium: #8a6d1b;
+  --sev-low: #2f7d4f;
+  --sev-info: #6e7781;
+}
+@page { size: A4; margin: 18mm 16mm; }
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink); line-height: 1.5; font-size: 12pt; margin: 0;
+}
+.report__cover {
+  background: var(--navy); color: #fff; padding: 26px 30px;
+  border-bottom: 3px solid var(--gold);
+}
+.report__kicker { font-size: 9pt; letter-spacing: 2.5px; color: var(--gold); font-weight: 700; }
+.report__title { font-size: 22pt; font-weight: 600; margin-top: 10px; }
+.report__subtitle { font-size: 11pt; color: #9fb0d0; margin-top: 10px; }
+.report__section { padding: 20px 30px; border-top: 1px solid var(--rule); }
+.report__h {
+  font-size: 10pt; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+  color: #8892a6; margin: 0 0 10px;
+}
+/* Executive tier: big-number metric grid. */
+.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 24px; }
+.metric__value { font-size: 26pt; font-weight: 700; color: var(--navy); }
+.metric__label { font-size: 10pt; color: var(--muted); }
+.metric__state--strong { color: var(--sev-low); }
+.metric__state--needs-work { color: var(--sev-high); }
+.metric__state--exposure { color: var(--sev-critical); }
+.metric__state--not-assessed { color: var(--muted); }
+/* Operational tier: dense finding rows with a severity color-bar. */
+.finding { border-left: 4px solid var(--sev-info); padding: 6px 10px; margin-bottom: 6px; background: #f6f8fa; }
+.finding--critical { border-left-color: var(--sev-critical); background: #faf0f0; }
+.finding--high { border-left-color: var(--sev-high); background: #fdf7e6; }
+.finding--medium { border-left-color: var(--sev-medium); background: #fdf9ee; }
+.finding--low { border-left-color: var(--sev-low); }
+.finding__title { font-size: 11pt; font-weight: 700; }
+.finding__meta { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9pt; color: #666; margin-top: 2px; }
+.oq { border-left: 3px solid var(--gold); background: #fdf8ef; padding: 10px 14px; margin: 8px 0; }
+.coverage { background: #f8f9fb; }
+.provenance { font-size: 9pt; color: #8892a6; }
+.report--operational .report__title { font-size: 18pt; }

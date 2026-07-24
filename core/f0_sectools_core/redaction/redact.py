@@ -5,9 +5,12 @@ so the "secrets never reach the model" guarantee is enforced in one place.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .patterns import REDACTED, SECRET_KEY_HINTS, SECRET_VALUE_PATTERNS
+
+if TYPE_CHECKING:
+    from f0_sectools_core.schema.findings import Finding
 
 
 def redact_text(text: str) -> str:
@@ -36,3 +39,23 @@ def redact_obj(obj: Any) -> Any:
     if isinstance(obj, str):
         return redact_text(obj)
     return obj
+
+
+def redact_finding(finding: Finding) -> Finding:
+    """Redact a Finding's full structured payload; returns a new Finding.
+
+    Applies the generic key/value redaction (``redact_obj``) and then additionally
+    blanks any evidence value whose *key* hints at a secret. Evidence is a flat
+    ``{key, value}`` list, so ``redact_obj``'s dict-key check never sees the
+    evidence key name (it is stored as a value under the literal ``"key"``); this
+    pass closes that gap. Use it on findings that flow into a shared artifact
+    (e.g. a generated report) so the redaction guarantee matches every server's
+    ``_render``. Centralized here per Critical Rule 3/6 — never reimplement per caller.
+    """
+    from f0_sectools_core.schema.findings import Finding as _Finding
+
+    data = redact_obj(finding.model_dump())
+    for ev in data.get("evidence", []):
+        if isinstance(ev, dict) and _key_is_secret(str(ev.get("key", ""))):
+            ev["value"] = REDACTED
+    return _Finding.model_validate(data)
