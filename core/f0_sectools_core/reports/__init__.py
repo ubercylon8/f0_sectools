@@ -7,6 +7,7 @@ the reverse). All platform wiring lives in scripts/gen_report.py.
 """
 from __future__ import annotations
 
+from .builder import build_report
 from .content import (
     BlockKind,
     MetricCard,
@@ -23,4 +24,5 @@ __all__ = [
     "ScopeMeta",
     "ReportContent",
     "ReportOutput",
+    "build_report",
 ]
