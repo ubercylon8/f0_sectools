@@ -65,3 +65,38 @@ def test_golden_ciso_en_frozen():
 def test_unknown_persona_raises_value_error():
     with pytest.raises(ValueError):
         build_report("nonsense", "en", "", [], _scope())
+
+
+def _detection_findings() -> list[Finding]:
+    data = json.loads((FIX / "findings_detection.json").read_text())
+    return [Finding.model_validate(d) for d in data]
+
+
+def _op_scope() -> ScopeMeta:
+    return ScopeMeta(
+        generated_at="2026-07-24 14:22", tenant_label="Contoso",
+        window_label="Trailing 7 days", platforms_queried=["defender", "limacharlie"],
+        findings_count=2, assessed=["Detections"], not_assessed=[],
+    )
+
+
+def test_operational_report_renders_evidence_and_mitre():
+    narrative = (FIX / "narrative_detection_en.md").read_text()
+    out = build_report("detection-engineer", "en", narrative, _detection_findings(), _op_scope())
+    md = out.markdown
+    assert "ATT&CK: T1059" in md
+    assert "ATT&CK: T1071, T1571" in md          # multiple techniques joined
+    assert "device: web-01.corp.local" in md      # evidence rendered
+    assert "account: CORP\\jsmith" in md
+
+
+def test_ciso_report_has_no_evidence_or_mitre_rows():
+    narrative = (FIX / "narrative_ciso_en.md").read_text()
+    out = build_report("ciso", "en", narrative, _findings(), _scope())
+    assert "ATT&CK" not in out.markdown           # executive tier stays compact
+
+
+def test_golden_detection_en_frozen():
+    narrative = (FIX / "narrative_detection_en.md").read_text()
+    out = build_report("detection-engineer", "en", narrative, _detection_findings(), _op_scope())
+    assert out.markdown == (FIX / "golden_detection_en.md").read_text()

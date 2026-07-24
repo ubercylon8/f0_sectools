@@ -1,9 +1,11 @@
 """Intermediate representation for a report.
 
 One model, two emitters (emit.to_markdown / emit.to_html) that stay structurally
-in step, though finding-section density differs by format: Markdown renders the
-full persona finding-rollup aggregate, HTML/PDF renders compact finding rows. A
-Section carries exactly one payload shape, selected by its kind.
+in step. Finding rows are report-owned and tier-aware: executive tier renders
+compact one-liners with no evidence/MITRE, operational tier renders dense rows
+(source · ATT&CK ids + all evidence pairs) — Markdown and HTML share the same
+tier logic, so the two formats stay in step. A Section carries exactly one
+payload shape, selected by its kind.
 """
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ from f0_sectools_core.schema.findings import Finding
 class BlockKind(StrEnum):
     narrative = "narrative"          # model prose (redacted at emit)
     metric_grid = "metric_grid"      # executive big-number cards
-    finding_rollup = "finding_rollup"  # CISO top-risks, rendered via persona renderer
+    finding_rollup = "finding_rollup"  # CISO top-risks, compact executive-tier rows
     finding_table = "finding_table"  # operational dense finding rows
     coverage = "coverage"            # assessed / not-assessed lines
     open_questions = "open_questions"  # numbered questions for the operator
