@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import html as _html
 
-from f0_sectools_core.redaction.redact import redact_text
+from f0_sectools_core.redaction.redact import redact_finding, redact_text
 from f0_sectools_core.schema.findings import Finding
 
 from .content import BlockKind, MetricCard, ReportContent, Section
@@ -119,9 +119,22 @@ def _metric_card(m: MetricCard) -> str:
     )
 
 
+_TIERS = ("executive", "operational")
+
+
 def _sorted(findings: list[Finding]) -> list[Finding]:
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     return sorted(findings, key=lambda f: order.get(f.severity.value, 99))
+
+
+def _prepare(findings: list[Finding], tier: str) -> list[Finding]:
+    """Key-hint-redact each finding (the report is a shared artifact — the render
+    path self-guarantees redaction regardless of what the caller did; redact_finding
+    is idempotent), then severity-sort. Fail loud on an unknown tier so a mismatch
+    never silently falls through to the dense (evidence + MITRE) render path."""
+    if tier not in _TIERS:
+        raise ValueError(f"unknown report tier: {tier!r}")
+    return _sorted([redact_finding(f) for f in findings])
 
 
 def _sev_tag(f: Finding) -> str:
@@ -144,7 +157,7 @@ def _grounding_clause(f: Finding) -> str:
 
 def _md_findings(findings: list[Finding], tier: str) -> list[str]:
     lines: list[str] = []
-    for f in _sorted(findings):
+    for f in _prepare(findings, tier):
         if tier == "executive":
             clause = _grounding_clause(f)
             suffix = f" — {clause}" if clause else ""
@@ -159,7 +172,7 @@ def _md_findings(findings: list[Finding], tier: str) -> list[str]:
 
 def _html_findings(findings: list[Finding], tier: str) -> list[str]:
     out: list[str] = []
-    for f in _sorted(findings):
+    for f in _prepare(findings, tier):
         sev = _SEV_CLASS.get(f.severity.value, "info")
         parts = [
             f'<div class="finding finding--{sev}">',

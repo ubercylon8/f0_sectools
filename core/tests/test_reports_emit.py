@@ -145,3 +145,52 @@ def test_no_chat_aggregate_heading_leaks_into_report():
     # The old render_findings(ciso) path injected a "## Security posture rollup"
     # heading inside the section body; report-owned rows must not.
     assert "Security posture rollup" not in to_markdown(_exec_content())
+
+
+def test_evidence_secret_hinting_value_redacted_in_both_emitters():
+    # A short, non-token-shaped secret under a secret-hinting evidence key won't
+    # match SECRET_VALUE_PATTERNS; the render path must still blank it (key-hint
+    # redaction via redact_finding), since the report is a shared artifact.
+    from f0_sectools_core.reports.content import BlockKind, ReportContent, Section
+    from f0_sectools_core.reports.emit import to_html, to_markdown
+    from f0_sectools_core.schema.findings import (
+        Evidence,
+        Finding,
+        FindingType,
+        Severity,
+    )
+
+    f = Finding(
+        source="defender", finding_type=FindingType.incident, severity=Severity.high,
+        title="Token stashed in evidence",
+        evidence=[Evidence(key="api_key", value="shortOpaque123"),
+                  Evidence(key="host", value="web-01.corp.local")],
+    )
+    content = ReportContent(
+        persona="detection_engineer", language="en", tier="operational",
+        title="Security Operations Report", subtitle="Prepared for Detection Engineering",
+        sections=[Section(BlockKind.finding_table, "Findings", "operational", findings=[f])],
+    )
+    md = to_markdown(content)
+    html = to_html(content)
+    assert "shortOpaque123" not in md and "shortOpaque123" not in html  # secret blanked
+    assert "web-01.corp.local" in md and "web-01.corp.local" in html    # benign evidence kept
+
+
+def test_unknown_tier_fails_loud():
+    # An unknown tier must raise, never silently fall through to the dense
+    # (evidence + MITRE) render path.
+    import pytest
+    from f0_sectools_core.reports.content import BlockKind, ReportContent, Section
+    from f0_sectools_core.reports.emit import to_markdown
+    from f0_sectools_core.schema.findings import Finding, FindingType, Severity
+
+    f = Finding(source="tenable", finding_type=FindingType.risk, severity=Severity.low,
+                title="x")
+    content = ReportContent(
+        persona="ciso", language="en", tier="bogus",
+        title="t", subtitle="s",
+        sections=[Section(BlockKind.finding_table, "Findings", "bogus", findings=[f])],
+    )
+    with pytest.raises(ValueError, match="unknown report tier"):
+        to_markdown(content)
