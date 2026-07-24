@@ -81,6 +81,7 @@ f0_sectools/
     smallmodel/             # tool helpers: flat-arg builders, enum guards, arg validation
     gating/                 # gated write-action machinery + audit log
     renderers/              # persona renderers (analyst/engineer/ciso/hunter/detection-engineer)
+    reports/                # persona posture reports: builder, emit, pdf, theme, i18n
   servers/                  # one thin MCP server per platform
     defender-mcp/           # built + live-validated
     entra-mcp/              # built + live-validated
@@ -95,6 +96,7 @@ f0_sectools/
   skills/                   # portable agentskills.io playbooks (SKILL.md) — load in any skills-aware runtime
     defender/ entra/ limacharlie/ projectachilles/ intune/ tenable/ purview/
     cross-platform/         # multi-server correlation: incident triage, offensive<->defensive loop
+    reports/                # generate-report
                             # (full catalog: docs/reference/skills.md — generated)
   integrations/             # runtime-specific wiring (NO skill content — see rule 9)
     hermes/                 # config.example.yaml (manual-merge) + distribution/ (installable profile: distribution.yaml + config.yaml + SOUL.md)
@@ -136,7 +138,7 @@ How a local model actually drives these tools. The mechanism differs by runtime,
 
 Skills live in `skills/` as **[agentskills.io](https://agentskills.io) `SKILL.md`** packages (the open standard, originally Anthropic's, now adopted by Hermes, Claude Code, Goose, OpenHands, Cursor, …). A skill is a directory with a `SKILL.md` (YAML frontmatter: `name`, `description` ≤60 chars, `version`, optional `metadata.hermes`) plus `## When to Use / Procedure / Pitfalls / Verification`, and optional `references/`. Loaded via progressive disclosure. The same files work in **every** skills-aware runtime — never fork them per runtime (Critical Rule 9). Each skill refers to tools by **base name** (`list_incidents`); runtimes prefix differently (Hermes `mcp_f0-defender_list_incidents`, Claude Code `mcp__f0-defender__list_incidents`).
 
-The full skill list lives in the **generated catalog** [`docs/reference/skills.md`](docs/reference/skills.md) (25 skills across 8 platform categories; regenerate with `uv run python scripts/gen_docs.py` — do not hand-list skills here or anywhere else). Default focuses: LimaCharlie → endpoint investigation, Intune → device-compliance review, Tenable → exposure-posture review, Purview → data-risk review; the cross-platform correlation playbooks favour a capable local model. A test (`skills/test_skills_valid.py`) enforces valid frontmatter and the ≤60-char description limit on every `SKILL.md`.
+The full skill list lives in the **generated catalog** [`docs/reference/skills.md`](docs/reference/skills.md) (27 skills across 9 platform categories; regenerate with `uv run python scripts/gen_docs.py` — do not hand-list skills here or anywhere else). Default focuses: LimaCharlie → endpoint investigation, Intune → device-compliance review, Tenable → exposure-posture review, Purview → data-risk review; the cross-platform correlation playbooks favour a capable local model. A test (`skills/test_skills_valid.py`) enforces valid frontmatter and the ≤60-char description limit on every `SKILL.md`.
 
 ### Personas (four role lenses)
 
@@ -147,7 +149,7 @@ CISO, threat hunter, detection engineer, security engineer — each a behavioura
 - **Hermes Agent** (primary) — skills-aware, native MCP, OpenAI-compatible backend. `integrations/hermes/` holds `config.example.yaml` (the manual-merge template — wires `mcp_servers`, points `skills.external_dirs` at this repo's `skills/` in place, defines the four personalities) and **`distribution/`** — a **git-installable profile distribution** (`distribution.yaml` manifest + `config.yaml` + `SOUL.md`; `hermes profile install ./integrations/hermes/distribution`). NB: Hermes reads MCP servers from `config.yaml`'s `mcp_servers` (a distribution `mcp.json` is **not** auto-loaded by the CLI), and the gated-write server ships **disabled-by-default**. See its README + `docs/user-guide/runtimes/hermes.md`.
 - **Claude Code / other agentskills.io clients** — the same `skills/` load unmodified.
 - **pi** ([pi.dev](https://pi.dev/docs/latest)) — minimal agentskills.io terminal harness; the same `skills/` load unmodified. No native MCP — bridge our servers with the `pi-mcp-extension`. `integrations/pi/` holds `mcp.json`, `AGENTS.md` (base identity), and the four persona prompt templates. See `docs/user-guide/runtimes/pi.md`.
-- **opencode** ([opencode.ai](https://opencode.ai), ≥1.18) — terminal agent with native MCP **and** native SKILL.md skills. Wiring ships **in-repo**: root `opencode.json` (8 servers, relative commands, `f0-pa-actions` disabled), `.opencode/skills/` (25 committed symlinks into `skills/` — no forks), `.opencode/agents/` (4 persona agents). Run opencode from the checkout and it all auto-loads. See `integrations/opencode/README.md` + `docs/user-guide/runtimes/opencode.md`.
+- **opencode** ([opencode.ai](https://opencode.ai), ≥1.18) — terminal agent with native MCP **and** native SKILL.md skills. Wiring ships **in-repo**: root `opencode.json` (8 servers, relative commands, `f0-pa-actions` disabled), `.opencode/skills/` (27 committed symlinks into `skills/` — no forks), `.opencode/agents/` (4 persona agents). Run opencode from the checkout and it all auto-loads. See `integrations/opencode/README.md` + `docs/user-guide/runtimes/opencode.md`.
 - **Non-skill chat UIs (LM Studio, Open WebUI)** — no skill system; paste `prompts/f0-sectools-system-prompt.md` (persona-switchable) as the system prompt. See `docs/running-with-local-models.md`.
 
 **Rule of thumb:** skill *content* and persona *definitions* are authored once; `integrations/` and `prompts/` only carry runtime wiring, never copies of skill logic.

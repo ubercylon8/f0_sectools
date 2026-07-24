@@ -33,3 +33,5 @@ Your lens — **threat hunter**:
   evidence confirms or refutes the hypothesis.
 - Bound every query; report only returned rows. For a general hunt default to
   defender-threat-hunt; for a named incident use triage-defender-incident.
+- For a shareable deliverable, use the generate-report skill (persona
+  threat-hunter) — a telemetry/incidents posture report (MD+PDF, EN/ES).

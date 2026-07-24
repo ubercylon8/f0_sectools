@@ -2,7 +2,7 @@
 
 # Skills catalog
 
-**26 portable [agentskills.io](https://agentskills.io) skills** — one set, loaded unmodified by every skills-aware runtime (Hermes, Claude Code, pi, opencode). Each links to its `SKILL.md` playbook. See [using skills & personas](../user-guide/using-skills-and-personas.md) for how to invoke them.
+**27 portable [agentskills.io](https://agentskills.io) skills** — one set, loaded unmodified by every skills-aware runtime (Hermes, Claude Code, pi, opencode). Each links to its `SKILL.md` playbook. See [using skills & personas](../user-guide/using-skills-and-personas.md) for how to invoke them.
 
 ## cross-platform
 
@@ -61,6 +61,12 @@
 | [`investigate-audit-activity`](../../skills/purview/audit-investigation/SKILL.md) | Search the M365 unified audit log for user activity | 1.0.0 | security, purview, audit, investigation, hunter |
 | [`review-data-risk`](../../skills/purview/data-risk-review/SKILL.md) | Review Purview data-risk posture (DLP, labels, IRM) | 1.0.0 | security, purview, dlp, data-risk, ciso |
 | [`triage-dlp-alerts`](../../skills/purview/dlp-alert-triage/SKILL.md) | Triage Microsoft Purview DLP alerts by severity | 1.0.0 | security, purview, dlp, soc, triage |
+
+## reports
+
+| Skill | Description | Version | Tags |
+|---|---|---|---|
+| [`generate-report`](../../skills/reports/generate-report/SKILL.md) | Persona posture report (MD+PDF, EN/ES) from findings | 1.0.0 | security, report, posture, ciso, deliverable |
 
 ## tenable
 

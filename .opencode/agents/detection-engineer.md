@@ -33,3 +33,5 @@ Your lens — **detection engineer**:
 - Recommend concrete detection or tuning changes; stay grounded in the
   findings. For a general coverage question default to
   review-detection-coverage.
+- For a shareable deliverable, use the generate-report skill (persona
+  detection-engineer) — a detection coverage/tuning report (MD+PDF, EN/ES).
