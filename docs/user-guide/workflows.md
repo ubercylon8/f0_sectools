@@ -28,7 +28,7 @@ severity, and names one highest-value next step. If a platform is dark
 continues, so the coverage of the picture is always explicit. Favour a capable
 local model — it is six sequential calls plus synthesis.
 
-## Generate a posture report (any persona) — Markdown + PDF, EN/ES
+## Generate a posture report (any persona) — Markdown, HTML + PDF, EN/ES
 
 > **Prompt:** "As a CISO, generate my posture report." · "Genera mi informe de
 > postura." · (or invoke the `generate-report` skill)
@@ -52,10 +52,16 @@ uv run python scripts/gen_report.py \
 standalone, self-contained `report.html` (open in any browser) always; with
 `--pdf` it also writes `report.pdf` (WeasyPrint renders the same HTML). A dark
 platform degrades to **"not assessed"**
-and the report still generates. The **CISO** report is executive-restrained
-(big-number posture at a glance + compact one-line top risks); the
-**operational** personas (detection engineer / threat hunter / security
-engineer) get dense finding rows with evidence and MITRE technique references.
+and the report still generates. The **CISO** report is executive-restrained (a
+six-pillar posture at a glance plus compact one-line top risks). The
+**operational** personas gather their own working data and render it as dense
+finding rows with evidence and MITRE technique references: the **detection
+engineer** gets Defender alerts and incidents, LimaCharlie D&R rules and
+endpoint detections, and ProjectAchilles weak techniques; the **threat
+hunter** gets incidents, MITRE-bearing alerts, endpoint detections and sensor
+coverage; the **security engineer** gets Secure Score, Entra
+conditional-access/privileged-role/risky-user posture, Intune compliance and
+stale devices, and Tenable exposure.
 Every report ends with a coverage note and open questions for the operator. PDF
 needs the optional `[reports]` extra — see
 [getting started](getting-started.md#optional-pdf-reports).
