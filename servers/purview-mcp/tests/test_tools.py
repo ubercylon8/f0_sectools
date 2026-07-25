@@ -72,6 +72,8 @@ async def test_dlp_summary_rolls_up_by_severity_and_status():
     assert ev["alerts_total"] == "2"
     assert "high: 1" in ev["by_severity"] and "low: 1" in ev["by_severity"]
     assert "new: 1" in ev["by_status"]
+    assert findings[0].evidence[0].key == "headline"
+    assert ev["headline"] == "2 DLP alerts"
 
 
 @pytest.mark.asyncio

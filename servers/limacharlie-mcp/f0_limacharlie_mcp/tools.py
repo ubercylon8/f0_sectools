@@ -623,13 +623,14 @@ def get_org_overview(lc: Any) -> list[Finding]:
             f"{len(detections)} detections (24h)"
         )
     evidence = [
+        Evidence(key="headline", value=f"{online} online"),
         Evidence(key="sensors_total", value=str(len(sensors))),
         Evidence(key="sensors_online", value=str(online)),
         Evidence(key="dr_rules", value=str(n_rules)),
         Evidence(key="detections_24h", value=str(len(detections))),
     ]
     if sleepers is not None:
-        evidence.insert(2, Evidence(key="sensors_dormant_sleepers", value=str(sleepers)))
+        evidence.insert(3, Evidence(key="sensors_dormant_sleepers", value=str(sleepers)))
     return [
         Finding(
             source="limacharlie",

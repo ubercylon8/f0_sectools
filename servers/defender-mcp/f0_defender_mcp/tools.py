@@ -97,6 +97,7 @@ async def get_secure_score(gc: GraphClient) -> list[Finding]:
             title=f"Microsoft Secure Score: {current:.0f}/{maximum:.0f} ({pct:.0f}%)",
             entity=Entity(kind=EntityKind.tenant, id="tenant"),
             evidence=[
+                Evidence(key="headline", value=f"{pct:.0f}%"),
                 Evidence(key="current_score", value=f"{current:.1f}"),
                 Evidence(key="max_score", value=f"{maximum:.1f}"),
             ],

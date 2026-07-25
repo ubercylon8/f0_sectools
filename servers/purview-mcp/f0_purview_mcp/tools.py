@@ -157,6 +157,7 @@ async def get_dlp_summary(gc: Any, hours_back: float = 168) -> list[Finding]:
             title=f"{len(alerts)} DLP alert(s) in the last {hours_back:g}h"
             + (f" (showing counts for first {_FETCH_CAP})" if len(alerts) >= _FETCH_CAP else ""),
             evidence=[
+                Evidence(key="headline", value=f"{len(alerts)} DLP alerts"),
                 Evidence(key="alerts_total", value=str(len(alerts))),
                 Evidence(key="by_severity", value=fmt(by_sev)),
                 Evidence(key="by_status", value=fmt(by_status)),

@@ -300,6 +300,7 @@ async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
     # ("total"/"protected") led a small model to render this as "Total hosts
     # tested"; the counts are per test execution.
     evidence = [
+        Evidence(key="headline", value=f"{score:.0f}% blocked"),
         Evidence(key="tests_protected", value=str(d.get("protectedCount", 0))),
         Evidence(key="tests_detected", value=str(d.get("detectedCount", 0))),
         Evidence(key="tests_unprotected", value=str(d.get("unprotectedCount", 0))),

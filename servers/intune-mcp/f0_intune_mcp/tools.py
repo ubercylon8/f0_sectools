@@ -174,6 +174,7 @@ async def get_compliance_summary(gc: Any) -> list[Finding]:
     conflict = int(s.get("conflictDeviceCount", 0) or 0)
     total = compliant + noncompliant + grace + unknown + error + conflict
     sev = Severity.high if noncompliant else (Severity.low if (grace or unknown) else Severity.info)
+    pct = round(compliant / total * 100) if total else 0
     return [
         Finding(
             source="intune",
@@ -185,6 +186,7 @@ async def get_compliance_summary(gc: Any) -> list[Finding]:
             ),
             entity=Entity(kind=EntityKind.host, id="tenant"),
             evidence=[
+                Evidence(key="headline", value=f"{pct}% compliant"),
                 Evidence(key="devices_total", value=str(total)),
                 Evidence(key="devices_compliant", value=str(compliant)),
                 Evidence(key="devices_noncompliant", value=str(noncompliant)),

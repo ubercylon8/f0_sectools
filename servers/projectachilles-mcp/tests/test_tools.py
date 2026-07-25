@@ -38,6 +38,8 @@ async def test_get_defense_score_maps():
     assert findings[0].finding_type.value == "posture"
     assert findings[0].severity.value == "high"  # low score -> high risk
     assert "35" in findings[0].title
+    assert findings[0].evidence[0].key == "headline"
+    assert findings[0].evidence[0].value == "35% blocked"
 
 
 @pytest.mark.asyncio

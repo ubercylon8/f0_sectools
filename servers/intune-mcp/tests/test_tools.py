@@ -147,6 +147,9 @@ async def test_get_compliance_summary_counts():
     assert ev["devices_compliant"] == "40" and ev["devices_noncompliant"] == "5"
     assert ev["devices_total"]  # keys name the counted noun (devices), not bare
     assert findings[0].severity.value in ("low", "medium", "high")  # 5 noncompliant present
+    # total = 40 + 5 + 2 + 3 + 0 + 0 = 50; pct = round(40/50*100) = 80
+    assert findings[0].evidence[0].key == "headline"
+    assert ev["headline"] == "80% compliant"
 
 
 @pytest.mark.asyncio
