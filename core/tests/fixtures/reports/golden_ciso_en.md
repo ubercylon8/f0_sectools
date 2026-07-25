@@ -8,13 +8,13 @@ Our posture is moderate and stable. Two risks are live this week: internet-expos
 
 ## Posture at a glance
 
-- **Config hardening:** 62% (needs-work)
+- **62%** — Config hardening (needs-work) · Microsoft Secure Score 1130/1816
 
 ## Top risks
 
 The critical vulnerabilities are the fastest single reduction in breach likelihood; the compliance gap is the largest attack surface.
 
-- **[CRITICAL]** 3 internet-exposed critical vulnerabilities — cvss: 9.8
+- **[CRITICAL]** 3 internet-exposed critical vulnerabilities — 3 critical
 - **[HIGH]** 39% of managed devices non-compliant
 
 ## Scope & coverage

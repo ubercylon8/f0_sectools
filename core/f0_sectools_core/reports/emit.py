@@ -10,7 +10,7 @@ from __future__ import annotations
 import html as _html
 
 from f0_sectools_core.redaction.redact import redact_finding, redact_text
-from f0_sectools_core.schema.findings import Finding
+from f0_sectools_core.schema.findings import Evidence, Finding
 
 from .content import BlockKind, MetricCard, ReportContent, Section
 from .theme import inline_css
@@ -41,7 +41,7 @@ def to_markdown(content: ReportContent) -> str:
 
 def _md_body(s: Section) -> list[str]:
     if s.kind is BlockKind.metric_grid:
-        return [f"- **{_r(m.label)}:** {_r(m.value)} ({_r(m.state)})" for m in s.metrics]
+        return [_md_metric(m) for m in s.metrics]
     if s.kind in (BlockKind.finding_rollup, BlockKind.finding_table):
         lines: list[str] = []
         if s.text.strip():
@@ -58,6 +58,13 @@ def _md_body(s: Section) -> list[str]:
         return [f"- {_r(item)}" for item in s.items] or [_r(s.text)]
     # narrative / provenance
     return [_r(s.text)]
+
+
+def _md_metric(m: MetricCard) -> str:
+    line = f"- **{_r(m.value)}** — {_r(m.label)} ({_r(m.state)})"
+    if m.detail:
+        line += f" · {_r(m.detail)}"
+    return line
 
 
 # ── HTML ─────────────────────────────────────────────────────────────
@@ -112,10 +119,13 @@ def _html_body(s: Section) -> list[str]:
 
 def _metric_card(m: MetricCard) -> str:
     state = _e(m.state).replace(" ", "-")
+    detail = f'<div class="metric__detail">{_e(m.detail)}</div>' if m.detail else ""
     return (
-        f'<div><div class="metric__value">{_e(m.value)}</div>'
-        f'<div class="metric__label">{_e(m.label)} · '
-        f'<span class="metric__state--{state}">{_e(m.state)}</span></div></div>'
+        '<div class="metric">'
+        f'<div class="metric__label">{_e(m.label)}</div>'
+        f'<div class="metric__value">{_e(m.value)}</div>'
+        f'<div class="metric__state metric__state--{state}">{_e(m.state)}</div>'
+        f'{detail}</div>'
     )
 
 
@@ -145,13 +155,26 @@ def _mitre_ids(f: Finding) -> list[str]:
     return [r.id for r in f.references if r.type == "mitre"]
 
 
+def _headline(f: Finding) -> str:
+    return next((e.value for e in f.evidence if e.key == "headline"), "")
+
+
+def _display_evidence(f: Finding) -> list[Evidence]:
+    """Evidence to show in operational rows — the 'headline' key is a tile hint, not detail."""
+    return [e for e in f.evidence if e.key != "headline"]
+
+
 def _grounding_clause(f: Finding) -> str:
-    """One short grounding phrase for an executive row: entity name, else the
-    first evidence key: value, else empty."""
+    """One short grounding phrase for an executive row: the headline (unless
+    already folded into the title), else entity name, else the first
+    (non-headline) evidence key: value, else empty."""
+    hl = _headline(f)
+    if hl and hl not in f.title:
+        return hl
     if f.entity is not None and f.entity.name:
         return f.entity.name
-    if f.evidence:
-        return f"{f.evidence[0].key}: {f.evidence[0].value}"
+    for e in _display_evidence(f):
+        return f"{e.key}: {e.value}"
     return ""
 
 
@@ -166,7 +189,7 @@ def _md_findings(findings: list[Finding], tier: str) -> list[str]:
             mitre = _mitre_ids(f)
             meta = f.source + (f" · ATT&CK: {', '.join(mitre)}" if mitre else "")
             lines.append(_r(f"- **[{_sev_tag(f)}]** {f.title} — {meta}"))
-            lines.extend(_r(f"  - {ev.key}: {ev.value}") for ev in f.evidence)
+            lines.extend(_r(f"  - {ev.key}: {ev.value}") for ev in _display_evidence(f))
     return lines
 
 
@@ -188,7 +211,7 @@ def _html_findings(findings: list[Finding], tier: str) -> list[str]:
             parts.append(f'<div class="finding__meta">{_e(meta)}</div>')
             parts.extend(
                 f'<div class="finding__evidence">{_e(f"{ev.key}: {ev.value}")}</div>'
-                for ev in f.evidence
+                for ev in _display_evidence(f)
             )
         parts.append("</div>")
         out.append("".join(parts))

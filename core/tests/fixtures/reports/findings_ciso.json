@@ -1,7 +1,7 @@
 [
   {"source": "tenable", "finding_type": "risk", "severity": "critical",
    "title": "3 internet-exposed critical vulnerabilities",
-   "evidence": [{"key": "cvss", "value": "9.8"}]},
+   "evidence": [{"key": "headline", "value": "3 critical"}, {"key": "cvss", "value": "9.8"}]},
   {"source": "intune", "finding_type": "risk", "severity": "high",
    "title": "39% of managed devices non-compliant"},
   {"source": "purview", "finding_type": "posture", "severity": "info",

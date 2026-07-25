@@ -23,7 +23,8 @@ def _scope() -> ScopeMeta:
         ],
         findings_count=3, assessed=["Config hardening", "Vulnerability exposure"],
         not_assessed=["Insider risk (not licensed)"],
-        pillar_metrics=[MetricCard("Config hardening", "62%", "needs-work")],
+        pillar_metrics=[MetricCard("Config hardening", "62%", "needs-work",
+                                    detail="Microsoft Secure Score 1130/1816")],
     )
 
 

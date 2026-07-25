@@ -39,6 +39,21 @@ def test_gather_collects_healthy_pillar(monkeypatch):
     assert any("62%" in f.title for f in findings)
 
 
+def test_metric_from_uses_headline_for_value_and_title_for_detail():
+    from f0_sectools_core.schema.findings import Evidence
+
+    findings = [Finding(
+        source="defender", finding_type=FindingType.posture, severity=Severity.info,
+        title="Secure Score: 62%",
+        evidence=[Evidence(key="headline", value="62%"),
+                  Evidence(key="secure_score_pct", value="62")],
+    )]
+    card = report_gather._metric_from("Config hardening", findings)
+    assert card.value == "62%"
+    assert card.detail == "Secure Score: 62%"
+    assert card.state == "strong"
+
+
 def test_gather_redacts_secret_hinting_evidence_from_findings(monkeypatch):
     # A pillar tool that emits a secret-hinting evidence key with a short,
     # non-token value must have it redacted before it can reach the shared report.

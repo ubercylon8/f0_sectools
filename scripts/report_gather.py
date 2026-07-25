@@ -92,28 +92,16 @@ _PILLAR_FACTORIES: dict[str, Callable[[int], Awaitable[list[Finding]]]] = {
     "Endpoint coverage": _pillar_endpoint_coverage,
 }
 
-# Map a pillar's healthy finding to a big-number MetricCard. Best-effort: reads a
-# conventional evidence key, falls back to the finding title.
-_PILLAR_METRIC_KEY = {
-    "Config hardening": "secure_score_pct",
-    "Attack validation": "defense_score",
-    "Vulnerability exposure": "critical_count",
-    "Device compliance": "compliant_pct",
-    "Data risk": "alert_count",
-    "Endpoint coverage": "online_sensors",
-}
-
-
 def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
     real = [f for f in findings if not is_not_assessed(f)]
     if not real:
         return MetricCard(pillar, "not assessed", "not-assessed")
     f = real[0]
-    key = _PILLAR_METRIC_KEY.get(pillar, "")
-    value = next((e.value for e in f.evidence if e.key == key), f.title)
+    headline = next((e.value for e in f.evidence if e.key == "headline"), "")
+    value = headline or f.title[:32]  # defensive fallback if a tool lacks a headline
     state = {"critical": "exposure", "high": "needs-work", "medium": "needs-work"}.get(
         f.severity.value, "strong")
-    return MetricCard(pillar, value, state)
+    return MetricCard(pillar, value, state, detail=f.title)
 
 
 async def _run_pillar(pillar: str, factory, window_hours: int) -> tuple[str, list[Finding]]:
