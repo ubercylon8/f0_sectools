@@ -166,3 +166,22 @@ def test_ciso_still_gets_metric_tiles(monkeypatch):
     monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"Config hardening": ok})
     _findings, meta = asyncio.run(report_gather.gather("ciso", 168))
     assert [m.value for m in meta.pillar_metrics] == ["90%"]
+
+
+def test_entra_conditional_access_factory_bounds_unbounded_result(monkeypatch):
+    # list_conditional_access_policies has no limit param and pages unbounded via
+    # gc.get_all() — the factory must cap it itself like every sibling group (10-15).
+    from unittest.mock import AsyncMock, patch
+
+    monkeypatch.setenv("ENTRA_TENANT_ID", "t")
+    monkeypatch.setenv("ENTRA_CLIENT_ID", "c")
+    monkeypatch.setenv("ENTRA_CLIENT_SECRET", "s")
+
+    many = [Finding(source="entra", finding_type=FindingType.posture,
+                    severity=Severity.info, title=f"Policy {i}") for i in range(25)]
+
+    with patch("f0_entra_mcp.tools.list_conditional_access_policies",
+              AsyncMock(return_value=many)):
+        result = asyncio.run(report_gather._entra_conditional_access(168))
+
+    assert len(result) == 10

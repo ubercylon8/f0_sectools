@@ -140,7 +140,10 @@ async def _entra_conditional_access(window_hours: int) -> list[Finding]:
     load_dotenv(".env.entra")
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
-        return await tools.list_conditional_access_policies(gc)
+        # list_conditional_access_policies has no limit param (it pages unbounded),
+        # so bound it here — the report is a human-facing document and every other
+        # group is capped.
+        return (await tools.list_conditional_access_policies(gc))[:10]
 
 
 async def _entra_privileged_roles(window_hours: int) -> list[Finding]:
