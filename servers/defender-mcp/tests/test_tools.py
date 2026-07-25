@@ -783,3 +783,70 @@ async def test_truncation_note_reports_the_filtered_total():
     with respx.mock as router:
         findings, _ = await _call(router, "/security/alerts_v2", list_alerts, body, limit=1)
     assert "Showing 1 of 6" in findings[-1].title
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path,tool,closed_status",
+    [
+        ("/security/incidents", list_incidents, "resolved"),
+        ("/security/incidents", list_incidents, "redirected"),
+        ("/security/alerts_v2", list_alerts, "resolved"),
+    ],
+)
+async def test_closed_records_are_dropped_if_the_server_ignores_the_filter(
+    path, tool, closed_status
+):
+    # Graph demonstrably accepts a param and silently ignores it ($orderby on
+    # lastUpdateDateTime does exactly that). If the status $filter were dropped
+    # the same way, an already-handled record must NOT reappear as open.
+    body = {
+        "value": [
+            {"id": "1", "displayName": "Handled", "title": "Handled",
+             "severity": "high", "status": closed_status},
+            {"id": "2", "displayName": "Open", "title": "Open",
+             "severity": "high", "status": "new"},
+        ]
+    }
+    with respx.mock as router:
+        findings, _ = await _call(router, path, tool, body, severity_min="high")
+    assert [f.title for f in findings] == ["Open"]
+
+
+@pytest.mark.asyncio
+async def test_state_all_keeps_closed_records():
+    # The backstop must not fight state="all", whose whole purpose is history.
+    body = {
+        "value": [
+            {"id": "1", "title": "Handled", "severity": "high", "status": "resolved"},
+            {"id": "2", "title": "Open", "severity": "high", "status": "new"},
+        ]
+    }
+    with respx.mock as router:
+        findings, _ = await _call(
+            router, "/security/alerts_v2", list_alerts, body, severity_min="high", state="all"
+        )
+    assert [f.title for f in findings] == ["Handled", "Open"]
+
+
+@pytest.mark.asyncio
+async def test_enum_arguments_are_case_insensitive():
+    # Small local models vary their casing. Folding case is not the same as
+    # silently reinterpreting an unknown value — that still fails loudly.
+    with respx.mock as router:
+        _, params = await _call(
+            router, "/security/alerts_v2", list_alerts, severity_min="High", state="OPEN"
+        )
+    assert params["$filter"] == "status ne 'resolved' and (severity eq 'high')"
+
+
+@pytest.mark.asyncio
+async def test_bad_argument_finding_echoes_what_the_caller_sent():
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        router.get(GRAPH + "/security/alerts_v2").mock(
+            return_value=httpx.Response(200, json={"value": []})
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await list_alerts(gc, severity_min="Urgent")
+    assert "Unsupported severity_min 'Urgent'" in findings[0].title

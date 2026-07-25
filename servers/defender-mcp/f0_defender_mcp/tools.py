@@ -135,12 +135,38 @@ def _bad_arg(name: str, value: str, allowed: Any) -> Finding:
     )
 
 
-def _check(severity_min: str, state: str) -> Finding | None:
-    if severity_min not in _MIN_RANK:
-        return _bad_arg("severity_min", severity_min, _MIN_RANK)
-    if state not in _STATES:
-        return _bad_arg("state", state, _STATES)
-    return None
+def _args(severity_min: str, state: str) -> tuple[str, str, Finding | None]:
+    """Normalize case, then validate; the finding reports what the caller sent.
+
+    Case is not semantic — "High" unambiguously means "high" — and small local
+    models vary their casing, so folding it costs a round-trip for nothing. An
+    unrecognized value still fails loudly: that is a different thing from
+    silently reinterpreting one, which is the defect this module was fixed for.
+    """
+    sev, st = str(severity_min).strip().lower(), str(state).strip().lower()
+    if sev not in _MIN_RANK:
+        return sev, st, _bad_arg("severity_min", severity_min, _MIN_RANK)
+    if st not in _STATES:
+        return sev, st, _bad_arg("state", state, _STATES)
+    return sev, st, None
+
+
+def _is_closed(record: dict[str, Any], state: str, closed: tuple[str, ...]) -> bool:
+    """Client-side backstop for the server-side status filter.
+
+    Graph demonstrably accepts a query parameter and silently ignores it — this
+    module already works around exactly that for $orderby=lastUpdateDateTime. If
+    the status $filter were dropped the same way, an already-handled record would
+    reappear as open with nothing to catch it, which is the staleness bug this
+    module exists to close. The severity floor already gets this treatment via
+    _meets(); status now matches it.
+
+    Phrased as an exclusion, like the $filter it backs: a state we did not
+    enumerate stays visible rather than being silently dropped.
+    """
+    if state == "all":
+        return False
+    return str(record.get("status", "")).strip().lower() in closed
 
 
 def _query(
@@ -249,7 +275,7 @@ async def list_incidents(
     gc: GraphClient, severity_min: str = "medium", limit: int = 25, state: str = "open"
 ) -> list[Finding]:
     limit = clamp_limit(limit)
-    bad = _check(severity_min, state)
+    severity_min, state, bad = _args(severity_min, state)
     if bad:
         return [bad]
     try:
@@ -267,6 +293,8 @@ async def list_incidents(
     raw = page.get("value", [])
     findings: list[Finding] = []
     for inc in raw:
+        if _is_closed(inc, state, _INCIDENT_CLOSED):
+            continue
         alerts = inc.get("alerts") or []
         sev = _sev(inc.get("severity", "medium"))
         # A high-severity incident correlating many alerts is treated as critical.
@@ -302,7 +330,7 @@ async def list_alerts(
     gc: GraphClient, severity_min: str = "high", limit: int = 25, state: str = "open"
 ) -> list[Finding]:
     limit = clamp_limit(limit)
-    bad = _check(severity_min, state)
+    severity_min, state, bad = _args(severity_min, state)
     if bad:
         return [bad]
     try:
@@ -318,6 +346,8 @@ async def list_alerts(
     raw = page.get("value", [])
     findings: list[Finding] = []
     for alert in raw:
+        if _is_closed(alert, state, _ALERT_CLOSED):
+            continue
         sev = _sev(alert.get("severity", "medium"))
         if not _meets(sev, severity_min):
             continue
