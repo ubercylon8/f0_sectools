@@ -20,9 +20,12 @@ The user wants to work through data-loss alerts: "show me DLP alerts",
 Base tool names: `get_dlp_summary`, `list_dlp_alerts`.
 
 1. Start with `get_dlp_summary` for the window in question (fractional
-   `hours_back` is fine: 0.25 = last 15 minutes).
+   `hours_back` is fine: 0.25 = last 15 minutes). It counts **unresolved**
+   alerts only — resolved ones are already handled and are not current risk.
 2. `list_dlp_alerts` with `severity_min="high"`; step down to `medium`/`low`
-   only after the higher tier is handled. Keep `limit` small (≤25).
+   only after the higher tier is handled. Keep `limit` small (≤25). It also
+   returns unresolved alerts only; pass `state: "all"` when the operator asks
+   what was raised historically, or to review how alerts were dispositioned.
 3. For each alert relay: title (the policy + what matched), severity, status
    (new / inProgress / resolved), category, and when.
 4. Recommend the next step per alert: confirm with the data owner, review the

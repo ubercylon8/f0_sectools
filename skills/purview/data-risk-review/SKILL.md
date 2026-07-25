@@ -22,8 +22,9 @@ This is the Purview default focus. (For endpoint/EDR posture use LimaCharlie's
 Base tool names (runtime may prefix): `get_dlp_summary`, `list_dlp_alerts`,
 `list_insider_risk_alerts`, `list_sensitivity_labels`.
 
-1. Call `get_dlp_summary` (default window 168h) — the headline: total DLP
-   alerts, by severity, by status.
+1. Call `get_dlp_summary` (default window 168h) — the headline: **unresolved**
+   DLP alerts, by severity, by status. Resolved alerts are excluded because
+   they are already handled; `state: "all"` includes them.
 2. If alerts exist, call `list_dlp_alerts` with `severity_min="high"` first;
    widen only if empty.
 3. Call `list_insider_risk_alerts` — note that IRM may pseudonymize users by
@@ -36,8 +37,11 @@ Base tool names (runtime may prefix): `get_dlp_summary`, `list_dlp_alerts`,
 
 ## Pitfalls
 
-- **0 DLP alerts is ambiguous**: quiet period, no DLP policies configured, or
-  missing Purview licensing — the summary finding says so; relay that nuance.
+- **0 unresolved DLP alerts is ambiguous**: a quiet period, no DLP policies
+  configured, missing Purview licensing, **or** every alert in the window
+  already resolved — which is the opposite conclusion, because it means DLP is
+  deployed and working. Re-run with `state: "all"` to tell them apart before
+  reporting "no data risk". The summary finding says this too; relay the nuance.
 - DLP alert titles can embed message subjects/filenames — treat findings as
   sensitive output; don't repeat more detail than the question needs.
 - A `permission`/posture finding (e.g. `SecurityAlert.Read.All` missing) is

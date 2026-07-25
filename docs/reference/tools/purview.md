@@ -10,36 +10,44 @@ Purview data-loss (DLP) alert rollup: counts by severity and status.
 
 The data-risk posture headline — not Defender incidents (use list_incidents)
 or Secure Score (use get_secure_score). hours_back may be fractional.
+Defaults to state="open" — excludes resolved alerts, which are already
+handled and are not current data risk. Use state="all" for the history.
 
 | Parameter | Type | Default |
 |---|---|---|
 | `hours_back` | `number` | `168` |
+| `state` | `"open"` \| `"all"` | `"open"` |
 
 Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md), [`triage-dlp-alerts`](../../../skills/purview/dlp-alert-triage/SKILL.md)
 
 ## `list_dlp_alerts`
 
-List recent Purview DLP alerts (data-loss policy matches), bounded.
+List recent unresolved Purview DLP alerts (data-loss policy matches), bounded.
 
-severity_min filters to that severity and above.
+severity_min filters to that severity and above. Defaults to state="open";
+use state="all" to include already-resolved alerts.
 
 | Parameter | Type | Default |
 |---|---|---|
 | `hours_back` | `number` | `168` |
 | `severity_min` | `"low"` \| `"medium"` \| `"high"` | `"low"` |
 | `limit` | `integer` | `25` |
+| `state` | `"open"` \| `"all"` | `"open"` |
 
 Used by skills: [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md), [`triage-dlp-alerts`](../../../skills/purview/dlp-alert-triage/SKILL.md)
 
 ## `list_insider_risk_alerts`
 
-List recent Purview Insider Risk Management alerts (potential data theft,
-leaks, risky departing users). Users may appear pseudonymized by design.
+List recent unresolved Purview Insider Risk Management alerts (potential data
+theft, leaks, risky departing users). Users may appear pseudonymized by design.
+
+Defaults to state="open"; use state="all" to include resolved alerts.
 
 | Parameter | Type | Default |
 |---|---|---|
 | `hours_back` | `number` | `168` |
 | `limit` | `integer` | `25` |
+| `state` | `"open"` \| `"all"` | `"open"` |
 
 Used by skills: [`review-data-risk`](../../../skills/purview/data-risk-review/SKILL.md)
 

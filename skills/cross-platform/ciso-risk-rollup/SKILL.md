@@ -78,9 +78,10 @@ or batch.
 - **Endpoint coverage nuance:** a fleet reporting many sensors can still be
   mostly *dormant* (`lc:sleeper`) — read the online-vs-dormant split from
   `get_org_overview`, don't take the raw sensor count as coverage.
-- **Purview data risk:** `0` DLP alerts is ambiguous (quiet, or no policies /
-  licensing) — the finding says which; relay that nuance rather than reporting
-  "no data risk".
+- **Purview data risk:** the DLP headline counts **unresolved** alerts. `0` is
+  ambiguous (quiet, no policies / licensing, or everything already resolved —
+  the last means DLP is working, not absent) — re-run with `state: "all"` to
+  tell them apart rather than reporting "no data risk".
 - Relay any degradation finding plainly and move on — do not retry a dark
   pillar in a loop.
 
