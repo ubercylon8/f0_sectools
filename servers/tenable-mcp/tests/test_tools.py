@@ -82,6 +82,8 @@ async def test_get_vulnerability_summary_counts_by_severity():
     # evidence carries per-severity instance counts
     ev = {e.key: e.value for e in f.evidence}
     assert ev["critical"] == "12" and ev["low"] == "40"
+    assert f.evidence[0].key == "headline"
+    assert ev["headline"] == "12 critical"
 
 
 @pytest.mark.asyncio

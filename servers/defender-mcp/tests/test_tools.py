@@ -115,6 +115,9 @@ async def test_get_secure_score_maps():
             findings = await get_secure_score(gc)
     assert findings[0].finding_type.value == "posture"
     assert "42" in findings[0].title
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["headline"] == "42%"
+    assert findings[0].evidence[0].key == "headline"
 
 
 @pytest.mark.asyncio

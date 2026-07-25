@@ -48,8 +48,10 @@ uv run python scripts/gen_report.py \
 ```
 
 `--persona` is one of `ciso`, `detection-engineer`, `threat-hunter`,
-`security-engineer`; `--lang` is `en` or `es`. It writes `report.md` (always)
-and, with `--pdf`, `report.pdf`. A dark platform degrades to **"not assessed"**
+`security-engineer`; `--lang` is `en` or `es`. It writes `report.md` and a
+standalone, self-contained `report.html` (open in any browser) always; with
+`--pdf` it also writes `report.pdf` (WeasyPrint renders the same HTML). A dark
+platform degrades to **"not assessed"**
 and the report still generates. The **CISO** report is executive-restrained
 (big-number posture at a glance + compact one-line top risks); the
 **operational** personas (detection engineer / threat hunter / security

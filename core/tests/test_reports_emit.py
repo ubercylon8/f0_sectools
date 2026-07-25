@@ -45,9 +45,50 @@ def test_markdown_has_title_sections_and_findings():
     assert "Is 61% device compliance acceptable?" in md
 
 
+def test_md_metric_line_leads_with_compact_value_and_carries_detail():
+    m = MetricCard("Config hardening", "62%", "needs-work",
+                    detail="Microsoft Secure Score 1130/1816")
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Report", subtitle="Sub",
+        sections=[Section(BlockKind.metric_grid, "Posture at a glance", "executive",
+                          metrics=[m])],
+    )
+    md = to_markdown(content)
+    assert "- **62%** — Config hardening (needs-work) · Microsoft Secure Score 1130/1816" in md
+
+
+def test_html_metric_tile_has_label_value_state_and_detail():
+    m = MetricCard("Config hardening", "62%", "needs-work",
+                    detail="Microsoft Secure Score 1130/1816")
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Report", subtitle="Sub",
+        sections=[Section(BlockKind.metric_grid, "Posture at a glance", "executive",
+                          metrics=[m])],
+    )
+    html = to_html(content)
+    assert '<div class="metric__label">Config hardening</div>' in html
+    assert '<div class="metric__value">62%</div>' in html
+    assert '<div class="metric__state metric__state--needs-work">needs-work</div>' in html
+    assert '<div class="metric__detail">Microsoft Secure Score 1130/1816</div>' in html
+
+
+def test_html_wraps_body_in_report_document_card():
+    html = to_html(_content())
+    assert html.startswith("<!doctype html>")
+    assert '<div class="report">' in html
+    # the cover + sections live inside the wrapper, before </body>
+    body = html.split("<div class=\"report\">", 1)[1]
+    assert "report__cover" in body
+    assert body.rstrip().endswith("</div></body></html>")
+
+
 def test_html_is_self_contained_and_has_severity_class():
     html = to_html(_content())
     assert "<style>" in html and "@page" in html          # inlined CSS
+    assert "@media print" in html
+    assert ".metric" in html
     assert "report--executive" in html
     assert "metric__value" in html
     head = html.split("</style>")[0].replace("https://", "")
@@ -139,6 +180,59 @@ def test_executive_rows_are_compact_no_evidence_no_mitre():
     # (report.css is shared across tiers) — check the rendered body, not the head
     body_html = html.split("</style>", 1)[-1]
     assert "finding__evidence" not in body_html
+
+
+def test_grounding_clause_prefers_headline_over_entity_and_evidence():
+    f = Finding(
+        source="tenable", finding_type=FindingType.risk, severity=Severity.critical,
+        title="3 internet-exposed critical vulnerabilities",
+        evidence=[Evidence(key="headline", value="3 critical"), Evidence(key="cvss", value="9.8")],
+        entity=Entity(kind=EntityKind.tenant, id="t1", name="some other clause"),
+    )
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Executive Risk Briefing", subtitle="Prepared for the CISO",
+        sections=[Section(BlockKind.finding_rollup, "Top risks", "executive", findings=[f])],
+    )
+    md = to_markdown(content)
+    assert "3 internet-exposed critical vulnerabilities — 3 critical" in md
+    assert "some other clause" not in md
+
+
+def test_grounding_clause_skips_headline_already_folded_into_title():
+    f = Finding(
+        source="intune", finding_type=FindingType.risk, severity=Severity.high,
+        title="39% of managed devices non-compliant",
+        evidence=[Evidence(key="headline", value="39%")],
+        entity=Entity(kind=EntityKind.tenant, id="t1", name="39% of devices non-compliant"),
+    )
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Executive Risk Briefing", subtitle="Prepared for the CISO",
+        sections=[Section(BlockKind.finding_rollup, "Top risks", "executive", findings=[f])],
+    )
+    md = to_markdown(content)
+    # headline "39%" is already substring of the title, so grounding falls through
+    # to the entity name instead of repeating it
+    assert "39% of managed devices non-compliant — 39% of devices non-compliant" in md
+
+
+def test_operational_rows_omit_headline_sub_bullet():
+    f = Finding(
+        source="tenable", finding_type=FindingType.risk, severity=Severity.critical,
+        title="3 internet-exposed critical vulnerabilities",
+        evidence=[Evidence(key="headline", value="3 critical"), Evidence(key="cvss", value="9.8")],
+    )
+    content = ReportContent(
+        persona="detection_engineer", language="en", tier="operational",
+        title="Security Operations Report", subtitle="Prepared for Detection Engineering",
+        sections=[Section(BlockKind.finding_table, "Findings", "operational", findings=[f])],
+    )
+    md = to_markdown(content)
+    html = to_html(content)
+    assert "- headline: 3 critical" not in md
+    assert "headline: 3 critical" not in html
+    assert "cvss: 9.8" in md and "cvss: 9.8" in html
 
 
 def test_no_chat_aggregate_heading_leaks_into_report():

@@ -707,6 +707,9 @@ def test_get_org_overview_maps():
     findings = tools.get_org_overview(lc)
     assert findings[0].finding_type.value == "posture"
     assert "2" in findings[0].title or any("2" in e.value for e in findings[0].evidence)
+    # s1 online, s2 offline -> 1 online
+    assert findings[0].evidence[0].key == "headline"
+    assert findings[0].evidence[0].value == "1 online"
 
 
 def test_get_org_overview_reports_sleeper_census():

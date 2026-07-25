@@ -30,8 +30,9 @@ class BlockKind(StrEnum):
 @dataclass(frozen=True)
 class MetricCard:
     label: str   # i18n'd pillar label, e.g. "Config hardening"
-    value: str   # "62%", "3", or the not-assessed label
+    value: str   # compact headline value, e.g. "62%", "3 critical", or the not-assessed label
     state: str   # one-word machine state: strong | needs-work | exposure | not-assessed
+    detail: str = ""  # small descriptor line, e.g. the source finding's title
 
 
 @dataclass(frozen=True)

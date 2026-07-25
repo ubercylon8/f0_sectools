@@ -133,9 +133,11 @@ async def get_vulnerability_summary(tio: Any) -> list[Finding]:
          if counts[s] > 0),
         Severity.info,
     )
-    evidence = [Evidence(key=s.value, value=str(counts[s]))
-                for s in (Severity.critical, Severity.high, Severity.medium,
-                          Severity.low, Severity.info)]
+    evidence = [Evidence(key="headline", value=f"{counts[Severity.critical]} critical")] + [
+        Evidence(key=s.value, value=str(counts[s]))
+        for s in (Severity.critical, Severity.high, Severity.medium,
+                  Severity.low, Severity.info)
+    ]
     total = sum(counts.values())
     return [
         Finding(
