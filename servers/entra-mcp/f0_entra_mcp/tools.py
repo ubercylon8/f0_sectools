@@ -6,6 +6,8 @@ still produces actionable guidance instead of failing.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from f0_sectools_core.auth.graph import GraphClient, GraphError
 from f0_sectools_core.graph_errors import map_graph_error
 from f0_sectools_core.paging import clamp_limit, more_available_finding
@@ -41,10 +43,31 @@ def _risk(value: str) -> Severity:
     return _RISK.get(str(value).lower(), Severity.info)
 
 
-async def list_risky_users(gc: GraphClient, limit: int = 25) -> list[Finding]:
+# Entra keeps every user/detection it has ever scored in these collections, so a
+# dismissed or remediated entry from years ago is returned alongside a live one.
+# Unfiltered and unordered, a real tenant's first page was 64% already-handled
+# entries with a median age over five years, burying a one-day-old active risk.
+# "active" is what the tool's name implies; "all" keeps the history reachable.
+_ACTIVE_RISK_FILTER = "riskState eq 'atRisk' or riskState eq 'confirmedCompromised'"
+
+
+def _risk_params(limit: int, state: str, order_by: str) -> dict[str, Any]:
+    """Query params for a risk collection: newest first, active-only by default."""
+    params: dict[str, Any] = {"$top": limit, "$orderby": f"{order_by} desc"}
+    if state != "all":
+        params["$filter"] = _ACTIVE_RISK_FILTER
+    return params
+
+
+async def list_risky_users(
+    gc: GraphClient, limit: int = 25, state: str = "active"
+) -> list[Finding]:
     limit = clamp_limit(limit)
     try:
-        page = await gc.get("/identityProtection/riskyUsers", params={"$top": limit})
+        page = await gc.get(
+            "/identityProtection/riskyUsers",
+            params=_risk_params(limit, state, "riskLastUpdatedDateTime"),
+        )
     except GraphError as e:
         finding = map_graph_error(e, "entra", "IdentityRiskyUser.Read.All", "Entra risky users")
         if finding:
@@ -77,10 +100,15 @@ async def list_risky_users(gc: GraphClient, limit: int = 25) -> list[Finding]:
     return out
 
 
-async def list_risk_detections(gc: GraphClient, limit: int = 25) -> list[Finding]:
+async def list_risk_detections(
+    gc: GraphClient, limit: int = 25, state: str = "active"
+) -> list[Finding]:
     limit = clamp_limit(limit)
     try:
-        page = await gc.get("/identityProtection/riskDetections", params={"$top": limit})
+        page = await gc.get(
+            "/identityProtection/riskDetections",
+            params=_risk_params(limit, state, "detectedDateTime"),
+        )
     except GraphError as e:
         finding = map_graph_error(e, "entra", "IdentityRiskEvent.Read.All", "Entra risk detections")
         if finding:
