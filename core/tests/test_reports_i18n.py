@@ -52,3 +52,14 @@ def test_state_label_translates_known_and_passes_through_unknown():
     assert state_label("en", "clear") == "clear"
     assert state_label("es", "clear") == "sin novedad"
     assert state_label("es", "bogus-state") == "bogus-state"
+
+
+def test_sev_label_translates_known_and_passes_through_unknown():
+    from f0_sectools_core.reports.i18n import sev_label
+
+    assert sev_label("en", "high") == "high"
+    assert sev_label("es", "high") == "alto"
+    # tolerant: an unknown severity token must pass through, never raise —
+    # the render path (builder._localize_metric) cannot afford a KeyError here.
+    assert sev_label("en", "bogus-sev") == "bogus-sev"
+    assert sev_label("es", "bogus-sev") == "bogus-sev"

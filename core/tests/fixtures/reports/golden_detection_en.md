@@ -8,6 +8,8 @@ Two detection signals stand out this window: a suspicious PowerShell execution a
 
 ## Posture at a glance
 
+- **2** — Alerts (MITRE) (needs work) · 1 high · 1 medium
+- **0** — Incidents (clear) · nothing in this window
 
 ## Findings
 

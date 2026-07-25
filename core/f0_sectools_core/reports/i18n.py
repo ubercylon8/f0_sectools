@@ -146,3 +146,8 @@ def group_label(lang: str, group_id: str) -> str:
 def state_label(lang: str, state_id: str) -> str:
     """Display word for a metric state identifier (tolerant of unknown ids)."""
     return _lookup(lang, f"state_{state_id.replace('-', '_')}", state_id)
+
+
+def sev_label(lang: str, sev_id: str) -> str:
+    """Display word for a severity token (tolerant of unknown tokens)."""
+    return _lookup(lang, f"sev_{sev_id}", sev_id)

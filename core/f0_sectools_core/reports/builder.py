@@ -10,7 +10,7 @@ from f0_sectools_core.schema.findings import Finding
 
 from . import emit
 from .content import BlockKind, MetricCard, ReportContent, ReportOutput, ScopeMeta, Section
-from .i18n import group_label, label, state_label
+from .i18n import group_label, label, sev_label, state_label
 from .narrative import parse_narrative
 from .sections import SECTION_MAPS, TIER, group_findings
 
@@ -45,7 +45,7 @@ def _localize_metric(lang: str, m: MetricCard) -> MetricCard:
     detail = m.detail
     if m.severity_counts:
         detail = " · ".join(
-            f"{count} {label(lang, f'sev_{sev}')}" for sev, count in m.severity_counts
+            f"{count} {sev_label(lang, sev)}" for sev, count in m.severity_counts
         )
     elif detail:
         detail = _lookup_or_raw(lang, detail)
@@ -110,6 +110,10 @@ def build_report(
             text = parsed.executive_summary or label(language, "no_findings")
             sections.append(Section(spec.kind, title, spec.tier, text=text))
         elif spec.kind is BlockKind.metric_grid:
+            if not scope_meta.pillar_metrics:
+                # No tiles to show — skip the section entirely rather than emit a
+                # bare heading with nothing under it.
+                continue
             metrics = [_localize_metric(language, m) for m in scope_meta.pillar_metrics]
             sections.append(Section(spec.kind, title, spec.tier, metrics=metrics))
         elif spec.kind in (BlockKind.finding_rollup, BlockKind.finding_table):

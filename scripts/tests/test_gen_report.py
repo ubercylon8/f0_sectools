@@ -90,6 +90,47 @@ def test_metric_from_no_headline_is_unquantified():
     assert card.detail == f.title
 
 
+def test_degraded_title_uses_canonical_display_name_not_mangled_id():
+    # _degraded used to mangle multi-word ids via .replace("_", " ").capitalize()
+    # ("alerts_mitre" -> "Alerts mitre"); it must use the canonical English
+    # display name from the i18n table instead ("Alerts (MITRE)"), while still
+    # tripping is_not_assessed via the "not configured" marker.
+    from f0_sectools_core.reports.sections import is_not_assessed
+
+    f = report_gather._degraded("alerts_mitre", "no creds")
+    assert f.title.startswith("Alerts (MITRE) not configured")
+    assert "not configured" in f.title
+    assert is_not_assessed(f)
+
+
+def test_metric_from_dark_pillar_value_is_em_dash_not_english_phrase():
+    # A dark pillar (every finding a degradation, or no findings at all) must
+    # render its tile VALUE as "—", matching _count_metric's dark branch —
+    # never the literal English "not assessed", which _localize_metric never
+    # translates and would leak untranslated into a Spanish report.
+    degraded = report_gather._degraded("data_risk", "insufficient permissions")
+    card = report_gather._metric_from("data_risk", [degraded])
+    assert card.value == "—"
+    assert card.state == "not-assessed"
+
+    empty_card = report_gather._metric_from("data_risk", [])
+    assert empty_card.value == "—"
+    assert empty_card.state == "not-assessed"
+
+
+def test_no_metric_value_is_the_literal_not_assessed_phrase():
+    # Guard against the English phrase leaking into a tile VALUE from any path
+    # through _metric_from / _count_metric — the translated state word carries
+    # the meaning, not the value slot.
+    degraded = report_gather._degraded("data_risk", "insufficient permissions")
+    for card in (
+        report_gather._metric_from("data_risk", [degraded]),
+        report_gather._metric_from("data_risk", []),
+        report_gather._count_metric("incidents", [degraded]),
+    ):
+        assert card.value != "not assessed"
+
+
 def test_gather_map_has_all_four_personas():
     assert set(report_gather.GATHER_MAP) == {
         "ciso", "detection_engineer", "threat_hunter", "security_engineer",
@@ -249,6 +290,25 @@ def test_gather_provenance_counts_distinct_sources_not_groups(monkeypatch):
     assert set(meta.platforms_queried) == {"defender", "limacharlie"}
 
 
+def test_findings_count_excludes_degradation_findings(monkeypatch):
+    # findings_count feeds the provenance line ("N findings"), which must agree
+    # with the tiles/rows — both of which exclude degradation findings. A group
+    # that raises must NOT inflate the count even though its degraded finding is
+    # still present in the returned findings list.
+    async def ok(window_hours):
+        return [Finding(source="defender", finding_type=FindingType.alert,
+                        severity=Severity.high, title="Suspicious PowerShell")]
+
+    async def boom(window_hours):
+        raise ValueError("no creds")
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "detection_engineer",
+                        {"alerts_mitre": ok, "incidents": boom})
+    findings, meta = asyncio.run(report_gather.gather("detection_engineer", 168))
+    assert len(findings) == 2          # the degraded finding is still returned
+    assert meta.findings_count == 1    # but only the real one is counted
+
+
 def test_ciso_provenance_still_six_platforms(monkeypatch):
     # Guardrail for the golden CISO fixture: each of the six pillars has a
     # distinct source, so platforms_queried must still resolve to 6.
@@ -335,6 +395,18 @@ def test_operational_persona_gets_count_tiles(monkeypatch):
     assert tiles["incidents"].value == "0"
     assert tiles["incidents"].state == "clear"
     assert tiles["incidents"].detail == "nothing_in_window"
+
+
+def test_every_gather_group_has_a_translation_in_both_languages():
+    # group_label is deliberately tolerant, so a missing translation would render
+    # the raw id ("weak_passwords") in the report with no other signal. This test
+    # is the guard that tolerance removes.
+    from f0_sectools_core.reports.i18n import LABELS
+
+    for persona, groups in report_gather.GATHER_MAP.items():
+        for gid in groups:
+            for lang in ("en", "es"):
+                assert f"group_{gid}" in LABELS[lang], (persona, gid, lang)
 
 
 def test_count_tile_state_escalates_to_exposure_on_critical(monkeypatch):

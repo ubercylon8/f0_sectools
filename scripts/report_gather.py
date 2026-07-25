@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from dotenv import load_dotenv
 from f0_sectools_core.redaction.redact import redact_finding, redact_text
 from f0_sectools_core.reports.content import MetricCard, ScopeMeta
+from f0_sectools_core.reports.i18n import group_label
 from f0_sectools_core.reports.sections import is_not_assessed
 from f0_sectools_core.schema.findings import Evidence, Finding, FindingType, Severity
 
@@ -43,7 +44,7 @@ def _within_window(findings: list[Finding], window_hours: int) -> list[Finding]:
 
 
 def _degraded(group: str, detail: str) -> Finding:
-    human = group.replace("_", " ").capitalize()
+    human = group_label("en", group)
     return Finding(
         source=group,
         finding_type=FindingType.posture,
@@ -260,7 +261,7 @@ GATHER_MAP: dict[str, dict[str, Callable[[int], Awaitable[list[Finding]]]]] = {
 def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
     real = [f for f in findings if not is_not_assessed(f)]
     if not real:
-        return MetricCard(pillar, "not assessed", "not-assessed")
+        return MetricCard(pillar, "—", "not-assessed")
     f = real[0]
     headline = next((e.value for e in f.evidence if e.key == "headline"), "")
     if not headline:
@@ -323,9 +324,11 @@ async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeM
     not_assessed: list[str] = []
     metrics: list[MetricCard] = []
     platforms: list[str] = []
+    real_count = 0
     for group, group_findings in results:
         findings.extend(group_findings)
         healthy = [f for f in group_findings if not is_not_assessed(f)]
+        real_count += len(healthy)
         # A group that ran and returned nothing is ASSESSED with nothing to report
         # (no risky users is good news); only a group whose every finding is a
         # degradation is genuinely dark. CISO groups always return one finding, so
@@ -355,7 +358,7 @@ async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeM
             else f"Trailing {window_hours}h"
         ),
         platforms_queried=platforms,
-        findings_count=len(findings),
+        findings_count=real_count,
         assessed=assessed,
         not_assessed=not_assessed,
         pillar_metrics=metrics,
