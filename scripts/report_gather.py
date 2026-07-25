@@ -16,6 +16,32 @@ from f0_sectools_core.reports.sections import is_not_assessed
 from f0_sectools_core.schema.findings import Evidence, Finding, FindingType, Severity
 
 
+def _within_window(findings: list[Finding], window_hours: int) -> list[Finding]:
+    """Keep findings observed inside the report window.
+
+    Defender's alert/incident tools have no time parameter, but the report
+    subtitle asserts a window — so scope them here. A finding with no parsable
+    observed_at is KEPT (we cannot judge it; silently dropping would understate).
+    """
+    from datetime import UTC, datetime, timedelta
+    cutoff = datetime.now(UTC) - timedelta(hours=window_hours)
+    kept: list[Finding] = []
+    for f in findings:
+        if not f.observed_at:
+            kept.append(f)
+            continue
+        try:
+            ts = datetime.fromisoformat(f.observed_at.replace("Z", "+00:00"))
+        except ValueError:
+            kept.append(f)
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        if ts >= cutoff:
+            kept.append(f)
+    return kept
+
+
 def _degraded(group: str, detail: str) -> Finding:
     return Finding(
         source=group.lower().replace(" ", "_"),
@@ -92,7 +118,9 @@ async def _defender_alerts(window_hours: int) -> list[Finding]:
     load_dotenv(".env.defender")
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
-        return await tools.list_alerts(gc, severity_min="medium", limit=15)
+        return _within_window(
+            await tools.list_alerts(gc, severity_min="medium", limit=15), window_hours,
+        )
 
 
 async def _defender_incidents(window_hours: int) -> list[Finding]:
@@ -102,7 +130,9 @@ async def _defender_incidents(window_hours: int) -> list[Finding]:
     load_dotenv(".env.defender")
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
-        return await tools.list_incidents(gc, severity_min="medium", limit=10)
+        return _within_window(
+            await tools.list_incidents(gc, severity_min="medium", limit=10), window_hours,
+        )
 
 
 async def _lc_dr_rules(window_hours: int) -> list[Finding]:
@@ -129,7 +159,7 @@ async def _pa_weak_techniques(window_hours: int) -> list[Finding]:
     from f0_sectools_core.auth.config import ProjectAchillesConfig
     load_dotenv(".env.projectachilles")
     async with ProjectAchillesClient(ProjectAchillesConfig.from_env()) as pa:
-        return await tools.get_weak_techniques(pa, limit=10)
+        return await tools.get_weak_techniques(pa, days=max(1, window_hours // 24), limit=10)
 
 
 # ── Security-engineer factories ──────────────────────────────────────
@@ -173,6 +203,8 @@ async def _intune_stale_devices(window_hours: int) -> list[Finding]:
     load_dotenv(".env.intune")
     cfg = PlatformConfig.from_env("INTUNE")
     async with GraphClient(cfg) as gc:
+        # Deliberately NOT window_hours: "stale" is defined by the tool's own
+        # 30-day-default threshold, not by the report's lookback window.
         return await tools.list_stale_devices(gc, limit=10)
 
 
@@ -263,13 +295,24 @@ async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeM
     assessed: list[str] = []
     not_assessed: list[str] = []
     metrics: list[MetricCard] = []
+    platforms: list[str] = []
     for group, group_findings in results:
         findings.extend(group_findings)
         healthy = [f for f in group_findings if not is_not_assessed(f)]
-        if healthy:
-            assessed.append(group)
-        else:
+        # A group that ran and returned nothing is ASSESSED with nothing to report
+        # (no risky users is good news); only a group whose every finding is a
+        # degradation is genuinely dark. CISO groups always return one finding, so
+        # this is byte-identical for the CISO report.
+        if group_findings and not healthy:
             not_assessed.append(group)
+        else:
+            assessed.append(group)
+        # Provenance counts real platforms, not group labels — derive it from the
+        # findings' own `source` field (a degraded group contributes no source
+        # here; it's still visible via not_assessed).
+        for f in healthy:
+            if f.source not in platforms:
+                platforms.append(f.source)
         # Tiles are an executive-tier device: a CISO group is one headline
         # posture finding, an operational group is a list of alerts/detections.
         if key == "ciso":
@@ -282,7 +325,7 @@ async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeM
             if window_hours >= 24
             else f"Trailing {window_hours}h"
         ),
-        platforms_queried=[g.lower().replace(" ", "_") for g in groups],
+        platforms_queried=platforms,
         findings_count=len(findings),
         assessed=assessed,
         not_assessed=not_assessed,

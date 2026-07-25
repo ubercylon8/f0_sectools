@@ -1,6 +1,6 @@
 ---
 name: generate-report
-description: Persona posture report (MD+PDF, EN/ES) from findings
+description: Persona posture report (MD+HTML+PDF, EN/ES) from findings
 version: 1.0.0
 metadata:
   hermes:
@@ -14,8 +14,9 @@ metadata:
 
 The operator wants a **shareable report** — a deliverable to open a conversation,
 not a chat answer. Triggers: "generate my report", "build a CISO briefing",
-"posture report I can send", "informe de postura". Produces Markdown (always) and
-PDF (optional), in English or Spanish.
+"posture report I can send", "informe de postura". Always writes Markdown and a
+standalone, self-contained HTML file (no external dependencies — safe to open or
+share as-is); PDF is optional. English or Spanish.
 
 Pick the persona from the operator's role/lens:
 - **ciso** — executive risk briefing (six-pillar posture, big numbers, restraint)
@@ -25,9 +26,20 @@ Pick the persona from the operator's role/lens:
 
 ## Procedure
 
-1. **Gather the findings** for the persona (read-only). For **ciso**, use the
-   `roll-up-ciso-risk` skill's six pillars. Ground everything in what the tools
-   actually return; a dark platform is "not assessed", never guessed.
+1. **Gather the findings** for the persona (read-only) — each persona gathers its
+   own working data (`scripts/report_gather.py`'s `GATHER_MAP`):
+   - **ciso** — the `roll-up-ciso-risk` skill's six-pillar rollup (config
+     hardening, attack validation, vulnerability exposure, device compliance,
+     data risk, endpoint coverage).
+   - **detection-engineer** — Defender alerts/incidents, LimaCharlie D&R rules
+     and endpoint detections, ProjectAchilles weak techniques.
+   - **threat-hunter** — Defender incidents/alerts, LimaCharlie endpoint
+     detections and sensor/endpoint coverage.
+   - **security-engineer** — Secure Score, Entra conditional access/privileged
+     roles/risky users, Intune compliance/stale devices, Tenable exposure.
+   Ground everything in what the tools actually return; a dark platform is "not
+   assessed", never guessed — a group that ran and found nothing (no risky
+   users, no stale devices) is reported as assessed, not dark.
 2. **Author the narrative file** in the chosen language, using
    `references/narrative-template.md`. Fill three sections: `## Executive Summary`
    (the one-paragraph "so what"), `## Risk Framing` (per-risk notes), and

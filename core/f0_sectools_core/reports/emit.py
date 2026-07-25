@@ -80,8 +80,11 @@ def _split_headline(value: str) -> tuple[str, str]:
 
 
 def _md_metric(m: MetricCard) -> str:
-    number, unit = _split_headline(m.value)
-    head = f"**{_r(number)}**" + (f" {_r(unit)}" if unit else "")
+    # Redact BEFORE splitting: a secret can span the split boundary (e.g. the
+    # client-secret-ish pattern), so redacting each half separately can miss it.
+    # `number`/`unit` are already redacted here — do not wrap them in _r() again.
+    number, unit = _split_headline(_r(m.value))
+    head = f"**{number}**" + (f" {unit}" if unit else "")
     line = f"- {head} — {_r(m.label)} ({_r(m.state)})"
     if m.detail:
         line += f" · {_r(m.detail)}"
@@ -115,6 +118,12 @@ def _e(text: str) -> str:
     return _html.escape(_r(text))
 
 
+def _esc(text: str) -> str:
+    """HTML-escape only — for text that has already been redacted upstream
+    (e.g. a headline split after redaction), so it is never redacted twice."""
+    return _html.escape(text)
+
+
 def _html_body(s: Section) -> list[str]:
     if s.kind is BlockKind.metric_grid:
         cards = "".join(_metric_card(m) for m in s.metrics)
@@ -140,15 +149,18 @@ def _html_body(s: Section) -> list[str]:
 
 def _metric_card(m: MetricCard) -> str:
     state = _e(m.state).replace(" ", "-")
-    number, unit = _split_headline(m.value)
+    # Redact BEFORE splitting: a secret can span the split boundary, so redacting
+    # each half separately can miss it. number/unit are already redacted here —
+    # escape only (via _esc), never redact again.
+    number, unit = _split_headline(_r(m.value))
     # The qualifier rides small next to the number so the big slot stays a single
     # short token (a full phrase there wraps and breaks the grid).
-    unit_html = f'<span class="metric__unit">{_e(unit)}</span>' if unit else ""
+    unit_html = f'<span class="metric__unit">{_esc(unit)}</span>' if unit else ""
     detail = f'<div class="metric__detail">{_e(m.detail)}</div>' if m.detail else ""
     return (
         '<div class="metric">'
         f'<div class="metric__label">{_e(m.label)}</div>'
-        f'<div class="metric__value">{_e(number)}{unit_html}</div>'
+        f'<div class="metric__value">{_esc(number)}{unit_html}</div>'
         f'<div class="metric__state metric__state--{state}">{_e(m.state)}</div>'
         f'{detail}</div>'
     )

@@ -305,6 +305,27 @@ def test_split_headline_isolates_the_number():
     assert _split_headline("not assessed") == ("—", "not assessed")
 
 
+def test_metric_headline_secret_spanning_split_boundary_is_redacted():
+    # A headline whose entire value is one secret-shaped token
+    # (32+ alnum chars, a dot, 6+ alnum chars) must be redacted BEFORE the
+    # number/qualifier split — splitting first breaks the token into two
+    # halves that neither individually match the secret pattern, letting it
+    # leak through unredacted.
+    secret = "12345678901234567890123456789012.abcdefgh"
+    metric = MetricCard("Config hardening", secret, "needs-work")
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Report", subtitle="Sub",
+        sections=[Section(BlockKind.metric_grid, "Posture", "executive", metrics=[metric])],
+    )
+    md = to_markdown(content)
+    html = to_html(content)
+    assert "«redacted»" in md
+    assert "«redacted»" in html
+    assert "abcdefgh" not in md
+    assert "abcdefgh" not in html
+
+
 def test_metric_tile_renders_number_big_and_qualifier_small():
     from f0_sectools_core.reports.content import (
         BlockKind,

@@ -185,3 +185,113 @@ def test_entra_conditional_access_factory_bounds_unbounded_result(monkeypatch):
         result = asyncio.run(report_gather._entra_conditional_access(168))
 
     assert len(result) == 10
+
+
+# ── FIX 1: a healthy-but-empty group is assessed, not "not assessed" ──────
+def test_gather_empty_but_healthy_group_is_assessed_not_dark(monkeypatch):
+    # A list-tool factory returning [] (e.g. "no risky users") ran successfully
+    # and found nothing to report — that is GOOD news, not a blind spot. It must
+    # land in meta.assessed, never meta.not_assessed.
+    async def empty(window_hours):
+        return []
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "security_engineer",
+                        {"Risky users": empty, "Stale devices": empty})
+    findings, meta = asyncio.run(report_gather.gather("security_engineer", 168))
+    assert findings == []
+    assert set(meta.assessed) == {"Risky users", "Stale devices"}
+    assert meta.not_assessed == []
+
+
+def test_gather_raising_group_still_lands_in_not_assessed(monkeypatch):
+    # A genuinely dark platform (raises — no creds, API down) must still be
+    # reported as not assessed, unlike the empty-but-healthy case above.
+    async def boom(window_hours):
+        raise ValueError("no creds")
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "security_engineer",
+                        {"Risky users": boom})
+    findings, meta = asyncio.run(report_gather.gather("security_engineer", 168))
+    assert meta.not_assessed == ["Risky users"]
+    assert meta.assessed == []
+    assert findings[0].finding_type is FindingType.posture
+
+
+# ── FIX 2: provenance counts platforms (source), not group labels ─────────
+def test_gather_provenance_counts_distinct_sources_not_groups(monkeypatch):
+    # detection_engineer-style: 4 groups, but only 2 distinct platform sources —
+    # platforms_queried must report 2, not 4.
+    async def defender_ok(window_hours):
+        return [Finding(source="defender", finding_type=FindingType.alert,
+                        severity=Severity.high, title="Alert A")]
+
+    async def defender_ok2(window_hours):
+        return [Finding(source="defender", finding_type=FindingType.incident,
+                        severity=Severity.high, title="Incident A")]
+
+    async def lc_ok(window_hours):
+        return [Finding(source="limacharlie", finding_type=FindingType.alert,
+                        severity=Severity.medium, title="Detection A")]
+
+    async def lc_ok2(window_hours):
+        return [Finding(source="limacharlie", finding_type=FindingType.posture,
+                        severity=Severity.info, title="Rule A")]
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "detection_engineer", {
+        "Alerts (MITRE)": defender_ok,
+        "Incidents": defender_ok2,
+        "Endpoint detections": lc_ok,
+        "Detection rules": lc_ok2,
+    })
+    _findings, meta = asyncio.run(report_gather.gather("detection_engineer", 168))
+    assert len(meta.platforms_queried) == 2
+    assert set(meta.platforms_queried) == {"defender", "limacharlie"}
+
+
+def test_ciso_provenance_still_six_platforms(monkeypatch):
+    # Guardrail for the golden CISO fixture: each of the six pillars has a
+    # distinct source, so platforms_queried must still resolve to 6.
+    sources = ["defender", "projectachilles", "tenable", "intune", "purview", "limacharlie"]
+    groups = list(report_gather.GATHER_MAP["ciso"])
+
+    def make(src):
+        async def ok(window_hours):
+            return [Finding(source=src, finding_type=FindingType.posture,
+                            severity=Severity.info, title=f"{src} posture")]
+        return ok
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso",
+                        dict(zip(groups, [make(s) for s in sources], strict=True)))
+    _findings, meta = asyncio.run(report_gather.gather("ciso", 168))
+    assert len(meta.platforms_queried) == 6
+
+
+# ── FIX 4: _within_window scopes findings without a time-bounded tool ─────
+def test_within_window_drops_old_finding():
+    from datetime import UTC, datetime, timedelta
+
+    old = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+    f = Finding(source="defender", finding_type=FindingType.alert,
+                severity=Severity.high, title="Old alert", observed_at=old)
+    assert report_gather._within_window([f], 168) == []
+
+
+def test_within_window_keeps_recent_finding():
+    from datetime import UTC, datetime, timedelta
+
+    recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    f = Finding(source="defender", finding_type=FindingType.alert,
+                severity=Severity.high, title="Recent alert", observed_at=recent)
+    assert report_gather._within_window([f], 168) == [f]
+
+
+def test_within_window_keeps_finding_with_no_observed_at():
+    f = Finding(source="defender", finding_type=FindingType.alert,
+                severity=Severity.high, title="No timestamp", observed_at=None)
+    assert report_gather._within_window([f], 168) == [f]
+
+
+def test_within_window_keeps_finding_with_unparsable_observed_at():
+    f = Finding(source="defender", finding_type=FindingType.alert,
+                severity=Severity.high, title="Bad timestamp", observed_at="not-a-date")
+    assert report_gather._within_window([f], 168) == [f]

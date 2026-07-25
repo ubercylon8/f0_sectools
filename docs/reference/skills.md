@@ -66,7 +66,7 @@
 
 | Skill | Description | Version | Tags |
 |---|---|---|---|
-| [`generate-report`](../../skills/reports/generate-report/SKILL.md) | Persona posture report (MD+PDF, EN/ES) from findings | 1.0.0 | security, report, posture, ciso, deliverable |
+| [`generate-report`](../../skills/reports/generate-report/SKILL.md) | Persona posture report (MD+HTML+PDF, EN/ES) from findings | 1.0.0 | security, report, posture, ciso, deliverable |
 
 ## tenable
 
