@@ -74,3 +74,17 @@ def test_gather_redacts_secret_hinting_evidence_from_findings(monkeypatch):
     ev = {e.key: e.value for f in findings for e in f.evidence}
     assert ev["client_secret"] == "«redacted»"
     assert ev["secure_score_pct"] == "62"
+
+
+def test_metric_from_no_headline_is_unquantified():
+    # A real finding lacking a headline (e.g. an unclassified platform-error
+    # finding) must render as unquantified — not a truncated title at tile size
+    # nor a misleading "strong" state.
+    from f0_sectools_core.schema.findings import Finding, FindingType, Severity
+
+    f = Finding(source="tenable", finding_type=FindingType.posture, severity=Severity.info,
+                title="Tenable authentication failed — vulnerability summary unavailable")
+    card = report_gather._metric_from("Vulnerability exposure", [f])
+    assert card.value == "—"
+    assert card.state == "not-assessed"
+    assert card.detail == f.title
