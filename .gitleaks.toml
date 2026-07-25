@@ -1,22 +1,37 @@
 # gitleaks configuration for f0_sectools.
 #
-# Keeps the FULL default gitleaks ruleset (useDefault = true) and adds a NARROW,
-# path-scoped allowlist for the only known false positives: env-var NAMES shown
-# with empty/placeholder values in (1) credential TEMPLATES and (2) design docs.
+# Keeps the FULL default gitleaks ruleset (useDefault = true) and suppresses the
+# only known false-positive class: env-var NAMES shown with empty/placeholder
+# values in (1) credential TEMPLATES and (2) design docs. Those trip
+# `generic-api-key`, the noisiest rule in the default set.
+#
+# SCOPED TO THAT ONE RULE ON PURPOSE. A path-only allowlist (`[allowlist] paths`)
+# suppresses EVERY rule beneath the matched paths, not just the noisy one.
+# Verified locally: a real private key planted under `docs/superpowers/` passed
+# SILENTLY under the previous path-only form, and is reported again with the
+# rule-scoped form below. For a repo whose design docs discuss credential
+# handling, a scanner with blind directories is worse than a slightly noisier one.
 #
 # Real secrets never live in the repo — per Critical Rule 2 / 7 they live solely
-# in gitignored `.env.<platform>` files. The allowlist paths below deliberately
-# require the `.example` suffix (templates) or the `docs/superpowers/` design-doc
-# tree, so a real `.env.<platform>` (no `.example`) is NEVER allowlisted: if one
-# were ever committed, gitleaks would still flag it. Verified locally with
-# gitleaks 8.24.3 (the CI version): both false-positive classes clear, while a
-# real `.env.intune` and a populated `*_SECRET=<value>` still trip the scanner.
+# in gitignored `.env.<platform>` files. The paths below deliberately require the
+# `.example` suffix (templates) or the `docs/superpowers/` design-doc tree, so a
+# real `.env.<platform>` (no `.example`) is NEVER allowlisted: if one were ever
+# committed, gitleaks would still flag it.
+#
+# Verified against the CI scan mode (full git history): the 5 known
+# generic-api-key false positives stay suppressed, and a planted private key in
+# those same paths is still reported.
+#
+# If a NEW false positive appears from a DIFFERENT rule, triage that one finding
+# into `.gitleaksignore` by fingerprint. Do not widen this back to a path-only
+# allowlist.
 
 [extend]
 useDefault = true
 
-[allowlist]
-description = "Env credential templates and design docs: env-var names with empty/placeholder values (never real secrets)"
+[[allowlists]]
+description = "generic-api-key only: env-var names with placeholder values in credential templates and design docs"
+targetRules = ["generic-api-key"]
 paths = [
   '''.*\.env\.[^/]*\.example$''',
   '''docs/superpowers/.*\.md$''',
