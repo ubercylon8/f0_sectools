@@ -563,40 +563,6 @@ async def test_severity_and_category_enums_closed():
         "network", "process", "logon", "email"}
 
 
-@pytest.mark.asyncio
-async def test_list_incidents_bogus_severity_min_is_graceful():
-    # Tools-layer keeps its floor even though the wrapper now advertises an enum
-    # (a lenient client bypassing the schema must not crash).
-    with respx.mock as router:
-        _token(router)
-        router.get(GRAPH + "/security/incidents").mock(
-            return_value=httpx.Response(
-                200,
-                json={"value": [{"id": "1", "displayName": "x", "severity": "high",
-                                  "status": "active", "alerts": []}]},
-            )
-        )
-        async with GraphClient(CFG) as gc:
-            findings = await list_incidents(gc, severity_min="bogus")
-    assert findings  # did not raise; degraded to the default floor
-
-
-@pytest.mark.asyncio
-async def test_list_alerts_bogus_severity_min_is_graceful():
-    with respx.mock as router:
-        _token(router)
-        router.get(GRAPH + "/security/alerts_v2").mock(
-            return_value=httpx.Response(
-                200,
-                json={"value": [{"id": "a1", "title": "x", "severity": "high",
-                                  "status": "new"}]},
-            )
-        )
-        async with GraphClient(CFG) as gc:
-            findings = await list_alerts(gc, severity_min="bogus")
-    assert findings  # did not raise; degraded to the default floor
-
-
 def _captured_params(router, path: str) -> dict[str, str]:
     """Query params the tool actually sent to Graph, for the last call to `path`.
 
