@@ -626,3 +626,38 @@ async def test_find_tests_allows_normal_multiword_value():
     pa = FakeClient(responses={"/browser/tests": {"data": []}})
     await tools.find_tests(pa, by="keyword", value="pass the hash (T1550.002)")
     assert pa.calls  # normal search reached the API
+
+
+# ---------- truncation disclosure ----------
+
+@pytest.mark.asyncio
+async def test_list_agents_disclose_the_fleet_total():
+    # The fleet endpoint reports its total under `data`; a bounded page that
+    # says nothing reads as the whole fleet.
+    agents = [{"id": f"a{i}", "hostname": f"host-{i}", "os": "windows",
+               "status": "active"} for i in range(2)]
+    pa = FakeClient(responses={"/agent/admin/agents": {
+        "success": True, "data": {"agents": agents, "total": 22}}})
+    findings = await tools.list_agents(pa, limit=2)
+    assert "Showing 2 of 22" in findings[-1].title
+
+
+@pytest.mark.asyncio
+async def test_list_agents_quiet_when_the_page_is_the_fleet():
+    pa = FakeClient(responses={"/agent/admin/agents": {"success": True, "data": {
+        "agents": [{"id": "a1", "hostname": "web-01", "os": "windows",
+                    "status": "active"}], "total": 1}}})
+    findings = await tools.list_agents(pa)
+    assert all("Showing" not in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_risk_acceptances_read_the_top_level_total():
+    # /risk-acceptances reports `total` at the top level, not under `data` —
+    # the two ProjectAchilles endpoints differ.
+    rows = [{"test_name": f"T{i}", "scope": "global", "accepted_by_name": "x"}
+            for i in range(2)]
+    pa = FakeClient(responses={"/risk-acceptances": {
+        "success": True, "data": rows, "total": 9}})
+    findings = await tools.list_risk_acceptances(pa, limit=2)
+    assert "Showing 2 of 9" in findings[-1].title

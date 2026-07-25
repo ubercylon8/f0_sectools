@@ -754,3 +754,32 @@ async def test_open_passthrough_params_stay_free_strings():
     tools_by_name = {t.name: t for t in await server.mcp.list_tools()}
     assert "enum" not in tools_by_name["list_detections"].inputSchema["properties"]["category"]
     assert "enum" not in tools_by_name["list_dr_rules"].inputSchema["properties"]["namespace"]
+
+
+# ---------- truncation disclosure ----------
+
+def test_dr_rules_disclose_what_was_cut():
+    # A bounded rule list that says nothing reads as the full detection coverage.
+    lc = FakeClient(dr_rules={f"rule-{i}": {} for i in range(40)})
+    findings = tools.list_dr_rules(lc, limit=10)
+    assert "Showing 10 of 40" in findings[-1].title
+
+
+def test_dr_rules_say_nothing_when_the_namespace_fits():
+    lc = FakeClient(dr_rules={"rule-1": {}, "rule-2": {}})
+    findings = tools.list_dr_rules(lc, limit=25)
+    assert all("Showing" not in f.title for f in findings)
+
+
+def test_detections_warn_when_the_page_is_full():
+    # The SDK bounds the query, so a full page is the only signal that the
+    # window held more. Over-warning beats implying a quiet window.
+    lc = FakeClient(detections=[{"cat": "c", "routing": {}} for _ in range(5)])
+    findings = tools.list_detections(lc, limit=5)
+    assert "more results available" in findings[-1].title
+
+
+def test_detections_stay_quiet_on_a_partial_page():
+    lc = FakeClient(detections=[{"cat": "c", "routing": {}} for _ in range(3)])
+    findings = tools.list_detections(lc, limit=25)
+    assert all("more results" not in f.title for f in findings)

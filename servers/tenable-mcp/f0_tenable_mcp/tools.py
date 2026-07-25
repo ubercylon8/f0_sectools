@@ -10,7 +10,11 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from f0_sectools_core.paging import clamp_limit, more_available_finding
+from f0_sectools_core.paging import (
+    clamp_limit,
+    more_available_finding,
+    truncation_finding,
+)
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -117,6 +121,12 @@ def _epoch_to_iso(value: Any) -> str:
         return str(value)
 
 
+# Workbenches returns the WHOLE result set in one payload — live-probed
+# 2026-07-25: /workbenches/assets 314 rows, /workbenches/vulnerabilities 673,
+# /scans 141, none carrying a paging signal. So the pool length IS the total,
+# and a bounded page that says nothing reads as "this is everything".
+
+
 async def get_vulnerability_summary(tio: Any) -> list[Finding]:
     try:
         d = await tio.get("/workbenches/vulnerabilities")
@@ -196,6 +206,12 @@ async def list_top_vulnerabilities(
                 ),
             )
         )
+    note = truncation_finding(
+        "tenable", shown=len(out), fetched=len(out), total=len(rows),
+        hint="Raise severity_min to prioritize, or raise limit to see more.",
+    )
+    if note:
+        out.append(note)
     return out
 
 
@@ -210,11 +226,15 @@ async def list_assets(tio: Any, hostname: str = "", limit: int = 25) -> list[Fin
             return [finding]
         raise
     out: list[Finding] = []
+    matched = 0
     for a in _rows(d, "assets"):
         fqdns = a.get("fqdn") or []
         ipv4s = a.get("ipv4") or []
         name = fqdns[0] if fqdns else (ipv4s[0] if ipv4s else a.get("id", "asset"))
         if hostname and hostname.lower() not in str(name).lower():
+            continue
+        matched += 1
+        if len(out) >= limit:
             continue
         evidence = []
         if a.get("last_seen"):
@@ -232,8 +252,23 @@ async def list_assets(tio: Any, hostname: str = "", limit: int = 25) -> list[Fin
                 observed_at=a.get("last_seen"),
             )
         )
-        if len(out) >= limit:
-            break
+    # Two paths, two different truncation signals:
+    #  - hostname given: params is None, so the WHOLE workbench was fetched and
+    #    filtered here. `matched` is the true count of matching assets.
+    #  - no hostname: the API bounded the page, so the pool size is unknown. Its
+    #    own `total` field cannot stand in — live-probed 2026-07-25, ?limit=10
+    #    reports total=580 while an unbounded fetch returns 314 assets with
+    #    total=314, so quoting 580 would contradict what the tool itself returns.
+    #    A full page is the honest signal; it over-warns only when the asset
+    #    count is exactly `limit`.
+    if hostname:
+        note = truncation_finding("tenable", shown=len(out), fetched=len(out), total=matched)
+    else:
+        note = truncation_finding(
+            "tenable", shown=len(out), fetched=len(out), has_more=len(out) >= limit,
+        )
+    if note:
+        out.append(note)
     return out
 
 
@@ -290,6 +325,12 @@ async def get_asset_vulnerabilities(
                 references=_cves(r),
             )
         )
+    note = truncation_finding(
+        "tenable", shown=len(out), fetched=len(out), total=len(rows),
+        hint="Raise severity_min to prioritize, or raise limit to see more.",
+    )
+    if note:
+        out.append(note)
     return out
 
 
@@ -343,8 +384,14 @@ async def list_scans(tio: Any, limit: int = 25) -> list[Finding]:
         if finding:
             return [finding]
         raise
+    # /scans comes back unordered (live-probed 2026-07-25: 141 scans, not
+    # newest-first), so "recent scans" was whatever the API happened to list
+    # first. Sort newest-first on last_modification_date; the 104 of 141 scans
+    # that carry no date sort last rather than being dropped or crashing the key.
+    scans = sorted(_rows(d, "scans"), key=lambda s: _num(s.get("last_modification_date")),
+                   reverse=True)
     out: list[Finding] = []
-    for s in _rows(d, "scans")[:limit]:
+    for s in scans[:limit]:
         evidence = [Evidence(key="status", value=str(s.get("status", "unknown")))]
         if s.get("last_modification_date"):
             evidence.append(
@@ -360,6 +407,9 @@ async def list_scans(tio: Any, limit: int = 25) -> list[Finding]:
                 evidence=evidence,
             )
         )
+    note = truncation_finding("tenable", shown=len(out), fetched=len(out), total=len(scans))
+    if note:
+        out.append(note)
     return out
 
 
