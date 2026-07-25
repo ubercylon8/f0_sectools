@@ -1,10 +1,15 @@
-# Security Operations Report
+# Detection Coverage Report
 
 *Prepared for Detection Engineering · Contoso · Trailing 7 days · Generated locally by f0_sectools*
 
 ## Executive summary
 
 Two detection signals stand out this window: a suspicious PowerShell execution and an outbound beaconing pattern.
+
+## Posture at a glance
+
+- **2** — Alerts (MITRE) (needs work) · 1 high · 1 medium
+- **0** — Incidents (clear) · nothing in this window
 
 ## Findings
 

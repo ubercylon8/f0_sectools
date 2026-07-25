@@ -9,8 +9,8 @@ from __future__ import annotations
 from f0_sectools_core.schema.findings import Finding
 
 from . import emit
-from .content import BlockKind, ReportContent, ReportOutput, ScopeMeta, Section
-from .i18n import label
+from .content import BlockKind, MetricCard, ReportContent, ReportOutput, ScopeMeta, Section
+from .i18n import group_label, label, sev_label, state_label
 from .narrative import parse_narrative
 from .sections import SECTION_MAPS, TIER, group_findings
 
@@ -25,9 +25,8 @@ def _normalize_persona(persona: str) -> str:
     return key
 
 
-def _title(lang: str, tier: str) -> str:
-    key = "report_title_executive" if tier == "executive" else "report_title_operational"
-    return label(lang, key)
+def _title(lang: str, persona: str) -> str:
+    return label(lang, f"report_title_{persona}")
 
 
 def _subtitle(lang: str, persona: str, meta: ScopeMeta) -> str:
@@ -36,12 +35,50 @@ def _subtitle(lang: str, persona: str, meta: ScopeMeta) -> str:
     return f"{prepared} · {meta.tenant_label} · {meta.window_label} · {generated}"
 
 
+def _localize_metric(lang: str, m: MetricCard) -> MetricCard:
+    """Render a gather-produced card in the report's language.
+
+    `label`/`state` arrive as identifiers from the gather layer; translate them
+    for display while keeping `state` itself stable (emit derives the CSS class
+    from it). `severity_counts`, when present, becomes the translated detail line.
+    """
+    detail = m.detail
+    if m.severity_counts:
+        detail = " · ".join(
+            f"{count} {sev_label(lang, sev)}" for sev, count in m.severity_counts
+        )
+    elif detail:
+        detail = _lookup_or_raw(lang, detail)
+    return MetricCard(
+        label=group_label(lang, m.label),
+        value=m.value,
+        state=m.state,
+        detail=detail,
+        state_label=state_label(lang, m.state),
+        severity_counts=m.severity_counts,
+    )
+
+
+def _lookup_or_raw(lang: str, text: str) -> str:
+    """Translate a detail that is exactly an i18n key; otherwise pass it through.
+
+    Exact-match only — a CISO tile's detail is a finding title and must never be
+    partially rewritten.
+    """
+    try:
+        return label(lang, text)
+    except KeyError:
+        return text
+
+
 def _coverage_items(lang: str, meta: ScopeMeta) -> list[str]:
     items: list[str] = []
     if meta.assessed:
-        items.append(f"{label(lang, 'assessed')}: {', '.join(meta.assessed)}")
+        names = ", ".join(group_label(lang, g) for g in meta.assessed)
+        items.append(f"{label(lang, 'assessed')}: {names}")
     if meta.not_assessed:
-        items.append(f"{label(lang, 'not_assessed')}: {', '.join(meta.not_assessed)}")
+        names = ", ".join(group_label(lang, g) for g in meta.not_assessed)
+        items.append(f"{label(lang, 'not_assessed')}: {names}")
     return items
 
 
@@ -73,7 +110,11 @@ def build_report(
             text = parsed.executive_summary or label(language, "no_findings")
             sections.append(Section(spec.kind, title, spec.tier, text=text))
         elif spec.kind is BlockKind.metric_grid:
-            metrics = list(scope_meta.pillar_metrics)
+            if not scope_meta.pillar_metrics:
+                # No tiles to show — skip the section entirely rather than emit a
+                # bare heading with nothing under it.
+                continue
+            metrics = [_localize_metric(language, m) for m in scope_meta.pillar_metrics]
             sections.append(Section(spec.kind, title, spec.tier, metrics=metrics))
         elif spec.kind in (BlockKind.finding_rollup, BlockKind.finding_table):
             group = grouped[spec.group] if spec.group is not None else []
@@ -93,7 +134,7 @@ def build_report(
         persona=persona,
         language=language,
         tier=tier,
-        title=_title(language, tier),
+        title=_title(language, persona),
         subtitle=_subtitle(language, persona, scope_meta),
         sections=sections,
     )

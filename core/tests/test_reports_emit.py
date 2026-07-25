@@ -288,3 +288,91 @@ def test_unknown_tier_fails_loud():
     )
     with pytest.raises(ValueError, match="unknown report tier"):
         to_markdown(content)
+
+
+def test_split_headline_isolates_the_number():
+    from f0_sectools_core.reports.emit import _split_headline
+
+    assert _split_headline("6 DLP alerts") == ("6", "DLP alerts")
+    assert _split_headline("90%") == ("90%", "")
+    assert _split_headline("51% blocked") == ("51%", "blocked")
+    assert _split_headline("317 critical") == ("317", "critical")
+    assert _split_headline("67% compliant") == ("67%", "compliant")
+    assert _split_headline("113 online") == ("113", "online")
+    assert _split_headline("1,507 devices") == ("1,507", "devices")
+    # No leading number: the big slot never holds a sentence.
+    assert _split_headline("—") == ("—", "")
+    assert _split_headline("not assessed") == ("—", "not assessed")
+
+
+def test_metric_headline_secret_spanning_split_boundary_is_redacted():
+    # A headline whose entire value is one secret-shaped token
+    # (32+ alnum chars, a dot, 6+ alnum chars) must be redacted BEFORE the
+    # number/qualifier split — splitting first breaks the token into two
+    # halves that neither individually match the secret pattern, letting it
+    # leak through unredacted.
+    #
+    # The token is deliberately repetitive: it still matches our client-secret
+    # pattern and still starts with a digit (so _split_headline takes the
+    # numeric-split path this test guards), but its entropy is ~0.8 rather than
+    # ~4.0, so the repo's secret scanner doesn't flag a fixture as a real key.
+    # Allowlisting the scanner here instead would blind generic-api-key across
+    # core/tests/ — exactly the blind spot .gitleaks.toml warns against.
+    secret = "1" * 32 + ".aaaaaa"
+    metric = MetricCard("Config hardening", secret, "needs-work")
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Report", subtitle="Sub",
+        sections=[Section(BlockKind.metric_grid, "Posture", "executive", metrics=[metric])],
+    )
+    md = to_markdown(content)
+    html = to_html(content)
+    assert "«redacted»" in md
+    assert "«redacted»" in html
+    assert "abcdefgh" not in md
+    assert "abcdefgh" not in html
+
+
+def test_metric_tile_renders_number_big_and_qualifier_small():
+    from f0_sectools_core.reports.content import (
+        BlockKind,
+        MetricCard,
+        ReportContent,
+        Section,
+    )
+    from f0_sectools_core.reports.emit import to_html, to_markdown
+
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Executive Risk Briefing", subtitle="Prepared for the CISO",
+        sections=[Section(BlockKind.metric_grid, "Posture at a glance", "executive",
+                          metrics=[MetricCard("Data risk", "6 DLP alerts", "needs-work",
+                                              detail="6 DLP alert(s) in the last 168h")])],
+    )
+    html = to_html(content)
+    # the big value slot holds ONLY the number; the qualifier is its own small span
+    assert '<div class="metric__value">6<span class="metric__unit">DLP alerts</span>' in html
+    assert ".metric__unit" in html  # styled small in the inlined CSS
+    # Markdown bolds only the number, qualifier stays plain
+    assert "- **6** DLP alerts — Data risk (needs-work)" in to_markdown(content)
+
+
+def test_css_class_uses_state_id_even_when_display_text_is_translated():
+    from f0_sectools_core.reports.content import (
+        BlockKind,
+        MetricCard,
+        ReportContent,
+        Section,
+    )
+    from f0_sectools_core.reports.emit import to_html
+
+    card = MetricCard("Cumplimiento", "67%", "needs-work",
+                      state_label="requiere atención")
+    content = ReportContent(
+        persona="ciso", language="es", tier="executive",
+        title="Informe", subtitle="sub",
+        sections=[Section(BlockKind.metric_grid, "Postura", "executive", metrics=[card])],
+    )
+    html = to_html(content)
+    assert "metric__state--needs-work" in html      # class from the stable id
+    assert "requiere atención" in html              # visible word translated

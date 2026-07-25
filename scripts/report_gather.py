@@ -1,7 +1,9 @@
 """Platform-aware finding gather for reports. Lives in scripts/ (may import
-servers/*); core/reports stays platform-free. Each pillar factory mirrors the
-matching live_smoke_*.py client construction. A platform that raises degrades to
-a posture finding so the report still generates (graceful-partial)."""
+servers/*); core/reports stays platform-free. Each persona gathers its own
+groups (GATHER_MAP) — the CISO the six-pillar rollup, the operational personas
+their working data. Each factory mirrors the matching live_smoke_*.py client
+construction. A platform that raises degrades to a posture finding so the report
+still generates (graceful-partial)."""
 from __future__ import annotations
 
 import asyncio
@@ -10,16 +12,45 @@ from collections.abc import Awaitable, Callable
 from dotenv import load_dotenv
 from f0_sectools_core.redaction.redact import redact_finding, redact_text
 from f0_sectools_core.reports.content import MetricCard, ScopeMeta
+from f0_sectools_core.reports.i18n import group_label
 from f0_sectools_core.reports.sections import is_not_assessed
 from f0_sectools_core.schema.findings import Evidence, Finding, FindingType, Severity
 
 
-def _degraded(pillar: str, detail: str) -> Finding:
+def _within_window(findings: list[Finding], window_hours: int) -> list[Finding]:
+    """Keep findings observed inside the report window.
+
+    Defender's alert/incident tools have no time parameter, but the report
+    subtitle asserts a window — so scope them here. A finding with no parsable
+    observed_at is KEPT (we cannot judge it; silently dropping would understate).
+    """
+    from datetime import UTC, datetime, timedelta
+    cutoff = datetime.now(UTC) - timedelta(hours=window_hours)
+    kept: list[Finding] = []
+    for f in findings:
+        if not f.observed_at:
+            kept.append(f)
+            continue
+        try:
+            ts = datetime.fromisoformat(f.observed_at.replace("Z", "+00:00"))
+        except ValueError:
+            kept.append(f)
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        if ts >= cutoff:
+            kept.append(f)
+    return kept
+
+
+def _degraded(group: str, detail: str) -> Finding:
+    human = group_label("en", group)
     return Finding(
-        source=pillar.lower().replace(" ", "_"),
+        source=group,
         finding_type=FindingType.posture,
         severity=Severity.info,
-        title=f"{pillar} not configured — pillar not assessed",
+        # "not configured" is the marker sections.is_not_assessed matches — keep it.
+        title=f"{human} not configured — not assessed",
         evidence=[Evidence(key="reason", value=redact_text(detail)[:300])],
     )
 
@@ -82,20 +113,155 @@ async def _pillar_endpoint_coverage(window_hours: int) -> list[Finding]:
     return await asyncio.to_thread(tools.get_org_overview, lc)
 
 
-# pillar label -> factory. Patched in tests.
-_PILLAR_FACTORIES: dict[str, Callable[[int], Awaitable[list[Finding]]]] = {
-    "Config hardening": _pillar_config_hardening,
-    "Attack validation": _pillar_attack_validation,
-    "Vulnerability exposure": _pillar_vuln_exposure,
-    "Device compliance": _pillar_device_compliance,
-    "Data risk": _pillar_data_risk,
-    "Endpoint coverage": _pillar_endpoint_coverage,
+# ── Detection-engineer / threat-hunter factories ─────────────────────
+async def _defender_alerts(window_hours: int) -> list[Finding]:
+    from f0_defender_mcp import tools
+    from f0_sectools_core.auth.config import PlatformConfig
+    from f0_sectools_core.auth.graph import GraphClient
+    load_dotenv(".env.defender")
+    cfg = PlatformConfig.from_env("DEFENDER")
+    async with GraphClient(cfg) as gc:
+        return _within_window(
+            await tools.list_alerts(gc, severity_min="medium", limit=15), window_hours,
+        )
+
+
+async def _defender_incidents(window_hours: int) -> list[Finding]:
+    from f0_defender_mcp import tools
+    from f0_sectools_core.auth.config import PlatformConfig
+    from f0_sectools_core.auth.graph import GraphClient
+    load_dotenv(".env.defender")
+    cfg = PlatformConfig.from_env("DEFENDER")
+    async with GraphClient(cfg) as gc:
+        return _within_window(
+            await tools.list_incidents(gc, severity_min="medium", limit=10), window_hours,
+        )
+
+
+async def _lc_dr_rules(window_hours: int) -> list[Finding]:
+    from f0_limacharlie_mcp import tools
+    from f0_limacharlie_mcp.client import LimaCharlieClient
+    from f0_sectools_core.auth.config import LimaCharlieConfig
+    load_dotenv(".env.limacharlie")
+    lc = LimaCharlieClient(LimaCharlieConfig.from_env())
+    return await asyncio.to_thread(tools.list_dr_rules, lc, "general", 15)
+
+
+async def _lc_detections(window_hours: int) -> list[Finding]:
+    from f0_limacharlie_mcp import tools
+    from f0_limacharlie_mcp.client import LimaCharlieClient
+    from f0_sectools_core.auth.config import LimaCharlieConfig
+    load_dotenv(".env.limacharlie")
+    lc = LimaCharlieClient(LimaCharlieConfig.from_env())
+    return await asyncio.to_thread(tools.list_detections, lc, float(window_hours), 15)
+
+
+async def _pa_weak_techniques(window_hours: int) -> list[Finding]:
+    from f0_projectachilles_mcp import tools
+    from f0_projectachilles_mcp.client import ProjectAchillesClient
+    from f0_sectools_core.auth.config import ProjectAchillesConfig
+    load_dotenv(".env.projectachilles")
+    async with ProjectAchillesClient(ProjectAchillesConfig.from_env()) as pa:
+        return await tools.get_weak_techniques(pa, days=max(1, window_hours // 24), limit=10)
+
+
+# ── Security-engineer factories ──────────────────────────────────────
+async def _entra_conditional_access(window_hours: int) -> list[Finding]:
+    from f0_entra_mcp import tools
+    from f0_sectools_core.auth.config import PlatformConfig
+    from f0_sectools_core.auth.graph import GraphClient
+    load_dotenv(".env.entra")
+    cfg = PlatformConfig.from_env("ENTRA")
+    async with GraphClient(cfg) as gc:
+        # list_conditional_access_policies has no limit param (it pages unbounded),
+        # so bound it here — the report is a human-facing document and every other
+        # group is capped.
+        return (await tools.list_conditional_access_policies(gc))[:10]
+
+
+async def _entra_privileged_roles(window_hours: int) -> list[Finding]:
+    from f0_entra_mcp import tools
+    from f0_sectools_core.auth.config import PlatformConfig
+    from f0_sectools_core.auth.graph import GraphClient
+    load_dotenv(".env.entra")
+    cfg = PlatformConfig.from_env("ENTRA")
+    async with GraphClient(cfg) as gc:
+        return await tools.list_privileged_role_assignments(gc, limit=10)
+
+
+async def _entra_risky_users(window_hours: int) -> list[Finding]:
+    from f0_entra_mcp import tools
+    from f0_sectools_core.auth.config import PlatformConfig
+    from f0_sectools_core.auth.graph import GraphClient
+    load_dotenv(".env.entra")
+    cfg = PlatformConfig.from_env("ENTRA")
+    async with GraphClient(cfg) as gc:
+        return await tools.list_risky_users(gc, limit=10)
+
+
+async def _intune_stale_devices(window_hours: int) -> list[Finding]:
+    from f0_intune_mcp import tools
+    from f0_sectools_core.auth.config import PlatformConfig
+    from f0_sectools_core.auth.graph import GraphClient
+    load_dotenv(".env.intune")
+    cfg = PlatformConfig.from_env("INTUNE")
+    async with GraphClient(cfg) as gc:
+        # Deliberately NOT window_hours: "stale" is defined by the tool's own
+        # 30-day-default threshold, not by the report's lookback window.
+        return await tools.list_stale_devices(gc, limit=10)
+
+
+async def _tenable_top_vulns(window_hours: int) -> list[Finding]:
+    from f0_sectools_core.auth.config import TenableConfig
+    from f0_tenable_mcp import tools
+    from f0_tenable_mcp.client import TenableClient
+    load_dotenv(".env.tenable")
+    async with TenableClient(TenableConfig.from_env()) as tio:
+        return await tools.list_top_vulnerabilities(tio, limit=10)
+
+
+# persona -> {group label: factory}. Patched in tests.
+# The CISO map is the six-pillar rollup; operational personas gather their own
+# working data (see docs/superpowers/specs/2026-07-25-report-persona-gathering-design.md).
+GATHER_MAP: dict[str, dict[str, Callable[[int], Awaitable[list[Finding]]]]] = {
+    "ciso": {
+        "config_hardening": _pillar_config_hardening,
+        "attack_validation": _pillar_attack_validation,
+        "vulnerability_exposure": _pillar_vuln_exposure,
+        "device_compliance": _pillar_device_compliance,
+        "data_risk": _pillar_data_risk,
+        "endpoint_coverage": _pillar_endpoint_coverage,
+    },
+    "detection_engineer": {
+        "alerts_mitre": _defender_alerts,
+        "incidents": _defender_incidents,
+        "detection_rules": _lc_dr_rules,
+        "endpoint_detections": _lc_detections,
+        "weak_techniques": _pa_weak_techniques,
+    },
+    "threat_hunter": {
+        "incidents": _defender_incidents,
+        "alerts_mitre": _defender_alerts,
+        "endpoint_detections": _lc_detections,
+        "endpoint_coverage": _pillar_endpoint_coverage,
+    },
+    "security_engineer": {
+        "config_hardening": _pillar_config_hardening,
+        "conditional_access": _entra_conditional_access,
+        "privileged_roles": _entra_privileged_roles,
+        "risky_users": _entra_risky_users,
+        "device_compliance": _pillar_device_compliance,
+        "stale_devices": _intune_stale_devices,
+        "vulnerability_exposure": _pillar_vuln_exposure,
+        "top_vulnerabilities": _tenable_top_vulns,
+    },
 }
+
 
 def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
     real = [f for f in findings if not is_not_assessed(f)]
     if not real:
-        return MetricCard(pillar, "not assessed", "not-assessed")
+        return MetricCard(pillar, "—", "not-assessed")
     f = real[0]
     headline = next((e.value for e in f.evidence if e.key == "headline"), "")
     if not headline:
@@ -109,36 +275,80 @@ def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
     return MetricCard(pillar, headline, state, detail=f.title)
 
 
-async def _run_pillar(pillar: str, factory, window_hours: int) -> tuple[str, list[Finding]]:
+_SEV_ORDER = ("critical", "high", "medium", "low", "info")
+_SEV_STATE = {
+    "critical": "exposure", "high": "needs-work", "medium": "needs-work",
+    "low": "strong", "info": "strong",
+}
+
+
+def _count_metric(group: str, findings: list[Finding]) -> MetricCard:
+    """An at-a-glance tile for an operational group: how many findings it produced.
+
+    An empty group is `clear`, not `strong` — "0 endpoint detections" is not good
+    news when most sensors are dormant, and a green tile would contradict the
+    narrative. A group whose findings are all degradations is `not-assessed`.
+    """
+    real = [f for f in findings if not is_not_assessed(f)]
+    if not findings:
+        return MetricCard(group, "0", "clear", detail="nothing_in_window")
+    if not real:
+        return MetricCard(group, "—", "not-assessed")
+    counts = {sev: sum(1 for f in real if f.severity.value == sev) for sev in _SEV_ORDER}
+    worst = next((s for s in _SEV_ORDER if counts[s]), "info")
+    breakdown = tuple((s, counts[s]) for s in _SEV_ORDER if counts[s])
+    return MetricCard(group, str(len(real)), _SEV_STATE[worst], severity_counts=breakdown)
+
+
+async def _run_group(group: str, factory, window_hours: int) -> tuple[str, list[Finding]]:
     try:
         findings = await factory(window_hours)
     except Exception as exc:  # noqa: BLE001 — any platform failure degrades, never aborts
-        return pillar, [_degraded(pillar, str(exc))]
+        return group, [_degraded(group, str(exc))]
     # The report is a shared artifact — apply the same structural redaction every
     # server's _render does (plus evidence-key-aware blanking), not just the
     # value-pattern net the emitters use. See core.redaction.redact.redact_finding.
-    return pillar, [redact_finding(f) for f in findings]
+    return group, [redact_finding(f) for f in findings]
 
 
 async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeMeta]:
-    # v1: all personas gather the six pillars (shared engine); operational personas
-    # additionally could gather detail tools — extend GATHER_MAP later.
+    key = persona.replace("-", "_")
+    groups = GATHER_MAP.get(key)
+    if groups is None:
+        raise ValueError(f"Unknown persona '{persona}'. Valid: {', '.join(sorted(GATHER_MAP))}")
     results = await asyncio.gather(*[
-        _run_pillar(pillar, factory, window_hours)
-        for pillar, factory in _PILLAR_FACTORIES.items()
+        _run_group(group, factory, window_hours) for group, factory in groups.items()
     ])
     findings: list[Finding] = []
     assessed: list[str] = []
     not_assessed: list[str] = []
     metrics: list[MetricCard] = []
-    for pillar, pillar_findings in results:
-        findings.extend(pillar_findings)
-        healthy = [f for f in pillar_findings if not is_not_assessed(f)]
-        if healthy:
-            assessed.append(pillar)
+    platforms: list[str] = []
+    real_count = 0
+    for group, group_findings in results:
+        findings.extend(group_findings)
+        healthy = [f for f in group_findings if not is_not_assessed(f)]
+        real_count += len(healthy)
+        # A group that ran and returned nothing is ASSESSED with nothing to report
+        # (no risky users is good news); only a group whose every finding is a
+        # degradation is genuinely dark. CISO groups always return one finding, so
+        # this is byte-identical for the CISO report.
+        if group_findings and not healthy:
+            not_assessed.append(group)
         else:
-            not_assessed.append(pillar)
-        metrics.append(_metric_from(pillar, pillar_findings))
+            assessed.append(group)
+        # Provenance counts real platforms, not group labels — derive it from the
+        # findings' own `source` field (a degraded group contributes no source
+        # here; it's still visible via not_assessed).
+        for f in healthy:
+            if f.source not in platforms:
+                platforms.append(f.source)
+        # CISO groups are one headline posture finding each (a percentage/score);
+        # operational groups are lists, so their tile is the count.
+        if key == "ciso":
+            metrics.append(_metric_from(group, group_findings))
+        else:
+            metrics.append(_count_metric(group, group_findings))
     meta = ScopeMeta(
         generated_at="",  # stamped by the CLI
         tenant_label="",
@@ -147,8 +357,8 @@ async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeM
             if window_hours >= 24
             else f"Trailing {window_hours}h"
         ),
-        platforms_queried=[p.lower().replace(" ", "_") for p in _PILLAR_FACTORIES],
-        findings_count=len(findings),
+        platforms_queried=platforms,
+        findings_count=real_count,
         assessed=assessed,
         not_assessed=not_assessed,
         pillar_metrics=metrics,

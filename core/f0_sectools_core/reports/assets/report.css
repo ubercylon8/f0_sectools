@@ -23,12 +23,14 @@ body {
 .metric-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:22px 26px; }
 .metric__label { font-size:9px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); font-weight:700; }
 .metric__value { font-size:34px; font-weight:700; color:var(--navy); line-height:1.05; margin:3px 0; }
+.metric__unit { font-size:12px; font-weight:600; color:var(--muted); margin-left:5px; white-space:nowrap; }
 .metric__state { font-size:11px; font-weight:600; }
 .metric__detail { font-size:10px; color:var(--muted); margin-top:3px; }
 .metric__state--strong { color:var(--sev-low); }
 .metric__state--needs-work { color:var(--sev-high); }
 .metric__state--exposure { color:var(--sev-critical); }
 .metric__state--not-assessed { color:var(--muted); }
+.metric__state--clear { color:var(--muted); }
 /* Finding rows — operational */
 .finding { border-left:4px solid var(--sev-info); padding:7px 11px; margin-bottom:7px; background:#f6f8fa; border-radius:0 4px 4px 0; }
 .finding--critical { border-left-color:var(--sev-critical); background:#faf0f0; }

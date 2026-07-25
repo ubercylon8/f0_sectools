@@ -78,6 +78,11 @@ def _op_scope() -> ScopeMeta:
         generated_at="2026-07-24 14:22", tenant_label="Contoso",
         window_label="Trailing 7 days", platforms_queried=["defender", "limacharlie"],
         findings_count=2, assessed=["Detections"], not_assessed=[],
+        pillar_metrics=[
+            MetricCard("alerts_mitre", "2", "needs-work",
+                       severity_counts=(("high", 1), ("medium", 1))),
+            MetricCard("incidents", "0", "clear", detail="nothing_in_window"),
+        ],
     )
 
 
@@ -110,3 +115,79 @@ def test_golden_detection_en_frozen():
     narrative = (FIX / "narrative_detection_en.md").read_text()
     out = build_report("detection-engineer", "en", narrative, _detection_findings(), _op_scope())
     assert out.markdown == (FIX / "golden_detection_en.md").read_text()
+
+
+def test_severity_breakdown_tolerates_unknown_severity_token():
+    # An unexpected severity token in a MetricCard's severity_counts must
+    # degrade gracefully (pass through as its own id), never raise KeyError
+    # and kill the whole report render.
+    scope = ScopeMeta(
+        generated_at="2026-07-24 14:22", tenant_label="Contoso",
+        window_label="Trailing 7 days", platforms_queried=["defender"],
+        findings_count=1, assessed=["alerts_mitre"], not_assessed=[],
+        pillar_metrics=[MetricCard("alerts_mitre", "1", "needs-work",
+                                    severity_counts=(("bogus-sev", 1),))],
+    )
+    md = build_report("detection-engineer", "en", "## Executive Summary\nHi.\n", [], scope).markdown
+    assert "1 bogus-sev" in md
+
+
+def test_empty_metric_grid_renders_no_section_at_all():
+    # A persona report whose scope carries no pillar_metrics must not emit a
+    # bare "## Posture at a glance" heading with nothing under it.
+    scope = ScopeMeta(
+        generated_at="2026-07-24 14:22", tenant_label="Contoso",
+        window_label="Trailing 7 days", platforms_queried=["defender", "limacharlie"],
+        findings_count=0, assessed=["Detections"], not_assessed=[],
+    )
+    narrative = (FIX / "narrative_detection_en.md").read_text()
+    out = build_report("detection-engineer", "en", narrative, _detection_findings(), scope)
+    assert "Posture at a glance" not in out.markdown
+    assert "Posture at a glance" not in out.html
+
+
+def test_each_persona_gets_its_own_title():
+    narrative = "## Executive Summary\nHi.\n"
+    titles = {
+        p: build_report(p, "en", narrative, [], _scope()).markdown.splitlines()[0]
+        for p in ("ciso", "detection-engineer", "threat-hunter", "security-engineer")
+    }
+    assert titles["ciso"] == "# Executive Risk Briefing"
+    assert titles["detection-engineer"] == "# Detection Coverage Report"
+    assert titles["threat-hunter"] == "# Threat Hunting Report"
+    assert titles["security-engineer"] == "# Security Hardening Report"
+    assert len(set(titles.values())) == 4  # all distinct
+
+
+def test_spanish_report_translates_tiles_and_coverage():
+    from f0_sectools_core.reports.content import MetricCard, ScopeMeta
+
+    meta = ScopeMeta(
+        generated_at="2026-07-24 14:22", tenant_label="Contoso",
+        window_label="Trailing 7 days", platforms_queried=["defender"],
+        findings_count=1, assessed=["config_hardening"], not_assessed=["data_risk"],
+        pillar_metrics=[MetricCard("config_hardening", "90%", "needs-work",
+                                   detail="Microsoft Secure Score")],
+    )
+    md = build_report("ciso", "es", "## Resumen Ejecutivo\nHola.\n", [], meta).markdown
+    # group ids and state words render in Spanish
+    assert "Endurecimiento de configuración" in md
+    assert "requiere atención" in md
+    assert "Riesgo de datos" in md            # the not-assessed coverage entry
+    # ...and the raw identifiers never leak
+    assert "config_hardening" not in md
+    assert "needs-work" not in md
+
+
+def test_english_report_renders_group_ids_as_todays_labels():
+    from f0_sectools_core.reports.content import MetricCard, ScopeMeta
+
+    meta = ScopeMeta(
+        generated_at="2026-07-24 14:22", tenant_label="Contoso",
+        window_label="Trailing 7 days", platforms_queried=["defender"],
+        findings_count=1, assessed=["config_hardening"], not_assessed=[],
+        pillar_metrics=[MetricCard("config_hardening", "90%", "needs-work")],
+    )
+    md = build_report("ciso", "en", "## Executive Summary\nHi.\n", [], meta).markdown
+    assert "Config hardening" in md          # identical to today's output
+    assert "needs work" in md

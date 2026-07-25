@@ -9,6 +9,32 @@ from f0_sectools_core.reports.sections import (
 from f0_sectools_core.schema.findings import Finding, FindingType, Severity
 
 
+def test_group_findings_keeps_every_real_source():
+    # Regression: the old source-based buckets silently dropped any finding whose
+    # source wasn't in the persona's bucket, so an operational report showed only
+    # part of what was gathered.
+    vuln = Finding(source="tenable", finding_type=FindingType.risk,
+                   severity=Severity.critical, title="3 critical vulns")
+    alert = Finding(source="defender", finding_type=FindingType.alert,
+                    severity=Severity.high, title="Suspicious PowerShell")
+    weak = Finding(source="projectachilles", finding_type=FindingType.risk,
+                   severity=Severity.medium, title="Weak technique T1059")
+    grouped = group_findings([vuln, alert, weak], "detection_engineer")
+    assert grouped[FindingGroup.all] == [vuln, alert, weak]
+    assert grouped[FindingGroup.top_risks] == [vuln, alert, weak]
+
+
+def test_finding_group_has_only_the_consumed_buckets():
+    assert {g.value for g in FindingGroup} == {"posture", "top_risks", "all"}
+
+
+def test_operational_sections_render_all_gathered_findings():
+    for persona in ("detection_engineer", "threat_hunter", "security_engineer"):
+        table = [s for s in SECTION_MAPS[persona] if s.kind is BlockKind.finding_table]
+        assert table, persona
+        assert all(s.group is FindingGroup.all for s in table), persona
+
+
 def test_all_four_personas_have_maps():
     assert set(SECTION_MAPS) == {"ciso", "detection_engineer", "threat_hunter", "security_engineer"}
 
@@ -31,8 +57,7 @@ def test_operational_personas_use_finding_table():
     for persona in ("detection_engineer", "threat_hunter", "security_engineer"):
         assert TIER[persona] == "operational"
         kinds = [s.kind for s in SECTION_MAPS[persona]]
-        assert BlockKind.finding_table in kinds
-        assert BlockKind.metric_grid not in kinds  # operational tier is finding-forward
+        assert BlockKind.finding_table in kinds  # operational tier is still finding-forward
 
 
 def test_is_not_assessed_detects_permission_missing():
@@ -43,9 +68,9 @@ def test_is_not_assessed_detects_permission_missing():
     assert is_not_assessed(real) is False
 
 
-def test_group_findings_buckets_exposure_for_security_engineer():
-    vuln = Finding(source="tenable", finding_type=FindingType.risk,
-                   severity=Severity.critical, title="3 critical vulns exposed")
-    grouped = group_findings([vuln], "security_engineer")
-    assert vuln in grouped[FindingGroup.all]
-    assert vuln in grouped[FindingGroup.exposure]
+def test_operational_personas_have_an_at_a_glance_section():
+    for persona in ("detection_engineer", "threat_hunter", "security_engineer"):
+        kinds = [s.kind for s in SECTION_MAPS[persona]]
+        assert BlockKind.metric_grid in kinds, persona
+        # it sits directly after the narrative, like the CISO's
+        assert kinds.index(BlockKind.metric_grid) == kinds.index(BlockKind.narrative) + 1

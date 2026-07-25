@@ -17,11 +17,6 @@ from .content import BlockKind
 class FindingGroup(StrEnum):
     posture = "posture"
     top_risks = "top_risks"
-    detections = "detections"
-    telemetry = "telemetry"
-    exposure = "exposure"
-    identity = "identity"
-    compliance = "compliance"
     all = "all"
 
 
@@ -65,20 +60,23 @@ SECTION_MAPS: dict[str, list[SectionSpec]] = {
     ],
     "detection_engineer": [
         SectionSpec(BlockKind.narrative, "sec_executive_summary", _OPS),
-        SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.detections),
+        SectionSpec(BlockKind.metric_grid, "sec_posture", _OPS, FindingGroup.posture),
+        SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.all),
         SectionSpec(BlockKind.coverage, "sec_scope", _OPS),
         SectionSpec(BlockKind.open_questions, "sec_open_questions", _OPS),
         SectionSpec(BlockKind.provenance, "sec_provenance", _OPS),
     ],
     "threat_hunter": [
         SectionSpec(BlockKind.narrative, "sec_executive_summary", _OPS),
-        SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.telemetry),
+        SectionSpec(BlockKind.metric_grid, "sec_posture", _OPS, FindingGroup.posture),
+        SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.all),
         SectionSpec(BlockKind.coverage, "sec_scope", _OPS),
         SectionSpec(BlockKind.open_questions, "sec_open_questions", _OPS),
         SectionSpec(BlockKind.provenance, "sec_provenance", _OPS),
     ],
     "security_engineer": [
         SectionSpec(BlockKind.narrative, "sec_executive_summary", _OPS),
+        SectionSpec(BlockKind.metric_grid, "sec_posture", _OPS, FindingGroup.posture),
         SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.all),
         SectionSpec(BlockKind.coverage, "sec_scope", _OPS),
         SectionSpec(BlockKind.open_questions, "sec_open_questions", _OPS),
@@ -98,30 +96,13 @@ def is_not_assessed(f: Finding) -> bool:
 def group_findings(findings: list[Finding], persona: str) -> dict[FindingGroup, list[Finding]]:
     """Bucket findings for a persona's data sections.
 
-    Bucketing is uniform across personas — driven by `finding.source` and
-    `finding_type`, not by which persona is asking. Every real
-    (non-degradation) finding lands in `all`, `top_risks`, and its
-    source-derived group (exposure/identity/compliance/telemetry/detections)
-    so a section always has something to render; each persona then selects
-    which of those buckets it renders via `SECTION_MAPS`. Degradation
-    findings are excluded from data buckets (they surface only in the
-    coverage section).
+    The gather is already persona-scoped (scripts/report_gather.py's GATHER_MAP),
+    so a section renders everything gathered. Degradation findings are excluded
+    from the data buckets; they surface in the coverage section.
     """
     real = [f for f in findings if not is_not_assessed(f)]
-    buckets: dict[FindingGroup, list[Finding]] = {g: [] for g in FindingGroup}
-    buckets[FindingGroup.all] = list(real)
-    buckets[FindingGroup.top_risks] = list(real)
-    buckets[FindingGroup.posture] = [f for f in findings if f.finding_type is FindingType.posture]
-    for f in real:
-        if f.source == "tenable":
-            buckets[FindingGroup.exposure].append(f)
-        elif f.source == "entra":
-            buckets[FindingGroup.identity].append(f)
-        elif f.source == "intune":
-            buckets[FindingGroup.compliance].append(f)
-        elif f.source == "limacharlie":
-            buckets[FindingGroup.telemetry].append(f)
-            buckets[FindingGroup.detections].append(f)
-        elif f.source == "defender":
-            buckets[FindingGroup.detections].append(f)
-    return buckets
+    return {
+        FindingGroup.all: list(real),
+        FindingGroup.top_risks: list(real),
+        FindingGroup.posture: [f for f in findings if f.finding_type is FindingType.posture],
+    }

@@ -8,3 +8,12 @@
 # recur; this entry only clears the historical commit, which gitleaks re-scans
 # on every PR containing it.
 c63fb2b6d3c1de0ab5ee62b5ce60051889282021:examples/transcripts/gated-run-test.md:generic-api-key:105
+
+# Synthetic secret-shaped fixture in the report redaction test: a token built to
+# match our own client-secret pattern (32+ alnum, dot, 6+ alnum) so the test can
+# prove emit.py redacts a metric headline BEFORE splitting it into number and
+# qualifier — split-first leaves two halves that neither match the pattern. Never
+# a credential. The live fixture is now deliberately low-entropy ("1"*32 +
+# ".aaaaaa") so the pattern cannot recur; this entry only clears the historical
+# commit, which gitleaks re-scans on every PR containing it.
+99a23dde3863fba96479fb6e1d5cd59c5ac08e56:core/tests/test_reports_emit.py:generic-api-key:314

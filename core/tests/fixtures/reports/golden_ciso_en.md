@@ -8,7 +8,7 @@ Our posture is moderate and stable. Two risks are live this week: internet-expos
 
 ## Posture at a glance
 
-- **62%** — Config hardening (needs-work) · Microsoft Secure Score 1130/1816
+- **62%** — Config hardening (needs work) · Microsoft Secure Score 1130/1816
 
 ## Top risks
 

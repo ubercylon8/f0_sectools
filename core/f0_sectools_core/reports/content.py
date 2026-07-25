@@ -29,10 +29,12 @@ class BlockKind(StrEnum):
 
 @dataclass(frozen=True)
 class MetricCard:
-    label: str   # i18n'd pillar label, e.g. "Config hardening"
+    label: str   # gather-group identifier (translated by the builder) or display text
     value: str   # compact headline value, e.g. "62%", "3 critical", or the not-assessed label
-    state: str   # one-word machine state: strong | needs-work | exposure | not-assessed
+    state: str   # stable id -> CSS class: strong | needs-work | exposure | not-assessed | clear
     detail: str = ""  # small descriptor line, e.g. the source finding's title
+    state_label: str = ""  # translated state word; emit falls back to `state`
+    severity_counts: tuple[tuple[str, int], ...] = ()  # ordered severity -> count breakdown
 
 
 @dataclass(frozen=True)
