@@ -12,7 +12,10 @@
 
 From `docs/superpowers/specs/2026-07-25-report-titles-tiles-i18n-design.md` and CLAUDE.md. Every task's requirements implicitly include this section.
 
-- **EN output must be byte-identical** — every new EN i18n value equals the string that renders today (e.g. `group_config_hardening` = `"Config hardening"`). `core/tests/fixtures/reports/golden_ciso_en.md` and `golden_detection_en.md` must NOT change. If a golden changes, STOP and report rather than re-freezing.
+- **EN output must be byte-identical except where a task's own deliverable changes it.** Every new EN i18n value equals the string that renders today (e.g. `group_config_hardening` = `"Config hardening"`), so no *incidental* drift is acceptable. Exactly two intentional golden changes are expected across this plan, each re-frozen in the task that causes it, after reading the diff to confirm nothing else moved:
+  - **Task 1** — `golden_detection_en.md` title line: `# Security Operations Report` → `# Detection Coverage Report` (that persona now has its own title). `golden_ciso_en.md` must stay byte-identical here.
+  - **Task 2** — `golden_ciso_en.md` state word: `(needs-work)` → `(needs work)` (emit now renders the display word instead of the raw id).
+  Any other golden difference means something unintended moved: STOP and report.
 - **Translation is tolerant** — an unknown group/state identifier passes through unchanged and never raises. The golden tests build `ScopeMeta` by hand with English labels; that must keep working.
 - **CSS classes derive from the state IDENTIFIER, never the translated text** — otherwise Spanish reports lose their colours.
 - **i18n EN/ES key parity** is enforced by an existing test; every new key needs both languages.
