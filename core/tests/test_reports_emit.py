@@ -348,3 +348,24 @@ def test_metric_tile_renders_number_big_and_qualifier_small():
     assert ".metric__unit" in html  # styled small in the inlined CSS
     # Markdown bolds only the number, qualifier stays plain
     assert "- **6** DLP alerts — Data risk (needs-work)" in to_markdown(content)
+
+
+def test_css_class_uses_state_id_even_when_display_text_is_translated():
+    from f0_sectools_core.reports.content import (
+        BlockKind,
+        MetricCard,
+        ReportContent,
+        Section,
+    )
+    from f0_sectools_core.reports.emit import to_html
+
+    card = MetricCard("Cumplimiento", "67%", "needs-work",
+                      state_label="requiere atención")
+    content = ReportContent(
+        persona="ciso", language="es", tier="executive",
+        title="Informe", subtitle="sub",
+        sections=[Section(BlockKind.metric_grid, "Postura", "executive", metrics=[card])],
+    )
+    html = to_html(content)
+    assert "metric__state--needs-work" in html      # class from the stable id
+    assert "requiere atención" in html              # visible word translated

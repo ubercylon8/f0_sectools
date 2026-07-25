@@ -85,7 +85,7 @@ def _md_metric(m: MetricCard) -> str:
     # `number`/`unit` are already redacted here — do not wrap them in _r() again.
     number, unit = _split_headline(_r(m.value))
     head = f"**{number}**" + (f" {unit}" if unit else "")
-    line = f"- {head} — {_r(m.label)} ({_r(m.state)})"
+    line = f"- {head} — {_r(m.label)} ({_r(m.state_label or m.state)})"
     if m.detail:
         line += f" · {_r(m.detail)}"
     return line
@@ -161,7 +161,7 @@ def _metric_card(m: MetricCard) -> str:
         '<div class="metric">'
         f'<div class="metric__label">{_e(m.label)}</div>'
         f'<div class="metric__value">{_esc(number)}{unit_html}</div>'
-        f'<div class="metric__state metric__state--{state}">{_e(m.state)}</div>'
+        f'<div class="metric__state metric__state--{state}">{_e(m.state_label or m.state)}</div>'
         f'{detail}</div>'
     )
 

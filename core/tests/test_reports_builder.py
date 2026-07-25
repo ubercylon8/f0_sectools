@@ -123,3 +123,37 @@ def test_each_persona_gets_its_own_title():
     assert titles["threat-hunter"] == "# Threat Hunting Report"
     assert titles["security-engineer"] == "# Security Hardening Report"
     assert len(set(titles.values())) == 4  # all distinct
+
+
+def test_spanish_report_translates_tiles_and_coverage():
+    from f0_sectools_core.reports.content import MetricCard, ScopeMeta
+
+    meta = ScopeMeta(
+        generated_at="2026-07-24 14:22", tenant_label="Contoso",
+        window_label="Trailing 7 days", platforms_queried=["defender"],
+        findings_count=1, assessed=["config_hardening"], not_assessed=["data_risk"],
+        pillar_metrics=[MetricCard("config_hardening", "90%", "needs-work",
+                                   detail="Microsoft Secure Score")],
+    )
+    md = build_report("ciso", "es", "## Resumen Ejecutivo\nHola.\n", [], meta).markdown
+    # group ids and state words render in Spanish
+    assert "Endurecimiento de configuración" in md
+    assert "requiere atención" in md
+    assert "Riesgo de datos" in md            # the not-assessed coverage entry
+    # ...and the raw identifiers never leak
+    assert "config_hardening" not in md
+    assert "needs-work" not in md
+
+
+def test_english_report_renders_group_ids_as_todays_labels():
+    from f0_sectools_core.reports.content import MetricCard, ScopeMeta
+
+    meta = ScopeMeta(
+        generated_at="2026-07-24 14:22", tenant_label="Contoso",
+        window_label="Trailing 7 days", platforms_queried=["defender"],
+        findings_count=1, assessed=["config_hardening"], not_assessed=[],
+        pillar_metrics=[MetricCard("config_hardening", "90%", "needs-work")],
+    )
+    md = build_report("ciso", "en", "## Executive Summary\nHi.\n", [], meta).markdown
+    assert "Config hardening" in md          # identical to today's output
+    assert "needs work" in md
