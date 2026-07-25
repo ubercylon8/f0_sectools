@@ -226,3 +226,76 @@ async def test_list_privileged_role_assignments_bounds_and_notes():
     shown = findings[:25]
     assert all(f.severity.value == "high" for f in shown[:5])  # criticals first
     assert all("more results" not in f.title.lower() for f in shown)
+
+
+
+def _captured_params(router, path: str) -> dict[str, str]:
+    """Query params the tool actually sent to Graph, for the last call to `path`.
+
+    Must be called INSIDE the respx.mock block — the context manager clears
+    router.calls on exit.
+    """
+    for call in reversed(router.calls):
+        if path in str(call.request.url):
+            return dict(call.request.url.params)
+    raise AssertionError(f"no request captured for {path}")
+
+
+@pytest.mark.asyncio
+async def test_list_risky_users_defaults_to_active_and_newest_first():
+    # Entra keeps dismissed/remediated users in riskyUsers forever. Without a
+    # riskState filter and a recency order, a real tenant's first page was 64%
+    # already-handled entries with a median age over five years, burying a
+    # one-day-old live risk.
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/identityProtection/riskyUsers").mock(
+            return_value=httpx.Response(200, json={"value": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await list_risky_users(gc)
+        params = _captured_params(router, "/identityProtection/riskyUsers")
+    assert params["$filter"] == "riskState eq 'atRisk' or riskState eq 'confirmedCompromised'"
+    assert params["$orderby"] == "riskLastUpdatedDateTime desc"
+
+
+@pytest.mark.asyncio
+async def test_list_risky_users_state_all_drops_the_filter_but_keeps_order():
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/identityProtection/riskyUsers").mock(
+            return_value=httpx.Response(200, json={"value": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await list_risky_users(gc, state="all")
+        params = _captured_params(router, "/identityProtection/riskyUsers")
+    assert "$filter" not in params          # history stays reachable
+    assert params["$orderby"] == "riskLastUpdatedDateTime desc"  # still newest-first
+
+
+@pytest.mark.asyncio
+async def test_list_risk_detections_defaults_to_active_and_newest_first():
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/identityProtection/riskDetections").mock(
+            return_value=httpx.Response(200, json={"value": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await list_risk_detections(gc)
+        params = _captured_params(router, "/identityProtection/riskDetections")
+    assert params["$filter"] == "riskState eq 'atRisk' or riskState eq 'confirmedCompromised'"
+    assert params["$orderby"] == "detectedDateTime desc"  # detections order by detection time
+
+
+@pytest.mark.asyncio
+async def test_list_risk_detections_state_all_drops_the_filter():
+    with respx.mock as router:
+        _token(router)
+        router.get(GRAPH + "/identityProtection/riskDetections").mock(
+            return_value=httpx.Response(200, json={"value": []})
+        )
+        async with GraphClient(CFG) as gc:
+            await list_risk_detections(gc, state="all")
+        params = _captured_params(router, "/identityProtection/riskDetections")
+    assert "$filter" not in params
+    assert params["$orderby"] == "detectedDateTime desc"

@@ -6,7 +6,7 @@ findings, and redacts every payload before returning it to the agent.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
@@ -29,19 +29,33 @@ def _render(findings: list[Finding]) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def list_risky_users(limit: int = 25) -> list[dict[str, Any]]:
-    """List Entra ID Protection risky users (requires Entra ID P2)."""
+async def list_risky_users(
+    limit: int = 25, state: Literal["active", "all"] = "active"
+) -> list[dict[str, Any]]:
+    """List Entra ID Protection risky users, newest first (requires Entra ID P2).
+
+    Defaults to state="active" — only users still at risk. Use state="all" to
+    include dismissed/remediated/confirmed-safe users, which Entra retains
+    indefinitely and which are usually already handled.
+    """
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
-        return _render(await tools.list_risky_users(gc, limit))
+        return _render(await tools.list_risky_users(gc, limit, state))
 
 
 @mcp.tool()
-async def list_risk_detections(limit: int = 25) -> list[dict[str, Any]]:
-    """List Entra ID Protection risk detections (requires Entra ID P2)."""
+async def list_risk_detections(
+    limit: int = 25, state: Literal["active", "all"] = "active"
+) -> list[dict[str, Any]]:
+    """List Entra ID Protection risk detections, newest first (requires Entra ID P2).
+
+    Defaults to state="active" — only detections still at risk. Use state="all"
+    to include dismissed/remediated/confirmed-safe detections, which are usually
+    already handled.
+    """
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
-        return _render(await tools.list_risk_detections(gc, limit))
+        return _render(await tools.list_risk_detections(gc, limit, state))
 
 
 @mcp.tool()

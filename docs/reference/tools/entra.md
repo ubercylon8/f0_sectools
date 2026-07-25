@@ -6,21 +6,31 @@ Module `f0_entra_mcp.server` · **4 tools** (all read-only) · [server README](.
 
 ## `list_risky_users`
 
-List Entra ID Protection risky users (requires Entra ID P2).
+List Entra ID Protection risky users, newest first (requires Entra ID P2).
+
+Defaults to state="active" — only users still at risk. Use state="all" to
+include dismissed/remediated/confirmed-safe users, which Entra retains
+indefinitely and which are usually already handled.
 
 | Parameter | Type | Default |
 |---|---|---|
 | `limit` | `integer` | `25` |
+| `state` | `"active"` \| `"all"` | `"active"` |
 
 Used by skills: [`triage-incident-cross-platform`](../../../skills/cross-platform/triage-incident-cross-platform/SKILL.md), [`review-entra-identity-risk`](../../../skills/entra/identity-risk-review/SKILL.md)
 
 ## `list_risk_detections`
 
-List Entra ID Protection risk detections (requires Entra ID P2).
+List Entra ID Protection risk detections, newest first (requires Entra ID P2).
+
+Defaults to state="active" — only detections still at risk. Use state="all"
+to include dismissed/remediated/confirmed-safe detections, which are usually
+already handled.
 
 | Parameter | Type | Default |
 |---|---|---|
 | `limit` | `integer` | `25` |
+| `state` | `"active"` \| `"all"` | `"active"` |
 
 Used by skills: [`triage-incident-cross-platform`](../../../skills/cross-platform/triage-incident-cross-platform/SKILL.md), [`review-entra-identity-risk`](../../../skills/entra/identity-risk-review/SKILL.md)
 

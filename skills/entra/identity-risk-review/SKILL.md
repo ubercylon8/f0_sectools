@@ -23,9 +23,12 @@ Base tool names (runtime may prefix — see the Entra server README):
 
 ## Procedure
 
-1. Call `list_risky_users`. Note each user's **risk level**. **Prioritize
-   `medium` and `high`**; `info`/`low` are usually background noise in a large
-   tenant.
+1. Call `list_risky_users`. It returns **only users still at risk, newest
+   first** — Entra keeps dismissed and remediated users in this collection
+   indefinitely, and they are already handled. Pass `state: "all"` only when the
+   operator explicitly asks for risk history. Note each user's **risk level**;
+   **prioritize `medium` and `high`** — `info`/`low` are usually background noise
+   in a large tenant.
 2. Call `list_risk_detections`. Note the **detection type** (e.g.
    `unlikelyTravel` = impossible travel, `unfamiliarFeatures`) and which user it
    maps to.
