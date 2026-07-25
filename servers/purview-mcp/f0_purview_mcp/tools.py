@@ -189,6 +189,25 @@ async def get_dlp_summary(
             "configured, or that every alert in the window is already resolved — "
             "re-run with state='all' to tell those apart."
         )
+    # The rollup — including the finding's own `severity` — is computed from the
+    # fetched page, and the query carries no ordering, so a capped window yields
+    # an ARBITRARY sample rather than the worst or the newest alerts. Saying so
+    # in machine-readable evidence matters more than the title caveat: a model
+    # reading `severity` sees a claim about the window, and past the cap that
+    # claim is only true of the sample.
+    sampled = total is not None and total > len(alerts)
+    evidence = [
+        Evidence(key="headline", value=f"{counted} {scope}DLP alerts"),
+        Evidence(key="alerts_total", value=str(counted)),
+        Evidence(key="by_severity", value=fmt(by_sev)),
+        Evidence(key="by_status", value=fmt(by_status)),
+    ]
+    if sampled:
+        evidence.append(Evidence(
+            key="severity_basis",
+            value=f"worst of an unordered {len(alerts)}-alert sample of {total}; "
+                  "a higher-severity alert may lie outside it — narrow hours_back",
+        ))
     return [
         Finding(
             source="purview",
@@ -197,13 +216,8 @@ async def get_dlp_summary(
                 max(alerts, key=lambda a: _SEV_ORDER.index(str(a.get("severity")).lower())
                     if str(a.get("severity")).lower() in _SEV_ORDER else 0).get("severity")),
             title=f"{counted} {scope}DLP alert(s) in the last {hours_back:g}h"
-            + (f" (showing counts for first {_FETCH_CAP})" if len(alerts) >= _FETCH_CAP else ""),
-            evidence=[
-                Evidence(key="headline", value=f"{counted} {scope}DLP alerts"),
-                Evidence(key="alerts_total", value=str(counted)),
-                Evidence(key="by_severity", value=fmt(by_sev)),
-                Evidence(key="by_status", value=fmt(by_status)),
-            ],
+            + (f" (counts from {len(alerts)} sampled)" if sampled else ""),
+            evidence=evidence,
             recommended_action=RecommendedAction(summary=action),
         )
     ]

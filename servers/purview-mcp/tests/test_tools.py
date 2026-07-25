@@ -466,3 +466,26 @@ async def test_server_advertises_enums_and_six_tools():
     assert len(tools_by_name) == 6
     sev = tools_by_name["list_dlp_alerts"].inputSchema["properties"]["severity_min"]
     assert set(sev.get("enum", [])) == {"low", "medium", "high"}
+
+
+@pytest.mark.asyncio
+async def test_dlp_summary_says_when_its_severity_is_only_a_sample():
+    # The query carries no ordering, so past the fetch cap the page is an
+    # ARBITRARY sample — the finding's own `severity` is then a claim about the
+    # sample, not the window, and must say so in machine-readable evidence.
+    rows = [{**DLP_ALERT, "id": f"a{i}", "severity": "low"} for i in range(3)]
+    gc = FakeGC(gets={"alerts_v2": {"value": rows, "@odata.count": 250}})
+    findings = await tools.get_dlp_summary(gc)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert "sample of 250" in ev["severity_basis"]
+    assert "counts from 3 sampled" in findings[0].title
+    assert ev["headline"] == "250 unresolved DLP alerts"  # the count is still exact
+
+
+@pytest.mark.asyncio
+async def test_dlp_summary_claims_no_sampling_when_it_saw_everything():
+    rows = [{**DLP_ALERT, "id": f"a{i}"} for i in range(3)]
+    gc = FakeGC(gets={"alerts_v2": {"value": rows, "@odata.count": 3}})
+    findings = await tools.get_dlp_summary(gc)
+    assert all(e.key != "severity_basis" for e in findings[0].evidence)
+    assert "sampled" not in findings[0].title
