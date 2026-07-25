@@ -38,7 +38,8 @@ All read-only; nothing changes state.
 Work **one tool at a time**: call, read the result, then decide the next step.
 
 1. **Incident (Defender).** Call `list_incidents` with a `severity_min` matching
-   the ask (`high` if they only want what matters now). Pick the incident of
+   the ask (`high` if they only want what matters now). It returns only
+   unresolved incidents, newest first. Pick the incident of
    interest. Note its **entity** (device name and/or user), **severity**,
    **status**, and **MITRE techniques** (the `references` of type `mitre`). For
    the correlated alert detail, call `list_alerts`.

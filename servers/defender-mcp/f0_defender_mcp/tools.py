@@ -42,6 +42,61 @@ _RANK = {
     Severity.critical: 4,
 }
 
+# `severity_min` is OUR vocabulary, not Graph's, so it needs its own ranks. It
+# used to be resolved through _SEV, which has no "info" and no "critical" key —
+# both silently fell back to medium, so severity_min="critical" returned medium
+# and high items and severity_min="info" dropped the low/info ones it asked for.
+_MIN_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+
+# Graph severity values at or above each floor, for a server-side $filter.
+# Graph has no "critical": ours is DERIVED below (a high incident correlating
+# many alerts), so it stays a client-side refinement of "high" and is never a
+# filter value. An empty tuple means "everything qualifies" -> emit no clause.
+_SEV_AT_OR_ABOVE: dict[str, tuple[str, ...]] = {
+    "info": (),
+    "low": ("low", "medium", "high"),
+    "medium": ("medium", "high"),
+    "high": ("high",),
+    "critical": ("high",),
+}
+
+# Closed states, excluded unless the caller asks for state="all". Written as
+# exclusions rather than an allow-list of open states: `ne` is honoured (verified
+# live) and an allow-list would silently drop a genuinely-open state we did not
+# think to enumerate — `awaitingAction` is a valid incident status.
+#
+# The two endpoints do NOT share a status vocabulary. Verified live:
+# `status eq 'active'` against alerts_v2 is HTTP 400 ("not a valid enumeration
+# type constant"), and `awaitingAction` is valid on incidents but not on alerts.
+# One shared constant would break one of the two tools.
+_INCIDENT_CLOSED = ("resolved", "redirected")  # redirected = merged into another incident
+_ALERT_CLOSED = ("resolved",)
+
+# "open" rather than "active": Graph's literal `active` status is narrower than
+# what these tools return (an `awaitingAction` or `inProgress` incident is open
+# but not active), and naming the argument after a status value it does not
+# match is the kind of contract-vs-behaviour gap this module was fixed for.
+_STATES = ("open", "all")
+
+# Only the fields the mappers below actually read. Cuts the alerts_v2 payload
+# from 71.5 KB to 1.9 KB for six alerts (measured live) — each unselected alert
+# drags its full `evidence[]` array along.
+_INCIDENT_SELECT = "id,displayName,severity,status,createdDateTime"
+_ALERT_SELECT = "id,title,severity,status,category,mitreTechniques,createdDateTime"
+
+# /security/incidents omits `alerts` entirely unless it is expanded, so the
+# correlated-alert count was always 0 and the escalation rule below could never
+# fire. Bare $expand costs ~15 KB per incident; the nested $select brings five
+# expanded incidents back to 4.9 KB (measured live).
+_INCIDENT_EXPAND = "alerts($select=id,severity,status,mitreTechniques)"
+
+# createdDateTime is the ONLY orderable field here. Verified live:
+# `$orderby=lastUpdateDateTime desc` is accepted and silently ignored (the same
+# trap Intune's managedDevices sets), and `$orderby=severity desc` is HTTP 400.
+# Ordering must be requested explicitly — despite the documentation, the
+# unordered page is NOT newest-first.
+_ORDER_BY = "createdDateTime desc"
+
 # Cap rows/items returned to keep payloads small-model-safe.
 _MAX_HUNT_ROWS = 50
 
@@ -59,8 +114,89 @@ def _sev(value: str) -> Severity:
 
 
 def _meets(sev: Severity, minimum: str) -> bool:
-    floor = _SEV.get(str(minimum).lower(), Severity.medium)
-    return _RANK[sev] >= _RANK[floor]
+    # Callers validate `minimum` against _MIN_RANK first, so index rather than
+    # .get(): a silent default is what broke severity_min in the first place.
+    return _RANK[sev] >= _MIN_RANK[minimum]
+
+
+def _bad_arg(name: str, value: str, allowed: Any) -> Finding:
+    """An unrecognized enum value is reported, never silently reinterpreted.
+
+    Both arguments are validated even though the MCP layer declares them as
+    Literals: a silently-defaulted argument is exactly the defect this module
+    was fixed for, and tools.py is also called directly (scripts/report_gather).
+    """
+    return Finding(
+        source="defender",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=f"Unsupported {name} '{value}'",
+        recommended_action=RecommendedAction(summary="Use one of: " + ", ".join(allowed) + "."),
+    )
+
+
+def _check(severity_min: str, state: str) -> Finding | None:
+    if severity_min not in _MIN_RANK:
+        return _bad_arg("severity_min", severity_min, _MIN_RANK)
+    if state not in _STATES:
+        return _bad_arg("state", state, _STATES)
+    return None
+
+
+def _query(
+    limit: int,
+    severity_min: str,
+    state: str,
+    closed: tuple[str, ...],
+    select: str,
+    expand: str = "",
+) -> dict[str, Any]:
+    """Params for a bounded, newest-first page filtered SERVER-side.
+
+    The severity floor and the open/closed state both go into $filter. Applying
+    either to an already-bounded page cannot reach the rows the bound excluded,
+    so a tenant whose first page was resolved noise reported "no high alerts"
+    while the high ones sat on page two.
+    """
+    clauses = []
+    if state != "all":
+        clauses += [f"status ne '{s}'" for s in closed]
+    severities = _SEV_AT_OR_ABOVE[severity_min]
+    if severities:
+        clauses.append("(" + " or ".join(f"severity eq '{s}'" for s in severities) + ")")
+    params: dict[str, Any] = {
+        "$top": limit,
+        "$count": "true",
+        "$orderby": _ORDER_BY,
+        "$select": select,
+    }
+    if clauses:
+        params["$filter"] = " and ".join(clauses)
+    if expand:
+        params["$expand"] = expand
+    return params
+
+
+def _truncation(page: dict[str, Any], shown: int, fetched: int) -> Finding | None:
+    """A "showing M of N" note built from the SERVER's filtered total.
+
+    $count reflects the $filter, so it counts what the caller asked for rather
+    than the whole collection (2,172 incidents on the validation tenant, of
+    which 5 were open).
+
+    Truncation is judged on `fetched` — how many rows the server handed back —
+    not on `shown`. With severity_min="critical" the server can only filter down
+    to `high` and the escalation refinement happens here, so shown < fetched is
+    normal and does NOT mean a page was cut short.
+    """
+    total = page.get("@odata.count")
+    if isinstance(total, int) and not isinstance(total, bool):
+        if total > fetched:
+            return more_available_finding("defender", shown=shown, total=total)
+        return None
+    if page.get("@odata.nextLink"):
+        return more_available_finding("defender", shown=shown)
+    return None
 
 
 async def get_secure_score(gc: GraphClient) -> list[Finding]:
@@ -110,18 +246,25 @@ async def get_secure_score(gc: GraphClient) -> list[Finding]:
 
 
 async def list_incidents(
-    gc: GraphClient, severity_min: str = "medium", limit: int = 25
+    gc: GraphClient, severity_min: str = "medium", limit: int = 25, state: str = "open"
 ) -> list[Finding]:
     limit = clamp_limit(limit)
+    bad = _check(severity_min, state)
+    if bad:
+        return [bad]
     try:
-        page = await gc.get("/security/incidents", params={"$top": limit})
+        page = await gc.get(
+            "/security/incidents",
+            params=_query(
+                limit, severity_min, state, _INCIDENT_CLOSED, _INCIDENT_SELECT, _INCIDENT_EXPAND
+            ),
+        )
     except GraphError as e:
         finding = map_graph_error(e, "defender", "SecurityIncident.Read.All", "Defender incidents")
         if finding:
             return [finding]
         raise
     raw = page.get("value", [])
-    has_more = bool(page.get("@odata.nextLink"))
     findings: list[Finding] = []
     for inc in raw:
         alerts = inc.get("alerts") or []
@@ -149,24 +292,30 @@ async def list_incidents(
             )
         )
     findings = findings[:limit]
-    if has_more:
-        findings.append(more_available_finding("defender", shown=len(findings)))
+    note = _truncation(page, len(findings), len(raw))
+    if note:
+        findings.append(note)
     return findings
 
 
 async def list_alerts(
-    gc: GraphClient, severity_min: str = "high", limit: int = 25
+    gc: GraphClient, severity_min: str = "high", limit: int = 25, state: str = "open"
 ) -> list[Finding]:
     limit = clamp_limit(limit)
+    bad = _check(severity_min, state)
+    if bad:
+        return [bad]
     try:
-        page = await gc.get("/security/alerts_v2", params={"$top": limit})
+        page = await gc.get(
+            "/security/alerts_v2",
+            params=_query(limit, severity_min, state, _ALERT_CLOSED, _ALERT_SELECT),
+        )
     except GraphError as e:
         finding = map_graph_error(e, "defender", "SecurityAlert.Read.All", "Defender alerts")
         if finding:
             return [finding]
         raise
     raw = page.get("value", [])
-    has_more = bool(page.get("@odata.nextLink"))
     findings: list[Finding] = []
     for alert in raw:
         sev = _sev(alert.get("severity", "medium"))
@@ -190,8 +339,9 @@ async def list_alerts(
             )
         )
     findings = findings[:limit]
-    if has_more:
-        findings.append(more_available_finding("defender", shown=len(findings)))
+    note = _truncation(page, len(findings), len(raw))
+    if note:
+        findings.append(note)
     return findings
 
 

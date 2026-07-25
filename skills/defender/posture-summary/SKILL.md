@@ -26,6 +26,8 @@ Base tool names (runtime may prefix — see the Defender server README):
 1. Call `get_secure_score` for the current Microsoft Secure Score (current/max
    and percentage).
 2. Call `list_incidents` with `severity_min: medium` to gather open incidents.
+   It already excludes resolved and redirected ones, so the count it returns is
+   the open count — do not filter it again by status.
 3. Aggregate: count incidents by **severity**; identify the top 2–3 by impact.
 4. Produce a brief rollup:
    - **Posture:** Secure Score X% (and what that band implies).
@@ -44,6 +46,9 @@ Base tool names (runtime may prefix — see the Defender server README):
 ## Pitfalls
 
 - Resist dumping every finding — leadership wants the signal, not the log.
+- **Zero open incidents is a real result** — say "no unresolved incidents at or
+  above medium", not "no data". If the rollup looks empty, try a lower
+  `severity_min` before reporting nothing.
 - A high Secure Score does not mean "no open incidents"; report both.
 - Numbers must match tool output exactly; do not round misleadingly.
 

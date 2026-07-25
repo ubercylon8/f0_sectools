@@ -19,27 +19,34 @@ Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-r
 
 ## `list_incidents`
 
-List Defender XDR incidents (correlated alert groups).
+List unresolved Defender XDR incidents (correlated alert groups), newest first.
 
 severity_min: one of info|low|medium|high|critical. limit: max incidents.
+Defaults to state="open" — excludes resolved incidents and ones redirected
+into another incident, which Defender retains indefinitely and which are
+already handled. Use state="all" for incident history.
 
 | Parameter | Type | Default |
 |---|---|---|
 | `severity_min` | `"info"` \| `"low"` \| `"medium"` \| `"high"` \| `"critical"` | `"medium"` |
 | `limit` | `integer` | `25` |
+| `state` | `"open"` \| `"all"` | `"open"` |
 
 Used by skills: [`triage-incident-cross-platform`](../../../skills/cross-platform/triage-incident-cross-platform/SKILL.md), [`defender-posture-summary`](../../../skills/defender/posture-summary/SKILL.md), [`triage-defender-incident`](../../../skills/defender/triage-incident/SKILL.md), [`intune-device-triage`](../../../skills/intune/device-triage/SKILL.md)
 
 ## `list_alerts`
 
-List Defender XDR alerts (alerts_v2).
+List unresolved Defender XDR alerts (alerts_v2), newest first.
 
 severity_min: one of info|low|medium|high|critical. limit: max alerts.
+Defaults to state="open" — excludes resolved alerts, which are already
+handled and which dominate a mature tenant. Use state="all" for alert history.
 
 | Parameter | Type | Default |
 |---|---|---|
 | `severity_min` | `"info"` \| `"low"` \| `"medium"` \| `"high"` \| `"critical"` | `"high"` |
 | `limit` | `integer` | `25` |
+| `state` | `"open"` \| `"all"` | `"open"` |
 
 Used by skills: [`triage-incident-cross-platform`](../../../skills/cross-platform/triage-incident-cross-platform/SKILL.md), [`triage-defender-incident`](../../../skills/defender/triage-incident/SKILL.md), [`intune-device-triage`](../../../skills/intune/device-triage/SKILL.md)
 

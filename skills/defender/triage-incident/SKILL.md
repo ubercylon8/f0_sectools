@@ -26,10 +26,15 @@ Base tool names (your runtime may prefix them — Hermes uses
 ## Procedure
 
 1. Call `list_incidents` with a `severity_min` that matches the ask
-   (`medium` by default; `high` if the user only wants what matters now).
+   (`medium` by default; `high` if the user only wants what matters now). It
+   returns **only unresolved incidents, newest first** — Defender retains
+   resolved ones (and ones redirected into another incident) indefinitely, and
+   they are already handled. Pass `state: "all"` only when the operator
+   explicitly asks for incident history.
 2. Identify the incident(s) of interest. Note each one's **severity**,
    **alert count**, **status**, and the entity it concerns.
-3. Call `list_alerts` (`severity_min: high`) to pull the correlated alerts.
+3. Call `list_alerts` (`severity_min: high`) to pull the correlated alerts. It
+   likewise defaults to unresolved alerts only.
    Note each alert's **title**, **category**, and **MITRE techniques**
    (the `references` of type `mitre`).
 4. Build a tight summary per incident: *what happened → affected entity →
@@ -48,6 +53,11 @@ Base tool names (your runtime may prefix them — Hermes uses
 
 ## Pitfalls
 
+- **An empty result is an answer, not a failure.** On a well-run tenant most
+  incidents are resolved, so "no unresolved incidents at or above `medium`" is a
+  normal and useful finding — report it plainly. Before concluding there is
+  nothing to see, consider lowering `severity_min`: the open incidents may all
+  sit below the floor you asked for.
 - High-volume tenants return many incidents; always bound with `severity_min`.
 - DLP-policy incidents are common and often low-signal — don't over-escalate.
 - A `critical` incident here means a high-severity incident correlating several

@@ -68,28 +68,35 @@ async def get_secure_score() -> list[dict[str, Any]]:
 async def list_incidents(
     severity_min: Literal["info", "low", "medium", "high", "critical"] = "medium",
     limit: int = 25,
+    state: Literal["open", "all"] = "open",
 ) -> list[dict[str, Any]]:
-    """List Defender XDR incidents (correlated alert groups).
+    """List unresolved Defender XDR incidents (correlated alert groups), newest first.
 
     severity_min: one of info|low|medium|high|critical. limit: max incidents.
+    Defaults to state="open" — excludes resolved incidents and ones redirected
+    into another incident, which Defender retains indefinitely and which are
+    already handled. Use state="all" for incident history.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
-        return _render(await tools.list_incidents(gc, severity_min, limit))
+        return _render(await tools.list_incidents(gc, severity_min, limit, state))
 
 
 @mcp.tool()
 async def list_alerts(
     severity_min: Literal["info", "low", "medium", "high", "critical"] = "high",
     limit: int = 25,
+    state: Literal["open", "all"] = "open",
 ) -> list[dict[str, Any]]:
-    """List Defender XDR alerts (alerts_v2).
+    """List unresolved Defender XDR alerts (alerts_v2), newest first.
 
     severity_min: one of info|low|medium|high|critical. limit: max alerts.
+    Defaults to state="open" — excludes resolved alerts, which are already
+    handled and which dominate a mature tenant. Use state="all" for alert history.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
-        return _render(await tools.list_alerts(gc, severity_min, limit))
+        return _render(await tools.list_alerts(gc, severity_min, limit, state))
 
 
 @mcp.tool()

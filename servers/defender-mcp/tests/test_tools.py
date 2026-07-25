@@ -595,3 +595,191 @@ async def test_list_alerts_bogus_severity_min_is_graceful():
         async with GraphClient(CFG) as gc:
             findings = await list_alerts(gc, severity_min="bogus")
     assert findings  # did not raise; degraded to the default floor
+
+
+def _captured_params(router, path: str) -> dict[str, str]:
+    """Query params the tool actually sent to Graph, for the last call to `path`.
+
+    Must be called INSIDE the respx.mock block — the context manager clears
+    router.calls on exit.
+    """
+    for call in reversed(router.calls):
+        if path in str(call.request.url):
+            return dict(call.request.url.params)
+    raise AssertionError(f"no request captured for {path}")
+
+
+async def _call(router, path, tool, body=None, **kwargs):
+    """Run `tool` against a mocked `path` and return (findings, params sent)."""
+    _token(router)
+    router.get(GRAPH + path).mock(
+        return_value=httpx.Response(200, json=body if body is not None else {"value": []})
+    )
+    async with GraphClient(CFG) as gc:
+        findings = await tool(gc, **kwargs)
+    return findings, _captured_params(router, path)
+
+
+@pytest.mark.asyncio
+async def test_list_incidents_filters_and_orders_server_side():
+    # Filtering an already-bounded page cannot reach rows the bound excluded:
+    # a tenant whose first page is resolved noise reported "no open incidents".
+    with respx.mock as router:
+        _, params = await _call(router, "/security/incidents", list_incidents)
+    assert params["$filter"] == (
+        "status ne 'resolved' and status ne 'redirected' "
+        "and (severity eq 'medium' or severity eq 'high')"
+    )
+    assert params["$orderby"] == "createdDateTime desc"
+    assert params["$count"] == "true"
+    assert params["$expand"] == "alerts($select=id,severity,status,mitreTechniques)"
+    assert "displayName" in params["$select"]
+
+
+@pytest.mark.asyncio
+async def test_list_alerts_uses_the_alert_status_vocabulary():
+    # alerts_v2 rejects `status eq 'active'` with HTTP 400 (verified live), and
+    # `awaitingAction` is valid on incidents but not on alerts — the two
+    # endpoints must not share one status constant.
+    with respx.mock as router:
+        _, params = await _call(router, "/security/alerts_v2", list_alerts)
+    assert params["$filter"] == "status ne 'resolved' and (severity eq 'high')"
+    assert "active" not in params["$filter"]
+    assert "redirected" not in params["$filter"]
+    assert params["$orderby"] == "createdDateTime desc"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path,tool",
+    [("/security/incidents", list_incidents), ("/security/alerts_v2", list_alerts)],
+)
+async def test_state_all_reaches_history(path, tool):
+    with respx.mock as router:
+        _, params = await _call(router, path, tool, state="all")
+    assert "status ne" not in params["$filter"]
+    assert params["$orderby"] == "createdDateTime desc"  # history stays newest-first
+
+
+@pytest.mark.asyncio
+async def test_severity_min_info_emits_no_severity_clause():
+    # Regression: `info` was absent from the severity lookup and silently became
+    # `medium`, dropping exactly the low/info rows the caller asked for.
+    with respx.mock as router:
+        _, params = await _call(router, "/security/alerts_v2", list_alerts, severity_min="info")
+    assert params["$filter"] == "status ne 'resolved'"
+    assert "severity" not in params["$filter"]
+
+
+@pytest.mark.asyncio
+async def test_severity_min_critical_asks_graph_for_high_then_refines():
+    # Graph has no `critical`; ours is derived from a high incident correlating
+    # many alerts. Previously `critical` was absent from the lookup and silently
+    # became `medium`, returning medium and high items the caller excluded.
+    body = {
+        "value": [
+            {"id": "1", "displayName": "Correlated", "severity": "high",
+             "status": "active", "alerts": [{}, {}, {}, {}]},
+            {"id": "2", "displayName": "Lone high", "severity": "high",
+             "status": "active", "alerts": [{}]},
+        ]
+    }
+    with respx.mock as router:
+        findings, params = await _call(
+            router, "/security/incidents", list_incidents, body, severity_min="critical"
+        )
+    assert params["$filter"].endswith("(severity eq 'high')")
+    titles = [f.title for f in findings]
+    assert titles == ["Correlated"]  # the un-escalated high incident is excluded
+    assert findings[0].severity.value == "critical"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path,tool",
+    [("/security/incidents", list_incidents), ("/security/alerts_v2", list_alerts)],
+)
+async def test_unsupported_severity_min_is_reported_not_reinterpreted(path, tool):
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        route = router.get(GRAPH + path).mock(
+            return_value=httpx.Response(200, json={"value": []})
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await tool(gc, severity_min="urgent")
+    assert not route.called  # no query is sent on an unusable filter
+    assert "Unsupported severity_min" in findings[0].title
+    assert "critical" in findings[0].recommended_action.summary
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path,tool",
+    [("/security/incidents", list_incidents), ("/security/alerts_v2", list_alerts)],
+)
+async def test_unsupported_state_is_reported_not_reinterpreted(path, tool):
+    # `state` is validated too: "active" is a plausible guess (Entra's tools use
+    # that word) and silently treating it as "open" would be the same
+    # contract-vs-behaviour gap this module was fixed for.
+    with respx.mock(assert_all_called=False) as router:
+        _token(router)
+        route = router.get(GRAPH + path).mock(
+            return_value=httpx.Response(200, json={"value": []})
+        )
+        async with GraphClient(CFG) as gc:
+            findings = await tool(gc, state="active")
+    assert not route.called
+    assert "Unsupported state 'active'" in findings[0].title
+    assert findings[0].recommended_action.summary == "Use one of: open, all."
+
+
+@pytest.mark.asyncio
+async def test_no_truncation_note_when_the_page_was_complete():
+    # severity_min="critical" filters `high` down to the escalated ones HERE, so
+    # shown < fetched is normal. Truncation is judged on what the SERVER
+    # returned, not on what survived the refinement.
+    body = {
+        "value": [
+            {"id": "1", "displayName": "Correlated", "severity": "high",
+             "status": "active", "alerts": [{}, {}, {}, {}]},
+            {"id": "2", "displayName": "Lone high", "severity": "high",
+             "status": "active", "alerts": [{}]},
+        ],
+        "@odata.count": 2,
+    }
+    with respx.mock as router:
+        findings, _ = await _call(
+            router, "/security/incidents", list_incidents, body, severity_min="critical"
+        )
+    assert len(findings) == 1  # the escalated one, and NO "more available" note
+    assert "Showing" not in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_incident_alert_count_requires_the_expand():
+    # /security/incidents omits `alerts` entirely without $expand, so the count
+    # was always 0 and the ">3 alerts -> critical" rule could never fire. The
+    # old fixture hand-fed an `alerts` array the real API never sends.
+    unexpanded = {"value": [{"id": "1", "displayName": "No expand", "severity": "high",
+                             "status": "active"}]}
+    with respx.mock as router:
+        findings, params = await _call(
+            router, "/security/incidents", list_incidents, unexpanded
+        )
+    assert params["$expand"].startswith("alerts(")  # the expand IS requested
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["alerts"] == "0"
+    assert findings[0].severity.value == "high"  # no alerts -> no escalation
+
+
+@pytest.mark.asyncio
+async def test_truncation_note_reports_the_filtered_total():
+    # $count reflects the $filter, so it counts what the caller asked for rather
+    # than the whole collection (3,151 alerts on the validation tenant, 6 open).
+    body = {
+        "value": [{"id": "a1", "title": "T", "severity": "high", "status": "new"}],
+        "@odata.count": 6,
+    }
+    with respx.mock as router:
+        findings, _ = await _call(router, "/security/alerts_v2", list_alerts, body, limit=1)
+    assert "Showing 1 of 6" in findings[-1].title
