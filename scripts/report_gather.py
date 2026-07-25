@@ -98,10 +98,15 @@ def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
         return MetricCard(pillar, "not assessed", "not-assessed")
     f = real[0]
     headline = next((e.value for e in f.evidence if e.key == "headline"), "")
-    value = headline or f.title[:32]  # defensive fallback if a tool lacks a headline
+    if not headline:
+        # A real finding without a headline is anomalous (e.g. an unclassified
+        # platform-error finding not caught by is_not_assessed) — render it
+        # unquantified rather than a truncated title at tile size or a misleading
+        # "strong" state. The full title still shows in the detail line.
+        return MetricCard(pillar, "—", "not-assessed", detail=f.title)
     state = {"critical": "exposure", "high": "needs-work", "medium": "needs-work"}.get(
         f.severity.value, "strong")
-    return MetricCard(pillar, value, state, detail=f.title)
+    return MetricCard(pillar, headline, state, detail=f.title)
 
 
 async def _run_pillar(pillar: str, factory, window_hours: int) -> tuple[str, list[Finding]]:
