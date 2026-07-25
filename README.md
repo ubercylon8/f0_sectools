@@ -25,7 +25,7 @@ Eight MCP servers — **all live-validated against a real tenant** — exposing 
 
 **51 registered tools** ([full tool reference](docs/reference/tools/README.md) — generated from code, drift-guarded in CI). Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 27 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
 
-**Persona posture reports** — the `generate-report` skill (+ `scripts/gen_report.py`) turns gathered findings into a shareable **Markdown + PDF** deliverable in **English or Spanish**: an executive briefing for the CISO or a dense operational report (with evidence + MITRE) for the other personas, ending with open questions for the operator. Grounded in real, redacted data and produced entirely on the host. See [example workflows](docs/user-guide/workflows.md).
+**Persona posture reports** — the `generate-report` skill (+ `scripts/gen_report.py`) turns gathered findings into a shareable deliverable in **English or Spanish**: **Markdown and a standalone, self-contained HTML page** every time, plus an optional **PDF**. An executive briefing for the CISO, or a dense operational report (with evidence + MITRE) for the other personas, ending with open questions for the operator. The agent writes the judgment; the engine re-gathers and writes every number, so no figure is ever transcribed by a model. Grounded in real, redacted data and produced entirely on the host. See [how to generate one](docs/user-guide/workflows.md#generate-a-posture-report-any-persona--markdown-html--pdf-enes).
 
 ## For security teams
 

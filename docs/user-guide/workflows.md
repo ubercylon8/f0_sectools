@@ -34,12 +34,43 @@ local model — it is six sequential calls plus synthesis.
 > postura." · (or invoke the `generate-report` skill)
 
 The `generate-report` skill produces a **shareable deliverable** — a
-conversation starter, not a chat answer. The agent gathers the persona's
-findings (for the CISO, via the risk-rollup above), authors the narrative
-(executive summary, per-risk framing, and **open questions for you to answer**)
-in the chosen language, then runs the deterministic engine — which re-gathers
-the data itself so every number is code-sourced and redacted, never transcribed
-by the model:
+conversation starter, not a chat answer.
+
+**The report is written in two halves, and that split is the whole design.** You
+(or the agent) write the *judgment*: the executive summary, the risk framing, and
+the open questions. The engine writes every *number*, by re-gathering the data
+from the servers itself — fresh and redacted. A model never transcribes a figure
+into a report, so no number in it can be invented.
+
+### Just ask the agent
+
+Say "As a CISO, generate my posture report" in any skills-aware runtime (Hermes,
+opencode, Claude Code, pi). The agent gathers the findings, writes the narrative
+for you, runs the engine, and hands back the file path. Nothing below is needed.
+
+### Or run it yourself
+
+**1. Write the narrative file.** This is the judgment half, and it is the one
+step the command cannot do for you. Create a Markdown file with these three
+headings — the same template ships at
+`skills/reports/generate-report/references/narrative-template.md`:
+
+```markdown
+## Executive Summary
+One paragraph: the overall read, and the one or two risks that matter this window.
+
+## Risk Framing
+A few lines per top risk: why it matters and what it intersects. Optional.
+
+## Open Questions
+Two to four questions for the *operator* to answer — real decisions, not rhetorical.
+```
+
+Write it in the same language you will pass to `--lang`. **Do not put numbers in
+it** — a number you type by hand is not grounded in a tool result, and the data
+sections supply them anyway.
+
+**2. Run the engine.**
 
 ```bash
 uv run python scripts/gen_report.py \
@@ -48,26 +79,32 @@ uv run python scripts/gen_report.py \
 ```
 
 `--persona` is one of `ciso`, `detection-engineer`, `threat-hunter`,
-`security-engineer`; `--lang` is `en` or `es`. It writes `report.md` and a
-standalone, self-contained `report.html` (open in any browser) always; with
-`--pdf` it also writes `report.pdf` (WeasyPrint renders the same HTML). Each
-persona's report carries its own title — Executive Risk Briefing, Detection
-Coverage Report, Threat Hunting Report, or Security Hardening Report — and now
-every persona opens with a "Posture at a glance" section: six headline pillar
-metrics for the **CISO**, per-group finding-count tiles for the operational
-personas. A dark platform degrades to **"not assessed"** and the report still
-generates. The **CISO** report is otherwise executive-restrained (compact
-one-line top risks). The **operational** personas gather their own working
-data and render it as dense finding rows with evidence and MITRE technique
-references: the **detection engineer** gets Defender alerts and incidents,
-LimaCharlie D&R rules and endpoint detections, and ProjectAchilles weak
-techniques; the **threat hunter** gets incidents, MITRE-bearing alerts,
-endpoint detections and sensor coverage; the **security engineer** gets Secure
-Score, Entra conditional-access/privileged-role/risky-user posture, Intune
-compliance and stale devices, and Tenable exposure.
-Every report ends with a coverage note and open questions for the operator. PDF
-needs the optional `[reports]` extra — see
+`security-engineer`; `--lang` is `en` or `es`. `--persona`, `--narrative` and
+`--out` are required.
+
+**3. Read the output.** It always writes `report.md` and a standalone,
+self-contained `report.html` — no external assets, so it opens in any browser and
+can be sent as-is. With `--pdf` it also writes `report.pdf` (WeasyPrint renders
+that same HTML), which needs the optional `[reports]` extra — see
 [getting started](getting-started.md#optional-pdf-reports).
+
+### What each persona produces
+
+Every report carries its own title, opens with a "Posture at a glance" section,
+and ends with a coverage note and the open questions. A platform that is dark
+(unlicensed, no permission) degrades to **"not assessed"** and the report still
+generates.
+
+| Persona | Title | Gathers |
+|---|---|---|
+| `ciso` | Executive Risk Briefing | The six-pillar rollup above, as headline metric tiles + compact one-line top risks |
+| `detection-engineer` | Detection Coverage Report | Defender alerts and incidents, LimaCharlie D&R rules and endpoint detections, ProjectAchilles weak techniques |
+| `threat-hunter` | Threat Hunting Report | Incidents, MITRE-bearing alerts, endpoint detections, sensor coverage |
+| `security-engineer` | Security Hardening Report | Secure Score, Entra conditional-access / privileged-role / risky-user posture, Intune compliance and stale devices, Tenable exposure |
+
+The CISO report is executive-restrained; the three operational personas render
+dense finding rows with evidence and MITRE technique references, and their
+at-a-glance tiles are per-group finding counts rather than headline metrics.
 
 ## Incident triage (SOC analyst / threat hunter)
 
