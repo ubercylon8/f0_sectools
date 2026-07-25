@@ -13,7 +13,7 @@ def test_gather_degrades_when_platform_unconfigured(monkeypatch):
     async def boom(window_hours):
         raise ValueError("Missing required environment variables: DEFENDER_TENANT_ID")
 
-    monkeypatch.setattr(report_gather, "_PILLAR_FACTORIES",
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso",
                         {"Config hardening": boom, "Vulnerability exposure": boom})
     findings, meta = asyncio.run(report_gather.gather("ciso", 168))
     assert isinstance(meta, ScopeMeta)
@@ -33,7 +33,7 @@ def test_gather_collects_healthy_pillar(monkeypatch):
                         severity=Severity.info, title="Secure Score: 62%",
                         evidence=[{"key": "secure_score_pct", "value": "62"}])]
 
-    monkeypatch.setattr(report_gather, "_PILLAR_FACTORIES", {"Config hardening": ok})
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"Config hardening": ok})
     findings, meta = asyncio.run(report_gather.gather("ciso", 168))
     assert "Config hardening" in meta.assessed
     assert any("62%" in f.title for f in findings)
@@ -69,7 +69,7 @@ def test_gather_redacts_secret_hinting_evidence_from_findings(monkeypatch):
             ],
         )]
 
-    monkeypatch.setattr(report_gather, "_PILLAR_FACTORIES", {"Config hardening": leaky})
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"Config hardening": leaky})
     findings, _meta = asyncio.run(report_gather.gather("ciso", 168))
     ev = {e.key: e.value for f in findings for e in f.evidence}
     assert ev["client_secret"] == "«redacted»"
@@ -88,3 +88,81 @@ def test_metric_from_no_headline_is_unquantified():
     assert card.value == "—"
     assert card.state == "not-assessed"
     assert card.detail == f.title
+
+
+def test_gather_map_has_all_four_personas():
+    assert set(report_gather.GATHER_MAP) == {
+        "ciso", "detection_engineer", "threat_hunter", "security_engineer",
+    }
+
+
+def test_ciso_map_is_the_six_pillars():
+    assert list(report_gather.GATHER_MAP["ciso"]) == [
+        "Config hardening", "Attack validation", "Vulnerability exposure",
+        "Device compliance", "Data risk", "Endpoint coverage",
+    ]
+
+
+def test_detection_engineer_gathers_its_own_groups():
+    groups = set(report_gather.GATHER_MAP["detection_engineer"])
+    assert groups == {
+        "Alerts (MITRE)", "Incidents", "Detection rules",
+        "Endpoint detections", "Weak techniques",
+    }
+    # it must NOT be the CISO pillar set
+    assert "Data risk" not in groups
+
+
+def test_security_engineer_gathers_identity_and_exposure():
+    groups = set(report_gather.GATHER_MAP["security_engineer"])
+    assert {"Conditional access", "Privileged roles", "Risky users",
+            "Vulnerability exposure", "Device compliance"} <= groups
+
+
+def test_threat_hunter_gathers_incidents_and_detections():
+    groups = set(report_gather.GATHER_MAP["threat_hunter"])
+    assert {"Incidents", "Alerts (MITRE)", "Endpoint detections",
+            "Endpoint coverage"} <= groups
+
+
+def test_gather_runs_only_the_personas_groups(monkeypatch):
+    async def ok(window_hours):
+        return [Finding(source="defender", finding_type=FindingType.alert,
+                        severity=Severity.high, title="Suspicious PowerShell")]
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "detection_engineer",
+                        {"Alerts (MITRE)": ok, "Weak techniques": ok})
+    findings, meta = asyncio.run(report_gather.gather("detection-engineer", 168))
+    assert set(meta.assessed) == {"Alerts (MITRE)", "Weak techniques"}
+    assert len(findings) == 2
+
+
+def test_gather_rejects_unknown_persona():
+    import pytest
+    with pytest.raises(ValueError, match="Unknown persona"):
+        asyncio.run(report_gather.gather("nonsense", 168))
+
+
+def test_operational_persona_gets_no_metric_tiles(monkeypatch):
+    # Operational groups return lists, not one headline number — a tile would be
+    # meaningless, so pillar_metrics stays empty for them (CISO-only).
+    async def ok(window_hours):
+        return [Finding(source="defender", finding_type=FindingType.alert,
+                        severity=Severity.high, title="Suspicious PowerShell")]
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "threat_hunter", {"Incidents": ok})
+    _findings, meta = asyncio.run(report_gather.gather("threat-hunter", 168))
+    assert meta.pillar_metrics == []
+
+
+def test_ciso_still_gets_metric_tiles(monkeypatch):
+    from f0_sectools_core.schema.findings import Evidence
+
+    async def ok(window_hours):
+        return [Finding(source="defender", finding_type=FindingType.posture,
+                        severity=Severity.low, title="Microsoft Secure Score: 90%",
+                        evidence=[Evidence(key="headline", value="90%")])]
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"Config hardening": ok})
+    _findings, meta = asyncio.run(report_gather.gather("ciso", 168))
+    assert [m.value for m in meta.pillar_metrics] == ["90%"]
