@@ -288,3 +288,42 @@ def test_unknown_tier_fails_loud():
     )
     with pytest.raises(ValueError, match="unknown report tier"):
         to_markdown(content)
+
+
+def test_split_headline_isolates_the_number():
+    from f0_sectools_core.reports.emit import _split_headline
+
+    assert _split_headline("6 DLP alerts") == ("6", "DLP alerts")
+    assert _split_headline("90%") == ("90%", "")
+    assert _split_headline("51% blocked") == ("51%", "blocked")
+    assert _split_headline("317 critical") == ("317", "critical")
+    assert _split_headline("67% compliant") == ("67%", "compliant")
+    assert _split_headline("113 online") == ("113", "online")
+    assert _split_headline("1,507 devices") == ("1,507", "devices")
+    # No leading number: the big slot never holds a sentence.
+    assert _split_headline("—") == ("—", "")
+    assert _split_headline("not assessed") == ("—", "not assessed")
+
+
+def test_metric_tile_renders_number_big_and_qualifier_small():
+    from f0_sectools_core.reports.content import (
+        BlockKind,
+        MetricCard,
+        ReportContent,
+        Section,
+    )
+    from f0_sectools_core.reports.emit import to_html, to_markdown
+
+    content = ReportContent(
+        persona="ciso", language="en", tier="executive",
+        title="Executive Risk Briefing", subtitle="Prepared for the CISO",
+        sections=[Section(BlockKind.metric_grid, "Posture at a glance", "executive",
+                          metrics=[MetricCard("Data risk", "6 DLP alerts", "needs-work",
+                                              detail="6 DLP alert(s) in the last 168h")])],
+    )
+    html = to_html(content)
+    # the big value slot holds ONLY the number; the qualifier is its own small span
+    assert '<div class="metric__value">6<span class="metric__unit">DLP alerts</span>' in html
+    assert ".metric__unit" in html  # styled small in the inlined CSS
+    # Markdown bolds only the number, qualifier stays plain
+    assert "- **6** DLP alerts — Data risk (needs-work)" in to_markdown(content)

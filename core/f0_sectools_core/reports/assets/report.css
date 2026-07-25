@@ -23,6 +23,7 @@ body {
 .metric-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:22px 26px; }
 .metric__label { font-size:9px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); font-weight:700; }
 .metric__value { font-size:34px; font-weight:700; color:var(--navy); line-height:1.05; margin:3px 0; }
+.metric__unit { font-size:12px; font-weight:600; color:var(--muted); margin-left:5px; white-space:nowrap; }
 .metric__state { font-size:11px; font-weight:600; }
 .metric__detail { font-size:10px; color:var(--muted); margin-top:3px; }
 .metric__state--strong { color:var(--sev-low); }
