@@ -1,4 +1,4 @@
-# Security Operations Report
+# Detection Coverage Report
 
 *Prepared for Detection Engineering · Contoso · Trailing 7 days · Generated locally by f0_sectools*
 

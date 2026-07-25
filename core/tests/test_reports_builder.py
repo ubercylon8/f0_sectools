@@ -110,3 +110,16 @@ def test_golden_detection_en_frozen():
     narrative = (FIX / "narrative_detection_en.md").read_text()
     out = build_report("detection-engineer", "en", narrative, _detection_findings(), _op_scope())
     assert out.markdown == (FIX / "golden_detection_en.md").read_text()
+
+
+def test_each_persona_gets_its_own_title():
+    narrative = "## Executive Summary\nHi.\n"
+    titles = {
+        p: build_report(p, "en", narrative, [], _scope()).markdown.splitlines()[0]
+        for p in ("ciso", "detection-engineer", "threat-hunter", "security-engineer")
+    }
+    assert titles["ciso"] == "# Executive Risk Briefing"
+    assert titles["detection-engineer"] == "# Detection Coverage Report"
+    assert titles["threat-hunter"] == "# Threat Hunting Report"
+    assert titles["security-engineer"] == "# Security Hardening Report"
+    assert len(set(titles.values())) == 4  # all distinct

@@ -25,9 +25,8 @@ def _normalize_persona(persona: str) -> str:
     return key
 
 
-def _title(lang: str, tier: str) -> str:
-    key = "report_title_executive" if tier == "executive" else "report_title_operational"
-    return label(lang, key)
+def _title(lang: str, persona: str) -> str:
+    return label(lang, f"report_title_{persona}")
 
 
 def _subtitle(lang: str, persona: str, meta: ScopeMeta) -> str:
@@ -93,7 +92,7 @@ def build_report(
         persona=persona,
         language=language,
         tier=tier,
-        title=_title(language, tier),
+        title=_title(language, persona),
         subtitle=_subtitle(language, persona, scope_meta),
         sections=sections,
     )
