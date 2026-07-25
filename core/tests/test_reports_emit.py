@@ -58,7 +58,7 @@ def test_md_metric_line_leads_with_compact_value_and_carries_detail():
     assert "- **62%** — Config hardening (needs-work) · Microsoft Secure Score 1130/1816" in md
 
 
-def test_html_metric_tile_has_value_and_detail():
+def test_html_metric_tile_has_label_value_state_and_detail():
     m = MetricCard("Config hardening", "62%", "needs-work",
                     detail="Microsoft Secure Score 1130/1816")
     content = ReportContent(
@@ -68,13 +68,27 @@ def test_html_metric_tile_has_value_and_detail():
                           metrics=[m])],
     )
     html = to_html(content)
+    assert '<div class="metric__label">Config hardening</div>' in html
     assert '<div class="metric__value">62%</div>' in html
+    assert '<div class="metric__state metric__state--needs-work">needs-work</div>' in html
     assert '<div class="metric__detail">Microsoft Secure Score 1130/1816</div>' in html
+
+
+def test_html_wraps_body_in_report_document_card():
+    html = to_html(_content())
+    assert html.startswith("<!doctype html>")
+    assert '<div class="report">' in html
+    # the cover + sections live inside the wrapper, before </body>
+    body = html.split("<div class=\"report\">", 1)[1]
+    assert "report__cover" in body
+    assert body.rstrip().endswith("</div></body></html>")
 
 
 def test_html_is_self_contained_and_has_severity_class():
     html = to_html(_content())
     assert "<style>" in html and "@page" in html          # inlined CSS
+    assert "@media print" in html
+    assert ".metric" in html
     assert "report--executive" in html
     assert "metric__value" in html
     head = html.split("</style>")[0].replace("https://", "")

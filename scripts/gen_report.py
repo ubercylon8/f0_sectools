@@ -31,7 +31,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--tenant-label", default="the organization")
     p.add_argument(
         "--out", required=True, type=Path,
-        help="Output basepath (writes <out>.md, <out>.pdf).",
+        help="Output basepath (writes <out>.md and <out>.html always; <out>.pdf with --pdf).",
     )
     p.add_argument("--pdf", action="store_true")
     return p.parse_args()
@@ -50,6 +50,9 @@ async def _main() -> None:
     md_path = args.out.with_suffix(".md")
     md_path.write_text(out.markdown, encoding="utf-8")
     print(f"wrote {md_path}")
+    html_path = args.out.with_suffix(".html")
+    html_path.write_text(out.html, encoding="utf-8")
+    print(f"wrote {html_path}")
     if args.pdf:
         try:
             pdf = to_pdf(out.html)

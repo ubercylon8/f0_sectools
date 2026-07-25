@@ -1,52 +1,46 @@
-/* f0_sectools report theme — two tiers share brand + severity palette. */
+/* f0_sectools report theme — one stylesheet for screen (.html) and print (PDF). */
 :root {
-  --navy: #0f1830;
-  --gold: #d4a24e;
-  --ink: #1a1f2b;
-  --muted: #667;
-  --rule: #eef0f4;
-  --sev-critical: #a11;
-  --sev-high: #a6641b;
-  --sev-medium: #8a6d1b;
-  --sev-low: #2f7d4f;
-  --sev-info: #6e7781;
+  --navy:#0f1830; --gold:#d4a24e; --ink:#1a1f2b; --body:#26303f; --muted:#8a93a6; --rule:#eef0f4;
+  --sev-critical:#a11; --sev-high:#a6641b; --sev-medium:#8a6d1b; --sev-low:#2f7d4f; --sev-info:#6e7781;
 }
-@page { size: A4; margin: 18mm 16mm; }
-* { box-sizing: border-box; }
+* { box-sizing:border-box; }
 body {
-  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: var(--ink); line-height: 1.5; font-size: 12pt; margin: 0;
+  font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:var(--body); line-height:1.55; font-size:13.5px; margin:0; background:#eaedf3;
 }
-.report__cover {
-  background: var(--navy); color: #fff; padding: 26px 30px;
-  border-bottom: 3px solid var(--gold);
+.report {
+  max-width:760px; margin:24px auto; background:#fff; color:var(--ink);
+  border-radius:8px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,.16);
 }
-.report__kicker { font-size: 9pt; letter-spacing: 2.5px; color: var(--gold); font-weight: 700; }
-.report__title { font-size: 22pt; font-weight: 600; margin-top: 10px; }
-.report__subtitle { font-size: 11pt; color: #9fb0d0; margin-top: 10px; }
-.report__section { padding: 20px 30px; border-top: 1px solid var(--rule); }
-.report__h {
-  font-size: 10pt; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
-  color: #8892a6; margin: 0 0 10px;
-}
-/* Executive tier: big-number metric grid. */
-.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 24px; }
-.metric__value { font-size: 26pt; font-weight: 700; color: var(--navy); }
-.metric__label { font-size: 10pt; color: var(--muted); }
-.metric__state--strong { color: var(--sev-low); }
-.metric__state--needs-work { color: var(--sev-high); }
-.metric__state--exposure { color: var(--sev-critical); }
-.metric__state--not-assessed { color: var(--muted); }
-/* Operational tier: dense finding rows with a severity color-bar. */
-.finding { border-left: 4px solid var(--sev-info); padding: 6px 10px; margin-bottom: 6px; background: #f6f8fa; }
-.finding--critical { border-left-color: var(--sev-critical); background: #faf0f0; }
-.finding--high { border-left-color: var(--sev-high); background: #fdf7e6; }
-.finding--medium { border-left-color: var(--sev-medium); background: #fdf9ee; }
-.finding--low { border-left-color: var(--sev-low); }
-.finding__title { font-size: 11pt; font-weight: 700; }
-.finding__meta { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9pt; color: #666; margin-top: 2px; }
-.finding__evidence { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9pt; color: #555; margin-top: 1px; }
-.oq { border-left: 3px solid var(--gold); background: #fdf8ef; padding: 10px 14px; margin: 8px 0; }
-.coverage { background: #f8f9fb; }
-.provenance { font-size: 9pt; color: #8892a6; }
-.report--operational .report__title { font-size: 18pt; }
+.report__cover { background:var(--navy); color:#fff; padding:30px 34px; border-bottom:3px solid var(--gold); }
+.report__kicker { font-size:10px; letter-spacing:2.5px; color:var(--gold); font-weight:700; }
+.report__title { font-size:26px; font-weight:600; margin-top:11px; letter-spacing:-.2px; }
+.report__subtitle { font-size:12.5px; color:#9fb0d0; margin-top:11px; line-height:1.5; }
+.report__section { padding:22px 34px; border-top:1px solid var(--rule); }
+.report__h { font-size:10.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--muted); margin:0 0 12px; }
+.report__section p { margin:0; font-size:13.5px; color:var(--body); }
+/* Metric tiles — Direction A (label · big number · state · detail) */
+.metric-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:22px 26px; }
+.metric__label { font-size:9px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.metric__value { font-size:34px; font-weight:700; color:var(--navy); line-height:1.05; margin:3px 0; }
+.metric__state { font-size:11px; font-weight:600; }
+.metric__detail { font-size:10px; color:var(--muted); margin-top:3px; }
+.metric__state--strong { color:var(--sev-low); }
+.metric__state--needs-work { color:var(--sev-high); }
+.metric__state--exposure { color:var(--sev-critical); }
+.metric__state--not-assessed { color:var(--muted); }
+/* Finding rows — operational */
+.finding { border-left:4px solid var(--sev-info); padding:7px 11px; margin-bottom:7px; background:#f6f8fa; border-radius:0 4px 4px 0; }
+.finding--critical { border-left-color:var(--sev-critical); background:#faf0f0; }
+.finding--high { border-left-color:var(--sev-high); background:#fdf7e6; }
+.finding--medium { border-left-color:var(--sev-medium); background:#fdf9ee; }
+.finding--low { border-left-color:var(--sev-low); }
+.finding__title { font-size:13px; font-weight:700; }
+.finding__meta { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#667; margin-top:2px; }
+.finding__evidence { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#556; margin-top:1px; }
+.oq { border-left:3px solid var(--gold); background:#fdf8ef; padding:9px 13px; margin:7px 0; border-radius:0 4px 4px 0; font-size:12.5px; }
+.coverage { background:#f8f9fb; font-size:12px; color:#445; }
+.provenance { font-size:9.5px; color:var(--muted); }
+.report--operational .report__title { font-size:22px; }
+@media print { body { background:#fff; } .report { max-width:none; margin:0; border-radius:0; box-shadow:none; } }
+@page { size:A4; margin:16mm 15mm; }

@@ -85,7 +85,7 @@ def to_html(content: ReportContent) -> str:
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
         f"<style>{inline_css(content.tier)}</style></head>"
-        f"<body class='{tier_class}'>{''.join(body)}</body></html>"
+        f"<body class='{tier_class}'><div class=\"report\">{''.join(body)}</div></body></html>"
     )
 
 
