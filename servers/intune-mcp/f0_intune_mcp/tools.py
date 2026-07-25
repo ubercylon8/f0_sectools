@@ -12,7 +12,7 @@ from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
 from f0_sectools_core.graph_errors import map_graph_error
-from f0_sectools_core.paging import clamp_limit
+from f0_sectools_core.paging import clamp_limit, truncation_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -52,6 +52,35 @@ def _sev(state: str) -> Severity:
     return _COMPLIANCE_SEV.get(str(state).lower(), Severity.info)
 
 
+# Truncation signals differ PER ENDPOINT here, and @odata.count is a trap on two
+# of the three. Live-probed 2026-07-25 ($top=3 against a 1507-device tenant):
+#
+#   managedDevices            $top=3            -> count=3    (echoes the PAGE)
+#                             $top=3&$count=true-> count=1507 but ZERO rows
+#                             => count is unusable either way; nextLink is reliable.
+#   deviceConfigurations      $top=3&$count=true-> count=2 of 28 (echoes the page)
+#                             => count is unusable; nextLink is reliable.
+#   deviceCompliancePolicies  $top=3&$count=true-> count=9 = the TRUE total,
+#                             and it never sends nextLink => count is required.
+#
+# So the "trust the count" decision is per call site, not a blanket parameter.
+# Believing the unasked count is what made a 5-of-1507 page report no truncation.
+_COUNTABLE = {"$count": "true"}
+
+
+def _truncation(
+    page: dict[str, Any], shown: int, fetched: int, trust_count: bool = False
+) -> Finding | None:
+    """Turn Graph's paging signals into a "showing M of N" note, or None."""
+    total = page.get("@odata.count") if trust_count else None
+    if not isinstance(total, int) or isinstance(total, bool):
+        total = None
+    return truncation_finding(
+        "intune", shown=shown, fetched=fetched, total=total,
+        has_more=bool(page.get("@odata.nextLink")),
+    )
+
+
 def _device_finding(d: dict[str, Any]) -> Finding:
     name = d.get("deviceName") or d.get("id", "unknown")
     os_str = f"{d.get('operatingSystem', '')} {d.get('osVersion', '')}".strip()
@@ -86,7 +115,12 @@ async def list_managed_devices(gc: Any, compliance: str = "all", limit: int = 25
         if finding:
             return [finding]
         raise
-    return [_device_finding(d) for d in (resp.get("value") or [])[:limit]]
+    rows = resp.get("value") or []
+    out = [_device_finding(d) for d in rows[:limit]]
+    note = _truncation(resp, shown=len(out), fetched=len(rows))
+    if note:
+        out.append(note)
+    return out
 
 
 async def get_managed_device(gc: Any, device_name: str) -> list[Finding]:
@@ -155,6 +189,9 @@ async def list_stale_devices(gc: Any, days: int = 30, limit: int = 25) -> list[F
             last_sync = d.get("lastSyncDateTime", "")
             f.title = f"Stale device {dev_name}: last sync {last_sync}"
             out.append(f)
+    note = _truncation(resp, shown=len(out), fetched=len(resp.get("value") or []))
+    if note:
+        out.append(note)
     return out
 
 
@@ -229,7 +266,8 @@ async def list_compliance_policies(gc: Any, limit: int = 25) -> list[Finding]:
     limit = clamp_limit(limit)
     try:
         resp = await gc.get(
-            "/deviceManagement/deviceCompliancePolicies", params={"$top": limit}
+            "/deviceManagement/deviceCompliancePolicies",
+            params={"$top": limit, **_COUNTABLE},
         )
     except GraphError as e:
         finding = map_graph_error(
@@ -238,10 +276,12 @@ async def list_compliance_policies(gc: Any, limit: int = 25) -> list[Finding]:
         if finding:
             return [finding]
         raise
-    return [
-        _policy_finding(p, "compliance policy")
-        for p in (resp.get("value") or [])[:limit]
-    ]
+    rows = resp.get("value") or []
+    out = [_policy_finding(p, "compliance policy") for p in rows[:limit]]
+    note = _truncation(resp, shown=len(out), fetched=len(rows), trust_count=True)
+    if note:
+        out.append(note)
+    return out
 
 
 async def list_configuration_profiles(gc: Any, limit: int = 25) -> list[Finding]:
@@ -257,7 +297,9 @@ async def list_configuration_profiles(gc: Any, limit: int = 25) -> list[Finding]
         if finding:
             return [finding]
         raise
-    return [
-        _policy_finding(p, "configuration profile")
-        for p in (resp.get("value") or [])[:limit]
-    ]
+    rows = resp.get("value") or []
+    out = [_policy_finding(p, "configuration profile") for p in rows[:limit]]
+    note = _truncation(resp, shown=len(out), fetched=len(rows))
+    if note:
+        out.append(note)
+    return out

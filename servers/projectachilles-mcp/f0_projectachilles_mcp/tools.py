@@ -11,7 +11,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from f0_sectools_core.paging import clamp_limit
+from f0_sectools_core.paging import clamp_limit, truncation_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -605,6 +605,17 @@ async def list_risk_acceptances(pa: Any, status: str = "active", limit: int = 50
                 observed_at=r.get("accepted_at"),
             )
         )
+    # /risk-acceptances reports its total at the TOP level, not under data
+    # (live-probed 2026-07-25) — the two PA endpoints differ.
+    total = d.get("total") if isinstance(d, dict) else None
+    rows = _rows(d)
+    note = truncation_finding(
+        "projectachilles", shown=len(out), fetched=len(rows),
+        total=total if isinstance(total, int) and not isinstance(total, bool) else None,
+        hint="Raise limit, or filter by status, to see more risk acceptances.",
+    )
+    if note:
+        out.append(note)
     return out
 
 
@@ -640,6 +651,17 @@ async def list_agents(
                 ],
             )
         )
+    # The fleet endpoint reports its own total (live-probed 2026-07-25:
+    # data.total = 22), so a bounded page can say how much of the fleet it shows
+    # rather than implying it is the whole fleet.
+    total = data.get("total") if isinstance(data, dict) else None
+    note = truncation_finding(
+        "projectachilles", shown=len(out), fetched=len(agents),
+        total=total if isinstance(total, int) and not isinstance(total, bool) else None,
+        hint="Raise limit, or filter with status/online_only, to see more agents.",
+    )
+    if note:
+        out.append(note)
     return out
 
 

@@ -317,3 +317,89 @@ async def test_get_asset_vulnerabilities_bogus_severity_min_is_graceful():
     })
     findings = await tools.get_asset_vulnerabilities(tio, _UUID, severity_min="bogus")
     assert findings  # did not raise; degraded to the default floor
+
+
+# ---------- truncation disclosure + scan ordering ----------
+
+@pytest.mark.asyncio
+async def test_top_vulnerabilities_disclose_what_was_cut():
+    rows = [{"plugin_id": i, "plugin_name": f"V{i}", "severity": 4, "count": 1}
+            for i in range(30)]
+    tio = FakeClient({"/workbenches/vulnerabilities": {"vulnerabilities": rows}})
+    findings = await tools.list_top_vulnerabilities(tio, limit=5)
+    assert "Showing 5 of 30" in findings[-1].title
+
+
+@pytest.mark.asyncio
+async def test_no_note_when_everything_fits():
+    rows = [{"plugin_id": 1, "plugin_name": "V", "severity": 4, "count": 1}]
+    tio = FakeClient({"/workbenches/vulnerabilities": {"vulnerabilities": rows}})
+    findings = await tools.list_top_vulnerabilities(tio, limit=10)
+    assert all("Showing" not in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_list_assets_warns_on_a_full_server_bounded_page():
+    # Without a hostname the API bounds the page, so the pool size is unknown.
+    # Tenable's own `total` cannot fill the gap: ?limit=10 reports 580 while an
+    # unbounded fetch returns 314 assets with total=314 (live-probed), so
+    # quoting it would contradict what the tool itself returns.
+    assets = [{"id": f"a{i}", "fqdn": [f"host{i}.corp.local"]} for i in range(10)]
+    tio = FakeClient({"/workbenches/assets": {"assets": assets, "total": 580}})
+    findings = await tools.list_assets(tio, limit=10)
+    assert "more results available" in findings[-1].title
+    assert "580" not in findings[-1].title
+
+
+@pytest.mark.asyncio
+async def test_list_assets_quiet_on_a_partial_page():
+    assets = [{"id": f"a{i}", "fqdn": [f"host{i}.corp.local"]} for i in range(3)]
+    tio = FakeClient({"/workbenches/assets": {"assets": assets, "total": 580}})
+    findings = await tools.list_assets(tio, limit=25)
+    assert all("more results" not in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_list_assets_counts_every_hostname_match():
+    # With a hostname the whole workbench is fetched and filtered here, so the
+    # match count is known exactly.
+    assets = [{"id": f"a{i}", "fqdn": [f"web{i}.corp.local"]} for i in range(40)]
+    assets += [{"id": "z", "fqdn": ["printer.corp.local"]}]
+    tio = FakeClient({"/workbenches/assets": {"assets": assets}})
+    findings = await tools.list_assets(tio, hostname="web", limit=10)
+    assert "Showing 10 of 40" in findings[-1].title
+
+
+@pytest.mark.asyncio
+async def test_list_assets_total_reflects_the_hostname_filter():
+    assets = [{"id": f"a{i}", "fqdn": [f"host{i}.corp.local"]} for i in range(40)]
+    assets += [{"id": "z", "fqdn": ["printer.corp.local"]}]
+    tio = FakeClient({"/workbenches/assets": {"assets": assets}})
+    findings = await tools.list_assets(tio, hostname="printer", limit=10)
+    assert len(findings) == 1  # one match, nothing cut, so no note
+    assert "printer" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_list_scans_returns_the_most_recent_first():
+    # /scans comes back unordered, so "recent scans" was whatever the API listed
+    # first. Scans with no last_modification_date must sort last, not crash.
+    scans = [
+        {"id": 1, "name": "old", "status": "completed", "last_modification_date": 1000},
+        {"id": 2, "name": "undated", "status": "empty"},
+        {"id": 3, "name": "newest", "status": "completed", "last_modification_date": 9000},
+        {"id": 4, "name": "mid", "status": "completed", "last_modification_date": 5000},
+    ]
+    tio = FakeClient({"/scans": {"scans": scans}})
+    findings = await tools.list_scans(tio, limit=4)
+    names = [f.entity.name for f in findings if f.entity]
+    assert names == ["newest", "mid", "old", "undated"]
+
+
+@pytest.mark.asyncio
+async def test_list_scans_disclose_truncation():
+    scans = [{"id": i, "name": f"s{i}", "status": "completed",
+              "last_modification_date": i} for i in range(141)]
+    tio = FakeClient({"/scans": {"scans": scans}})
+    findings = await tools.list_scans(tio, limit=25)
+    assert "Showing 25 of 141" in findings[-1].title

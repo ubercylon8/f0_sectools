@@ -63,9 +63,12 @@ class FakeGC:
 
 @pytest.mark.asyncio
 async def test_dlp_summary_rolls_up_by_severity_and_status():
+    # The fixture holds only unresolved alerts because the query now excludes
+    # resolved ones server-side; a fixture feeding resolved rows to an open
+    # query would be testing a response the API no longer sends.
     gc = FakeGC(gets={"alerts_v2": {"value": [DLP_ALERT, {**DLP_ALERT, "id": "al3",
                                                           "severity": "low",
-                                                          "status": "resolved"}]}})
+                                                          "status": "inProgress"}]}})
     findings = await tools.get_dlp_summary(gc)
     assert findings[0].finding_type.value == "posture"
     ev = {e.key: e.value for e in findings[0].evidence}
@@ -73,7 +76,75 @@ async def test_dlp_summary_rolls_up_by_severity_and_status():
     assert "high: 1" in ev["by_severity"] and "low: 1" in ev["by_severity"]
     assert "new: 1" in ev["by_status"]
     assert findings[0].evidence[0].key == "headline"
-    assert ev["headline"] == "2 DLP alerts"
+    assert ev["headline"] == "2 unresolved DLP alerts"
+
+
+def _filter_of(gc) -> str:
+    for method, path, params in reversed(gc.calls):
+        if method == "GET" and "alerts_v2" in path:
+            return str((params or {}).get("$filter", ""))
+    raise AssertionError("no alerts_v2 request captured")
+
+
+@pytest.mark.asyncio
+async def test_alert_queries_exclude_resolved_by_default():
+    # A resolved alert is already handled and is not current data risk. On the
+    # validation tenant every DLP alert in the default window was resolved, so
+    # the unfiltered headline read "6 DLP alerts" against an open count of 0 —
+    # and that headline feeds the CISO report's data-risk tile.
+    for tool in (tools.get_dlp_summary, tools.list_dlp_alerts, tools.list_insider_risk_alerts):
+        gc = FakeGC()
+        await tool(gc)
+        assert "status ne 'resolved'" in _filter_of(gc), tool.__name__
+        assert "createdDateTime ge" in _filter_of(gc), tool.__name__
+
+
+@pytest.mark.asyncio
+async def test_state_all_reaches_resolved_history():
+    for tool in (tools.get_dlp_summary, tools.list_dlp_alerts, tools.list_insider_risk_alerts):
+        gc = FakeGC()
+        await tool(gc, state="all")
+        assert "status ne" not in _filter_of(gc), tool.__name__
+
+
+@pytest.mark.asyncio
+async def test_unsupported_state_is_reported_not_reinterpreted():
+    for tool in (tools.get_dlp_summary, tools.list_dlp_alerts, tools.list_insider_risk_alerts):
+        gc = FakeGC()
+        findings = await tool(gc, state="active")
+        assert "Unsupported state 'active'" in findings[0].title, tool.__name__
+        assert not gc.calls, tool.__name__  # no query is sent on an unusable filter
+
+
+@pytest.mark.asyncio
+async def test_dlp_summary_headline_uses_the_server_side_count():
+    # The fetched page is capped; @odata.count reports how many actually matched.
+    gc = FakeGC(gets={"alerts_v2": {"value": [DLP_ALERT], "@odata.count": 37}})
+    findings = await tools.get_dlp_summary(gc)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["headline"] == "37 unresolved DLP alerts"
+    assert "37 unresolved DLP alert(s)" in findings[0].title
+
+
+@pytest.mark.asyncio
+async def test_dlp_summary_zero_open_distinguishes_handled_from_absent():
+    # "Nothing happened" and "everything was handled" have opposite meanings for
+    # whether DLP is actually deployed; the guidance must not conflate them.
+    gc = FakeGC()
+    findings = await tools.get_dlp_summary(gc)
+    assert "state='all'" in findings[0].recommended_action.summary
+
+
+@pytest.mark.asyncio
+async def test_list_dlp_alerts_reports_the_fetch_cap_over_the_local_limit():
+    # When the window holds more than the fetch cap, the severity refinement
+    # only saw part of it, so raising `limit` would not help — say so.
+    rows = [{**DLP_ALERT, "id": f"a{i}"} for i in range(3)]
+    gc = FakeGC(gets={"alerts_v2": {"value": rows, "@odata.count": 250}})
+    findings = await tools.list_dlp_alerts(gc, limit=2)
+    note = findings[-1]
+    assert "of 250" in note.title
+    assert "narrow hours_back" in note.recommended_action.summary
 
 
 @pytest.mark.asyncio
@@ -395,3 +466,26 @@ async def test_server_advertises_enums_and_six_tools():
     assert len(tools_by_name) == 6
     sev = tools_by_name["list_dlp_alerts"].inputSchema["properties"]["severity_min"]
     assert set(sev.get("enum", [])) == {"low", "medium", "high"}
+
+
+@pytest.mark.asyncio
+async def test_dlp_summary_says_when_its_severity_is_only_a_sample():
+    # The query carries no ordering, so past the fetch cap the page is an
+    # ARBITRARY sample — the finding's own `severity` is then a claim about the
+    # sample, not the window, and must say so in machine-readable evidence.
+    rows = [{**DLP_ALERT, "id": f"a{i}", "severity": "low"} for i in range(3)]
+    gc = FakeGC(gets={"alerts_v2": {"value": rows, "@odata.count": 250}})
+    findings = await tools.get_dlp_summary(gc)
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert "sample of 250" in ev["severity_basis"]
+    assert "counts from 3 sampled" in findings[0].title
+    assert ev["headline"] == "250 unresolved DLP alerts"  # the count is still exact
+
+
+@pytest.mark.asyncio
+async def test_dlp_summary_claims_no_sampling_when_it_saw_everything():
+    rows = [{**DLP_ALERT, "id": f"a{i}"} for i in range(3)]
+    gc = FakeGC(gets={"alerts_v2": {"value": rows, "@odata.count": 3}})
+    findings = await tools.get_dlp_summary(gc)
+    assert all(e.key != "severity_basis" for e in findings[0].evidence)
+    assert "sampled" not in findings[0].title

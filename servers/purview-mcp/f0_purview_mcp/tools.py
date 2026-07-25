@@ -15,7 +15,11 @@ from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
 from f0_sectools_core.graph_errors import map_graph_error
-from f0_sectools_core.paging import clamp_limit
+from f0_sectools_core.paging import (
+    clamp_limit,
+    more_available_finding,
+    truncation_finding,
+)
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -78,15 +82,50 @@ def _sev(value: Any) -> Severity:
     return _SEV.get(str(value).lower(), Severity.medium)
 
 
-async def _fetch_alerts(gc: Any, source: str, hours_back: float) -> list[dict[str, Any]]:
-    params = {
-        "$filter": (
-            f"serviceSource eq '{source}' and createdDateTime ge {_since_iso(hours_back)}"
-        ),
-        "$top": _FETCH_CAP,
-    }
-    data = await gc.get("/security/alerts_v2", params=params)
-    return [a for a in data.get("value", []) if isinstance(a, dict)]
+# A resolved alert is already handled and is not current data risk. Live-checked
+# 2026-07-25: every DLP alert in the default 168h window on the validation tenant
+# was `resolved`, so the headline read "6 DLP alerts" while the open count was 0 —
+# and that headline feeds the CISO report's data-risk tile. `status ne 'resolved'`
+# is honoured on alerts_v2 (the same clause the Defender tools use); `state="all"`
+# keeps the history reachable.
+_ALERT_CLOSED = "resolved"
+_STATES = ("open", "all")
+
+
+def _bad_state(state: str) -> Finding:
+    """An unrecognized state is reported, never silently treated as one of them."""
+    return Finding(
+        source="purview",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=f"Unsupported state '{state}'",
+        recommended_action=RecommendedAction(summary="Use one of: " + ", ".join(_STATES) + "."),
+    )
+
+
+async def _fetch_alerts(
+    gc: Any, source: str, hours_back: float, state: str = "open"
+) -> tuple[list[dict[str, Any]], int | None]:
+    """Alerts for one service source in the window; returns (rows, total-or-None).
+
+    `total` is Graph's filtered @odata.count, so a bounded page can report how
+    many matched rather than how many it happened to fetch.
+    """
+    clauses = [
+        f"serviceSource eq '{source}'",
+        f"createdDateTime ge {_since_iso(hours_back)}",
+    ]
+    if state != "all":
+        clauses.append(f"status ne '{_ALERT_CLOSED}'")
+    data = await gc.get(
+        "/security/alerts_v2",
+        params={"$filter": " and ".join(clauses), "$top": _FETCH_CAP, "$count": "true"},
+    )
+    rows = [a for a in data.get("value", []) if isinstance(a, dict)]
+    total = data.get("@odata.count")
+    if not isinstance(total, int) or isinstance(total, bool):
+        total = None
+    return rows, total
 
 
 def _alert_finding(a: dict[str, Any]) -> Finding:
@@ -110,27 +149,21 @@ def _alert_finding(a: dict[str, Any]) -> Finding:
     )
 
 
-def _more_note(shown: int, total: int) -> Finding:
-    return Finding(
-        source="purview",
-        finding_type=FindingType.posture,
-        severity=Severity.info,
-        title=f"More alerts available ({total - shown} not shown)",
-        recommended_action=RecommendedAction(
-            summary="Narrow the window (hours_back) or raise severity_min."
-        ),
-    )
-
-
-async def get_dlp_summary(gc: Any, hours_back: float = 168) -> list[Finding]:
+async def get_dlp_summary(
+    gc: Any, hours_back: float = 168, state: str = "open"
+) -> list[Finding]:
     """DLP alert rollup: counts by severity/status over the window."""
+    if state not in _STATES:
+        return [_bad_state(state)]
     try:
-        alerts = await _fetch_alerts(gc, _DLP_SOURCE, hours_back)
+        alerts, total = await _fetch_alerts(gc, _DLP_SOURCE, hours_back, state)
     except GraphError as e:
         finding = map_graph_error(e, "purview", _ALERT_PERM, "dlp.alerts")
         if finding:
             return [finding]
         raise
+    counted = total if total is not None else len(alerts)
+    scope = "" if state == "all" else "unresolved "
     by_sev: dict[str, int] = {}
     by_status: dict[str, int] = {}
     for a in alerts:
@@ -141,12 +174,40 @@ async def get_dlp_summary(gc: Any, hours_back: float = 168) -> list[Finding]:
     def fmt(d: dict[str, int]) -> str:
         return ", ".join(f"{k}: {v}" for k, v in sorted(d.items())) or "none"
 
-    action = (
-        "Review the highest-severity alerts with list_dlp_alerts."
-        if alerts
-        else "0 DLP alerts can mean a quiet period, no DLP policies configured, "
-        "or missing Purview licensing — verify policies exist in the Purview portal."
-    )
+    if alerts:
+        action = "Review the highest-severity alerts with list_dlp_alerts."
+    elif state == "all":
+        action = (
+            "0 DLP alerts can mean a quiet period, no DLP policies configured, "
+            "or missing Purview licensing — verify policies exist in the Purview portal."
+        )
+    else:
+        # Distinguishing "nothing happened" from "everything was handled" matters:
+        # the first may mean DLP is not deployed, the second means it is working.
+        action = (
+            "No unresolved DLP alerts. This can mean a quiet period, no DLP policies "
+            "configured, or that every alert in the window is already resolved — "
+            "re-run with state='all' to tell those apart."
+        )
+    # The rollup — including the finding's own `severity` — is computed from the
+    # fetched page, and the query carries no ordering, so a capped window yields
+    # an ARBITRARY sample rather than the worst or the newest alerts. Saying so
+    # in machine-readable evidence matters more than the title caveat: a model
+    # reading `severity` sees a claim about the window, and past the cap that
+    # claim is only true of the sample.
+    sampled = total is not None and total > len(alerts)
+    evidence = [
+        Evidence(key="headline", value=f"{counted} {scope}DLP alerts"),
+        Evidence(key="alerts_total", value=str(counted)),
+        Evidence(key="by_severity", value=fmt(by_sev)),
+        Evidence(key="by_status", value=fmt(by_status)),
+    ]
+    if sampled:
+        evidence.append(Evidence(
+            key="severity_basis",
+            value=f"worst of an unordered {len(alerts)}-alert sample of {total}; "
+                  "a higher-severity alert may lie outside it — narrow hours_back",
+        ))
     return [
         Finding(
             source="purview",
@@ -154,26 +215,24 @@ async def get_dlp_summary(gc: Any, hours_back: float = 168) -> list[Finding]:
             severity=Severity.info if not alerts else _sev(
                 max(alerts, key=lambda a: _SEV_ORDER.index(str(a.get("severity")).lower())
                     if str(a.get("severity")).lower() in _SEV_ORDER else 0).get("severity")),
-            title=f"{len(alerts)} DLP alert(s) in the last {hours_back:g}h"
-            + (f" (showing counts for first {_FETCH_CAP})" if len(alerts) >= _FETCH_CAP else ""),
-            evidence=[
-                Evidence(key="headline", value=f"{len(alerts)} DLP alerts"),
-                Evidence(key="alerts_total", value=str(len(alerts))),
-                Evidence(key="by_severity", value=fmt(by_sev)),
-                Evidence(key="by_status", value=fmt(by_status)),
-            ],
+            title=f"{counted} {scope}DLP alert(s) in the last {hours_back:g}h"
+            + (f" (counts from {len(alerts)} sampled)" if sampled else ""),
+            evidence=evidence,
             recommended_action=RecommendedAction(summary=action),
         )
     ]
 
 
 async def list_dlp_alerts(
-    gc: Any, hours_back: float = 168, severity_min: str = "low", limit: int = 25
+    gc: Any, hours_back: float = 168, severity_min: str = "low", limit: int = 25,
+    state: str = "open",
 ) -> list[Finding]:
     """Recent DLP alerts at/above severity_min, bounded."""
     limit = clamp_limit(limit)
+    if state not in _STATES:
+        return [_bad_state(state)]
     try:
-        alerts = await _fetch_alerts(gc, _DLP_SOURCE, hours_back)
+        alerts, total = await _fetch_alerts(gc, _DLP_SOURCE, hours_back, state)
     except GraphError as e:
         finding = map_graph_error(e, "purview", _ALERT_PERM, "dlp.alerts")
         if finding:
@@ -193,27 +252,44 @@ async def list_dlp_alerts(
                 source="purview",
                 finding_type=FindingType.posture,
                 severity=Severity.info,
-                title=f"No DLP alerts at or above '{severity_min}' in the last "
-                f"{hours_back:g}h",
+                title=f"No {'' if state == 'all' else 'unresolved '}DLP alerts at or "
+                f"above '{severity_min}' in the last {hours_back:g}h",
                 recommended_action=RecommendedAction(
                     summary="Lower severity_min or widen hours_back; get_dlp_summary "
-                    "shows the full rollup."
+                    "shows the full rollup. state='all' includes resolved alerts."
                 ),
             )
         ]
     out = [_alert_finding(a) for a in kept[:limit]]
-    if len(kept) > limit:
-        out.append(_more_note(limit, len(kept)))
+    # Two truncations can apply here and they mean different things. The fetch
+    # cap is the more serious one: it means the severity refinement above only
+    # examined part of the window, so `kept` itself is incomplete and raising
+    # `limit` would not help. Report that in preference to the local bound.
+    if total is not None and total > len(alerts):
+        out.append(more_available_finding(
+            "purview", shown=len(out), total=total,
+            hint=f"Only the first {_FETCH_CAP} alerts in the window were examined — "
+                 "narrow hours_back to see the rest.",
+        ))
+        return out
+    note = truncation_finding(
+        "purview", shown=len(out), fetched=len(out), total=len(kept),
+        hint="Narrow the window (hours_back) or raise severity_min.",
+    )
+    if note:
+        out.append(note)
     return out
 
 
 async def list_insider_risk_alerts(
-    gc: Any, hours_back: float = 168, limit: int = 25
+    gc: Any, hours_back: float = 168, limit: int = 25, state: str = "open"
 ) -> list[Finding]:
     """Recent Insider Risk Management alerts (users may be pseudonymized by IRM)."""
     limit = clamp_limit(limit)
+    if state not in _STATES:
+        return [_bad_state(state)]
     try:
-        alerts = await _fetch_alerts(gc, _IRM_SOURCE, hours_back)
+        alerts, total = await _fetch_alerts(gc, _IRM_SOURCE, hours_back, state)
     except GraphError as e:
         finding = map_graph_error(e, "purview", _ALERT_PERM, "irm.alerts")
         if finding:
@@ -225,7 +301,8 @@ async def list_insider_risk_alerts(
                 source="purview",
                 finding_type=FindingType.posture,
                 severity=Severity.info,
-                title=f"No insider-risk alerts in the last {hours_back:g}h",
+                title=f"No {'' if state == 'all' else 'unresolved '}insider-risk alerts "
+                f"in the last {hours_back:g}h",
                 recommended_action=RecommendedAction(
                     summary="A quiet period, or Insider Risk Management policies are "
                     "not configured/licensed on this tenant."
@@ -233,8 +310,12 @@ async def list_insider_risk_alerts(
             )
         ]
     out = [_alert_finding(a) for a in alerts[:limit]]
-    if len(alerts) > limit:
-        out.append(_more_note(limit, len(alerts)))
+    note = truncation_finding(
+        "purview", shown=len(out), fetched=len(alerts), total=total,
+        hint="Narrow the window (hours_back) or raise limit.",
+    )
+    if note:
+        out.append(note)
     return out
 
 
@@ -248,6 +329,7 @@ async def list_sensitivity_labels(gc: Any) -> list[Finding]:
             return [finding]
         raise
     labels = [label for label in data.get("value", []) if isinstance(label, dict)]
+    shown_labels = labels[:clamp_limit(len(labels))] if labels else []
     if not labels:
         return [
             Finding(
@@ -262,7 +344,7 @@ async def list_sensitivity_labels(gc: Any) -> list[Finding]:
             )
         ]
     out: list[Finding] = []
-    for label in labels[:clamp_limit(len(labels))]:
+    for label in shown_labels:
         name = str(label.get("name") or label.get("displayName") or label.get("id"))
         out.append(
             Finding(
@@ -278,6 +360,12 @@ async def list_sensitivity_labels(gc: Any) -> list[Finding]:
                 ],
             )
         )
+    note = truncation_finding(
+        "purview", shown=len(out), fetched=len(out), total=len(labels),
+        hint="The label inventory is bounded; review the rest in the Purview portal.",
+    )
+    if note:
+        out.append(note)
     return out
 
 

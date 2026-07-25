@@ -11,7 +11,7 @@ import re
 import time
 from typing import Any
 
-from f0_sectools_core.paging import clamp_limit
+from f0_sectools_core.paging import clamp_limit, truncation_finding
 from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import (
     Entity,
@@ -213,6 +213,15 @@ def list_dr_rules(lc: Any, namespace: str = "general", limit: int = _MAX_ITEMS) 
                 evidence=[Evidence(key="namespace", value=namespace)],
             )
         )
+    # The SDK returns the whole namespace as one dict, so its length IS the
+    # total; a bounded page that says nothing reads as the full rule set, which
+    # would misstate detection coverage.
+    note = truncation_finding(
+        "limacharlie", shown=len(out), fetched=len(out), total=len(names),
+        hint="Raise limit, or query a specific namespace, to see more rules.",
+    )
+    if note:
+        out.append(note)
     return out
 
 
@@ -257,6 +266,17 @@ def list_detections(
                 references=[Reference(type="mitre", id=t) for t in (d.get("mitre") or [])],
             )
         )
+    # The SDK bounds the query itself, so there is no total to compare against —
+    # a full page is the only available signal that the window held more. This
+    # can over-warn when the window holds exactly `limit` detections; saying
+    # "there may be more" wrongly is far cheaper here than silently implying a
+    # quiet window when detections were cut.
+    note = truncation_finding(
+        "limacharlie", shown=len(out), fetched=len(raw), has_more=len(raw) >= limit,
+        hint="Narrow hours_back or raise limit to see the rest of the window.",
+    )
+    if note:
+        out.append(note)
     return out
 
 

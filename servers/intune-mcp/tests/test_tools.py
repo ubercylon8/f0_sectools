@@ -197,3 +197,106 @@ async def test_compliance_enum_closed():
     tools = {t.name: t for t in await server.mcp.list_tools()}
     enum = tools["list_managed_devices"].inputSchema["properties"]["compliance"]["enum"]
     assert set(enum) == {"all", "compliant", "noncompliant", "ingraceperiod", "unknown"}
+
+
+# ---------- truncation disclosure ----------
+
+def _page(rows, count=None, next_link=False):
+    page = {"value": rows}
+    if count is not None:
+        page["@odata.count"] = count
+    if next_link:
+        page["@odata.nextLink"] = GRAPH + "/next"
+    return page
+
+
+def _params(router, path):
+    """Query params sent for the last call to `path` (call INSIDE the mock block)."""
+    for call in reversed(router.calls):
+        if path in str(call.request.url):
+            return dict(call.request.url.params)
+    raise AssertionError(f"no request captured for {path}")
+
+
+@pytest.mark.asyncio
+async def test_managed_devices_disclose_truncation_via_next_link():
+    # Live-probed: managedDevices echoes the PAGE size in @odata.count (3 rows ->
+    # count=3 on a 1507-device tenant), so a count that equals what we fetched
+    # must NOT be read as "that is everything". nextLink is the reliable signal.
+    with respx.mock as router:
+        _token(router)
+        router.get(DEV).mock(return_value=httpx.Response(
+            200, json=_page([_device("PC-1"), _device("PC-2")], count=2, next_link=True)))
+        async with GraphClient(CFG) as gc:
+            findings = await list_managed_devices(gc, limit=2)
+        sent = _params(router, "/managedDevices")
+    assert "more results available" in findings[-1].title
+    # $count=true returns ZERO rows on this endpoint — never request it here.
+    assert "$count" not in sent
+
+
+@pytest.mark.asyncio
+async def test_managed_devices_quiet_on_a_complete_page():
+    with respx.mock as router:
+        _token(router)
+        router.get(DEV).mock(return_value=httpx.Response(
+            200, json=_page([_device("PC-1")], count=1)))
+        async with GraphClient(CFG) as gc:
+            findings = await list_managed_devices(gc, limit=25)
+    assert all("more results" not in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_compliance_policies_trust_the_count_they_asked_for():
+    # This endpoint never sends nextLink, and its $count IS the true total
+    # (live-probed: 3 rows, count=9, and the tenant has 9 policies).
+    with respx.mock as router:
+        _token(router)
+        router.get(CPOL).mock(return_value=httpx.Response(
+            200, json=_page([{"id": "p1", "displayName": "P"}], count=9)))
+        async with GraphClient(CFG) as gc:
+            findings = await list_compliance_policies(gc, limit=1)
+        sent = _params(router, "/deviceCompliancePolicies")
+    assert sent.get("$count") == "true"
+    assert "Showing 1 of 9" in findings[-1].title
+
+
+@pytest.mark.asyncio
+async def test_compliance_policies_quiet_when_the_count_fits():
+    with respx.mock as router:
+        _token(router)
+        router.get(CPOL).mock(return_value=httpx.Response(
+            200, json=_page([{"id": "p1", "displayName": "P"}], count=1)))
+        async with GraphClient(CFG) as gc:
+            findings = await list_compliance_policies(gc, limit=25)
+    assert all("Showing" not in f.title for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_configuration_profiles_ignore_a_page_echoing_count():
+    # Live-probed: deviceConfigurations reports count=2 for a 2-row page of a
+    # 28-profile tenant. Believing it would suppress a real truncation note, so
+    # the tool neither requests nor reads the count here.
+    with respx.mock as router:
+        _token(router)
+        router.get(CONF).mock(return_value=httpx.Response(
+            200, json=_page([{"id": "c1", "displayName": "C"},
+                             {"id": "c2", "displayName": "C2"}], count=2, next_link=True)))
+        async with GraphClient(CFG) as gc:
+            findings = await list_configuration_profiles(gc, limit=5)
+        sent = _params(router, "/deviceConfigurations")
+    assert "$count" not in sent
+    assert "more results available" in findings[-1].title
+
+
+@pytest.mark.asyncio
+async def test_stale_devices_disclose_truncation():
+    with respx.mock as router:
+        _token(router)
+        router.get(DEV).mock(return_value=httpx.Response(
+            200, json=_page([_device("OLD-1", last_sync="2020-01-01T00:00:00Z"),
+                             _device("OLD-2", last_sync="2020-02-01T00:00:00Z")],
+                            next_link=True)))
+        async with GraphClient(CFG) as gc:
+            findings = await list_stale_devices(gc, days=30, limit=2)
+    assert "more results available" in findings[-1].title

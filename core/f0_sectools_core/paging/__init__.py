@@ -29,6 +29,39 @@ def clamp_limit(limit: object, default: int = DEFAULT_LIMIT, maximum: int = MAX_
     return min(n, maximum)
 
 
+def truncation_finding(
+    source: str,
+    shown: int,
+    fetched: int,
+    total: int | None = None,
+    has_more: bool = False,
+    hint: str = "",
+) -> Finding | None:
+    """A "showing M of N" note, or None when nothing was actually cut.
+
+    Platform-free: each server extracts its own truncation signals (Graph's
+    @odata.count/@odata.nextLink, a vendor `total`, or simply the length of a
+    full list) and passes the numbers here, so the "did we hide anything?"
+    decision is made once.
+
+    `shown` is how many findings are being returned; `fetched` is how many
+    records the platform handed back. They differ whenever a tool refines
+    results client-side, and truncation is judged on `fetched` — a refinement
+    that drops rows is not a page that was cut short, and reporting it as one
+    tells the caller to raise a limit that will not help.
+
+    A known `total` is authoritative: if it does not exceed what we fetched,
+    there is nothing more, whatever other signals say.
+    """
+    if total is not None:
+        if total > fetched:
+            return more_available_finding(source, shown=shown, total=total, hint=hint)
+        return None
+    if has_more:
+        return more_available_finding(source, shown=shown, hint=hint)
+    return None
+
+
 def more_available_finding(
     source: str, shown: int, total: int | None = None, hint: str = ""
 ) -> Finding:

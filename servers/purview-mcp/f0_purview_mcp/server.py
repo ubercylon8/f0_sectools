@@ -31,13 +31,17 @@ def _client() -> GraphClient:
 
 
 @mcp.tool()
-async def get_dlp_summary(hours_back: float = 168) -> list[dict[str, Any]]:
+async def get_dlp_summary(
+    hours_back: float = 168, state: Literal["open", "all"] = "open"
+) -> list[dict[str, Any]]:
     """Purview data-loss (DLP) alert rollup: counts by severity and status.
 
     The data-risk posture headline — not Defender incidents (use list_incidents)
-    or Secure Score (use get_secure_score). hours_back may be fractional."""
+    or Secure Score (use get_secure_score). hours_back may be fractional.
+    Defaults to state="open" — excludes resolved alerts, which are already
+    handled and are not current data risk. Use state="all" for the history."""
     async with _client() as gc:
-        return _render(await tools.get_dlp_summary(gc, hours_back))
+        return _render(await tools.get_dlp_summary(gc, hours_back, state))
 
 
 @mcp.tool()
@@ -45,22 +49,26 @@ async def list_dlp_alerts(
     hours_back: float = 168,
     severity_min: Literal["low", "medium", "high"] = "low",
     limit: int = 25,
+    state: Literal["open", "all"] = "open",
 ) -> list[dict[str, Any]]:
-    """List recent Purview DLP alerts (data-loss policy matches), bounded.
+    """List recent unresolved Purview DLP alerts (data-loss policy matches), bounded.
 
-    severity_min filters to that severity and above."""
+    severity_min filters to that severity and above. Defaults to state="open";
+    use state="all" to include already-resolved alerts."""
     async with _client() as gc:
-        return _render(await tools.list_dlp_alerts(gc, hours_back, severity_min, limit))
+        return _render(await tools.list_dlp_alerts(gc, hours_back, severity_min, limit, state))
 
 
 @mcp.tool()
 async def list_insider_risk_alerts(
-    hours_back: float = 168, limit: int = 25
+    hours_back: float = 168, limit: int = 25, state: Literal["open", "all"] = "open"
 ) -> list[dict[str, Any]]:
-    """List recent Purview Insider Risk Management alerts (potential data theft,
-    leaks, risky departing users). Users may appear pseudonymized by design."""
+    """List recent unresolved Purview Insider Risk Management alerts (potential data
+    theft, leaks, risky departing users). Users may appear pseudonymized by design.
+
+    Defaults to state="open"; use state="all" to include resolved alerts."""
     async with _client() as gc:
-        return _render(await tools.list_insider_risk_alerts(gc, hours_back, limit))
+        return _render(await tools.list_insider_risk_alerts(gc, hours_back, limit, state))
 
 
 @mcp.tool()
