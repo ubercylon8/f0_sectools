@@ -311,7 +311,14 @@ def test_metric_headline_secret_spanning_split_boundary_is_redacted():
     # number/qualifier split — splitting first breaks the token into two
     # halves that neither individually match the secret pattern, letting it
     # leak through unredacted.
-    secret = "12345678901234567890123456789012.abcdefgh"
+    #
+    # The token is deliberately repetitive: it still matches our client-secret
+    # pattern and still starts with a digit (so _split_headline takes the
+    # numeric-split path this test guards), but its entropy is ~0.8 rather than
+    # ~4.0, so the repo's secret scanner doesn't flag a fixture as a real key.
+    # Allowlisting the scanner here instead would blind generic-api-key across
+    # core/tests/ — exactly the blind spot .gitleaks.toml warns against.
+    secret = "1" * 32 + ".aaaaaa"
     metric = MetricCard("Config hardening", secret, "needs-work")
     content = ReportContent(
         persona="ciso", language="en", tier="executive",
