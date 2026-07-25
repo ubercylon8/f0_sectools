@@ -258,6 +258,23 @@ GATHER_MAP: dict[str, dict[str, Callable[[int], Awaitable[list[Finding]]]]] = {
 }
 
 
+_SEV_ORDER = ("critical", "high", "medium", "low", "info")
+# `info` is `clear` (muted), NOT `strong` (green). A finding scored `low` has been
+# assessed and judged fine — green states that. `info` carries no risk judgment at
+# all; it is a fact. Painting a fact green asserts good news the data never
+# claimed, and on a real tenant it did exactly that: "0 unresolved DLP alerts"
+# rendered green while the report's own narrative warned that zero is ambiguous
+# until you confirm policies are deployed, and "114 online" rendered green for a
+# fleet whose own detail line read "1178 dormant sleepers".
+#
+# This is the same call _count_metric already makes for an empty operational
+# group, for the same reason — the two paths now agree.
+_SEV_STATE = {
+    "critical": "exposure", "high": "needs-work", "medium": "needs-work",
+    "low": "strong", "info": "clear",
+}
+
+
 def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
     real = [f for f in findings if not is_not_assessed(f)]
     if not real:
@@ -270,16 +287,7 @@ def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
         # unquantified rather than a truncated title at tile size or a misleading
         # "strong" state. The full title still shows in the detail line.
         return MetricCard(pillar, "—", "not-assessed", detail=f.title)
-    state = {"critical": "exposure", "high": "needs-work", "medium": "needs-work"}.get(
-        f.severity.value, "strong")
-    return MetricCard(pillar, headline, state, detail=f.title)
-
-
-_SEV_ORDER = ("critical", "high", "medium", "low", "info")
-_SEV_STATE = {
-    "critical": "exposure", "high": "needs-work", "medium": "needs-work",
-    "low": "strong", "info": "strong",
-}
+    return MetricCard(pillar, headline, _SEV_STATE[f.severity.value], detail=f.title)
 
 
 def _count_metric(group: str, findings: list[Finding]) -> MetricCard:

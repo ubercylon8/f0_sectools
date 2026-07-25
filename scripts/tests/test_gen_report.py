@@ -2,6 +2,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/ importable
 import report_gather  # noqa: E402
 from f0_sectools_core.reports.content import ScopeMeta  # noqa: E402
@@ -42,8 +44,10 @@ def test_gather_collects_healthy_pillar(monkeypatch):
 def test_metric_from_uses_headline_for_value_and_title_for_detail():
     from f0_sectools_core.schema.findings import Evidence
 
+    # severity=low, which is what get_secure_score actually emits for a healthy
+    # score — it returns high/medium/low and never info.
     findings = [Finding(
-        source="defender", finding_type=FindingType.posture, severity=Severity.info,
+        source="defender", finding_type=FindingType.posture, severity=Severity.low,
         title="Secure Score: 62%",
         evidence=[Evidence(key="headline", value="62%"),
                   Evidence(key="secure_score_pct", value="62")],
@@ -52,6 +56,62 @@ def test_metric_from_uses_headline_for_value_and_title_for_detail():
     assert card.value == "62%"
     assert card.detail == "Secure Score: 62%"
     assert card.state == "strong"
+
+
+def _pillar(severity, headline, title="Pillar"):
+    from f0_sectools_core.schema.findings import Evidence
+    return [Finding(source="x", finding_type=FindingType.posture, severity=severity,
+                    title=title, evidence=[Evidence(key="headline", value=headline)])]
+
+
+def test_an_info_pillar_is_clear_not_green():
+    # `info` carries no risk judgment — it is a fact. Painting a fact green
+    # asserts good news the data never claimed. On a real tenant this rendered
+    # "0 unresolved DLP alerts" green while the report's own narrative warned
+    # that zero is ambiguous until you confirm policies are deployed.
+    card = report_gather._metric_from(
+        "data_risk", _pillar(Severity.info, "0 unresolved DLP alerts"))
+    assert card.state == "clear"
+    assert card.value == "0 unresolved DLP alerts"  # the number is still shown
+
+
+def test_a_descriptive_coverage_pillar_is_not_green():
+    # "114 online" rendered green for a fleet whose own detail line read
+    # "1178 dormant sleepers".
+    card = report_gather._metric_from(
+        "endpoint_coverage", _pillar(Severity.info, "114 online"))
+    assert card.state == "clear"
+
+
+def test_a_low_severity_pillar_stays_green():
+    # `low` means assessed and judged fine — that IS good news, and green says so.
+    assert report_gather._metric_from(
+        "config_hardening", _pillar(Severity.low, "90%")).state == "strong"
+
+
+@pytest.mark.parametrize(
+    "severity,state",
+    [(Severity.critical, "exposure"), (Severity.high, "needs-work"),
+     (Severity.medium, "needs-work"), (Severity.low, "strong"), (Severity.info, "clear")],
+)
+def test_pillar_and_group_tiles_agree_on_state(severity, state):
+    # _metric_from (CISO pillars) and _count_metric (operational groups) read the
+    # same table, so the two report families cannot drift apart on what a colour
+    # means.
+    assert report_gather._SEV_STATE[severity.value] == state
+
+
+def test_a_fully_compliant_pillar_renders_muted_a_known_trade_off():
+    # KNOWN TRADE-OFF, pinned so it stays deliberate: get_compliance_summary
+    # returns `info` when every device is compliant, so a perfect score renders
+    # muted rather than green — understating real good news. Accepted because
+    # severity alone cannot separate "measured, all good" from "nothing to
+    # score", and in a security report understating is the safer error. The
+    # headline number is still shown at full size either way.
+    card = report_gather._metric_from(
+        "device_compliance", _pillar(Severity.info, "100% compliant"))
+    assert card.state == "clear"
+    assert card.value == "100% compliant"
 
 
 def test_gather_redacts_secret_hinting_evidence_from_findings(monkeypatch):
