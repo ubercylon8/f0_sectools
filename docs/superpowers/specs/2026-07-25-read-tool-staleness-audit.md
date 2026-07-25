@@ -1,6 +1,6 @@
 # Read-Tool Staleness & Bounding Audit
 
-**Date:** 2026-07-25 · **Status:** findings — no fixes proposed yet · **Trigger:** the Entra
+**Date:** 2026-07-25 · **Status:** all findings fixed (Tier 1 in PR #74; tiers 2–4 follow-up) · **Trigger:** the Entra
 risky-users staleness bug ([PR #73](https://github.com/ubercylon8/f0_sectools/pull/73))
 
 The Entra fix exposed a defect *class*, not a one-off: a tool whose name promises
@@ -45,6 +45,12 @@ mocked responses exactly as Microsoft documents them.
 So the remedy here is server-side `$filter` (+ `$expand=alerts`), **not** `$orderby` —
 the opposite of the Entra fix, which needed `$orderby`. Worth stating plainly because
 the initial hypothesis was "missing `$orderby`" and the docs disproved it.
+
+> **Status: all tiers below are now fixed.** Tier 1 shipped in
+> [PR #74](https://github.com/ubercylon8/f0_sectools/pull/74); tiers 2–4 in the
+> follow-up branch. See *Follow-up verification* at the end for what the live probes
+> overturned — the truncation work found a second `accepted ≠ honoured` trap, this
+> time in a field's *value* rather than a parameter's effect.
 
 ### Tier 2 — Silent truncation (no "more available" note)
 
@@ -165,3 +171,70 @@ actionable rows on a tenant that has a small but real set of them.
    escalation rule, so it must stay a client-side refinement of `high`), and Graph's
    `informational`/`unknown` both mean our `info` (so `severity_min="info"` is *no*
    severity filter rather than a broken one).
+
+---
+
+## Follow-up verification (operator-authorized, read-only, 2026-07-25)
+
+Tiers 2–4 were probed the same way as Tier 1, and the probes were again load-bearing.
+
+### Purview — the status filter was a live reporting bug
+
+| | Result |
+|---|---|
+| DLP alerts in the default 168h window | **6** |
+| …of which unresolved | **0** — every one was already `resolved` |
+
+The headline read "6 DLP alerts", and that headline feeds the **CISO report's
+data-risk tile**, so the shipped report overstated current data risk. `status ne
+'resolved'` is honoured on `alerts_v2`, and `@odata.count` there *is* the true
+filtered total, so the summary can now report what matched rather than what it
+happened to fetch.
+
+A second-order point drove the guidance change: "nothing happened" and "everything
+was handled" both render as `0`, but they mean opposite things — the first suggests
+DLP may not be deployed, the second proves it is working. The zero-case guidance now
+tells the operator to re-run with `state="all"` to tell them apart.
+
+### Intune — `@odata.count` is a trap on two of three endpoints
+
+Probed with `$top=3` against a **1,507-device** tenant:
+
+| Endpoint | `$top=N` alone | `$top=N&$count=true` | Reliable signal |
+|---|---|---|---|
+| `managedDevices` | `count=3` — **echoes the page** | `count=1507` but **zero rows** | `@odata.nextLink` |
+| `deviceConfigurations` | no count | `count=2` of 28 — **echoes the page** | `@odata.nextLink` |
+| `deviceCompliancePolicies` | no count, never a nextLink | `count=9` — **the true total** | `$count=true` |
+
+The first implementation trusted `@odata.count` uniformly and a 5-of-1,507 page
+reported no truncation at all — the fix reproduced the very bug it was written to
+close. This is the Tier-1 lesson one level deeper: it is not enough to ask whether a
+parameter is *honoured*; a field that is present and well-typed can still not mean
+what its name implies. So the "trust the count" decision is per call site.
+
+### Tenable — the API's own total contradicts the API's own listing
+
+| Query | assets returned | `total` field |
+|---|---|---|
+| `?limit=10` | 10 | **580** |
+| unbounded | 314 | **314** |
+
+Quoting `total` would have produced "Showing 10 of 580" from a tool whose full
+listing returns 314. `list_assets` therefore reports a full page as "more available"
+rather than quoting a number it cannot stand behind, and uses an exact count only on
+the hostname path, where it fetches the whole workbench and filters locally.
+
+`/scans` was confirmed unordered (141 scans, not newest-first) and only **37 of 141**
+carry `last_modification_date`; those without one now sort last rather than being
+dropped.
+
+### ProjectAchilles — two endpoints, two shapes
+
+`/agent/admin/agents` reports its total under `data.total` (22); `/risk-acceptances`
+reports it at the **top level** (`total`). Both are honest totals, but a single
+extraction path would have silently missed one.
+
+### Result
+
+Every bounded call now discloses what it withheld, and every complete call stays
+silent — verified live across all four platforms.
