@@ -60,6 +60,7 @@ SECTION_MAPS: dict[str, list[SectionSpec]] = {
     ],
     "detection_engineer": [
         SectionSpec(BlockKind.narrative, "sec_executive_summary", _OPS),
+        SectionSpec(BlockKind.metric_grid, "sec_posture", _OPS, FindingGroup.posture),
         SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.all),
         SectionSpec(BlockKind.coverage, "sec_scope", _OPS),
         SectionSpec(BlockKind.open_questions, "sec_open_questions", _OPS),
@@ -67,6 +68,7 @@ SECTION_MAPS: dict[str, list[SectionSpec]] = {
     ],
     "threat_hunter": [
         SectionSpec(BlockKind.narrative, "sec_executive_summary", _OPS),
+        SectionSpec(BlockKind.metric_grid, "sec_posture", _OPS, FindingGroup.posture),
         SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.all),
         SectionSpec(BlockKind.coverage, "sec_scope", _OPS),
         SectionSpec(BlockKind.open_questions, "sec_open_questions", _OPS),
@@ -74,6 +76,7 @@ SECTION_MAPS: dict[str, list[SectionSpec]] = {
     ],
     "security_engineer": [
         SectionSpec(BlockKind.narrative, "sec_executive_summary", _OPS),
+        SectionSpec(BlockKind.metric_grid, "sec_posture", _OPS, FindingGroup.posture),
         SectionSpec(BlockKind.finding_table, "sec_findings", _OPS, FindingGroup.all),
         SectionSpec(BlockKind.coverage, "sec_scope", _OPS),
         SectionSpec(BlockKind.open_questions, "sec_open_questions", _OPS),

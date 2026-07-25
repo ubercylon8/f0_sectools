@@ -30,6 +30,7 @@ body {
 .metric__state--needs-work { color:var(--sev-high); }
 .metric__state--exposure { color:var(--sev-critical); }
 .metric__state--not-assessed { color:var(--muted); }
+.metric__state--clear { color:var(--muted); }
 /* Finding rows — operational */
 .finding { border-left:4px solid var(--sev-info); padding:7px 11px; margin-bottom:7px; background:#f6f8fa; border-radius:0 4px 4px 0; }
 .finding--critical { border-left-color:var(--sev-critical); background:#faf0f0; }

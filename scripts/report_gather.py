@@ -43,11 +43,13 @@ def _within_window(findings: list[Finding], window_hours: int) -> list[Finding]:
 
 
 def _degraded(group: str, detail: str) -> Finding:
+    human = group.replace("_", " ").capitalize()
     return Finding(
-        source=group.lower().replace(" ", "_"),
+        source=group,
         finding_type=FindingType.posture,
         severity=Severity.info,
-        title=f"{group} not configured — not assessed",
+        # "not configured" is the marker sections.is_not_assessed matches — keep it.
+        title=f"{human} not configured — not assessed",
         evidence=[Evidence(key="reason", value=redact_text(detail)[:300])],
     )
 
@@ -222,35 +224,35 @@ async def _tenable_top_vulns(window_hours: int) -> list[Finding]:
 # working data (see docs/superpowers/specs/2026-07-25-report-persona-gathering-design.md).
 GATHER_MAP: dict[str, dict[str, Callable[[int], Awaitable[list[Finding]]]]] = {
     "ciso": {
-        "Config hardening": _pillar_config_hardening,
-        "Attack validation": _pillar_attack_validation,
-        "Vulnerability exposure": _pillar_vuln_exposure,
-        "Device compliance": _pillar_device_compliance,
-        "Data risk": _pillar_data_risk,
-        "Endpoint coverage": _pillar_endpoint_coverage,
+        "config_hardening": _pillar_config_hardening,
+        "attack_validation": _pillar_attack_validation,
+        "vulnerability_exposure": _pillar_vuln_exposure,
+        "device_compliance": _pillar_device_compliance,
+        "data_risk": _pillar_data_risk,
+        "endpoint_coverage": _pillar_endpoint_coverage,
     },
     "detection_engineer": {
-        "Alerts (MITRE)": _defender_alerts,
-        "Incidents": _defender_incidents,
-        "Detection rules": _lc_dr_rules,
-        "Endpoint detections": _lc_detections,
-        "Weak techniques": _pa_weak_techniques,
+        "alerts_mitre": _defender_alerts,
+        "incidents": _defender_incidents,
+        "detection_rules": _lc_dr_rules,
+        "endpoint_detections": _lc_detections,
+        "weak_techniques": _pa_weak_techniques,
     },
     "threat_hunter": {
-        "Incidents": _defender_incidents,
-        "Alerts (MITRE)": _defender_alerts,
-        "Endpoint detections": _lc_detections,
-        "Endpoint coverage": _pillar_endpoint_coverage,
+        "incidents": _defender_incidents,
+        "alerts_mitre": _defender_alerts,
+        "endpoint_detections": _lc_detections,
+        "endpoint_coverage": _pillar_endpoint_coverage,
     },
     "security_engineer": {
-        "Config hardening": _pillar_config_hardening,
-        "Conditional access": _entra_conditional_access,
-        "Privileged roles": _entra_privileged_roles,
-        "Risky users": _entra_risky_users,
-        "Device compliance": _pillar_device_compliance,
-        "Stale devices": _intune_stale_devices,
-        "Vulnerability exposure": _pillar_vuln_exposure,
-        "Top vulnerabilities": _tenable_top_vulns,
+        "config_hardening": _pillar_config_hardening,
+        "conditional_access": _entra_conditional_access,
+        "privileged_roles": _entra_privileged_roles,
+        "risky_users": _entra_risky_users,
+        "device_compliance": _pillar_device_compliance,
+        "stale_devices": _intune_stale_devices,
+        "vulnerability_exposure": _pillar_vuln_exposure,
+        "top_vulnerabilities": _tenable_top_vulns,
     },
 }
 
@@ -270,6 +272,31 @@ def _metric_from(pillar: str, findings: list[Finding]) -> MetricCard:
     state = {"critical": "exposure", "high": "needs-work", "medium": "needs-work"}.get(
         f.severity.value, "strong")
     return MetricCard(pillar, headline, state, detail=f.title)
+
+
+_SEV_ORDER = ("critical", "high", "medium", "low", "info")
+_SEV_STATE = {
+    "critical": "exposure", "high": "needs-work", "medium": "needs-work",
+    "low": "strong", "info": "strong",
+}
+
+
+def _count_metric(group: str, findings: list[Finding]) -> MetricCard:
+    """An at-a-glance tile for an operational group: how many findings it produced.
+
+    An empty group is `clear`, not `strong` — "0 endpoint detections" is not good
+    news when most sensors are dormant, and a green tile would contradict the
+    narrative. A group whose findings are all degradations is `not-assessed`.
+    """
+    real = [f for f in findings if not is_not_assessed(f)]
+    if not findings:
+        return MetricCard(group, "0", "clear", detail="nothing_in_window")
+    if not real:
+        return MetricCard(group, "—", "not-assessed")
+    counts = {sev: sum(1 for f in real if f.severity.value == sev) for sev in _SEV_ORDER}
+    worst = next((s for s in _SEV_ORDER if counts[s]), "info")
+    breakdown = tuple((s, counts[s]) for s in _SEV_ORDER if counts[s])
+    return MetricCard(group, str(len(real)), _SEV_STATE[worst], severity_counts=breakdown)
 
 
 async def _run_group(group: str, factory, window_hours: int) -> tuple[str, list[Finding]]:
@@ -313,10 +340,12 @@ async def gather(persona: str, window_hours: int) -> tuple[list[Finding], ScopeM
         for f in healthy:
             if f.source not in platforms:
                 platforms.append(f.source)
-        # Tiles are an executive-tier device: a CISO group is one headline
-        # posture finding, an operational group is a list of alerts/detections.
+        # CISO groups are one headline posture finding each (a percentage/score);
+        # operational groups are lists, so their tile is the count.
         if key == "ciso":
             metrics.append(_metric_from(group, group_findings))
+        else:
+            metrics.append(_count_metric(group, group_findings))
     meta = ScopeMeta(
         generated_at="",  # stamped by the CLI
         tenant_label="",

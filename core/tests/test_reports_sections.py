@@ -57,8 +57,7 @@ def test_operational_personas_use_finding_table():
     for persona in ("detection_engineer", "threat_hunter", "security_engineer"):
         assert TIER[persona] == "operational"
         kinds = [s.kind for s in SECTION_MAPS[persona]]
-        assert BlockKind.finding_table in kinds
-        assert BlockKind.metric_grid not in kinds  # operational tier is finding-forward
+        assert BlockKind.finding_table in kinds  # operational tier is still finding-forward
 
 
 def test_is_not_assessed_detects_permission_missing():
@@ -67,3 +66,11 @@ def test_is_not_assessed_detects_permission_missing():
     real = Finding(source="defender", finding_type=FindingType.risk,
                    severity=Severity.high, title="Device compliance gap")
     assert is_not_assessed(real) is False
+
+
+def test_operational_personas_have_an_at_a_glance_section():
+    for persona in ("detection_engineer", "threat_hunter", "security_engineer"):
+        kinds = [s.kind for s in SECTION_MAPS[persona]]
+        assert BlockKind.metric_grid in kinds, persona
+        # it sits directly after the narrative, like the CISO's
+        assert kinds.index(BlockKind.metric_grid) == kinds.index(BlockKind.narrative) + 1

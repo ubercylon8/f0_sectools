@@ -14,10 +14,10 @@ def test_gather_degrades_when_platform_unconfigured(monkeypatch):
         raise ValueError("Missing required environment variables: DEFENDER_TENANT_ID")
 
     monkeypatch.setitem(report_gather.GATHER_MAP, "ciso",
-                        {"Config hardening": boom, "Vulnerability exposure": boom})
+                        {"config_hardening": boom, "vulnerability_exposure": boom})
     findings, meta = asyncio.run(report_gather.gather("ciso", 168))
     assert isinstance(meta, ScopeMeta)
-    assert set(meta.not_assessed) >= {"Config hardening", "Vulnerability exposure"}
+    assert set(meta.not_assessed) >= {"config_hardening", "vulnerability_exposure"}
     assert meta.assessed == []  # nothing came back healthy
     # every dark pillar still produced a posture finding
     assert all(f.finding_type is FindingType.posture for f in findings)
@@ -33,9 +33,9 @@ def test_gather_collects_healthy_pillar(monkeypatch):
                         severity=Severity.info, title="Secure Score: 62%",
                         evidence=[{"key": "secure_score_pct", "value": "62"}])]
 
-    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"Config hardening": ok})
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"config_hardening": ok})
     findings, meta = asyncio.run(report_gather.gather("ciso", 168))
-    assert "Config hardening" in meta.assessed
+    assert "config_hardening" in meta.assessed
     assert any("62%" in f.title for f in findings)
 
 
@@ -48,7 +48,7 @@ def test_metric_from_uses_headline_for_value_and_title_for_detail():
         evidence=[Evidence(key="headline", value="62%"),
                   Evidence(key="secure_score_pct", value="62")],
     )]
-    card = report_gather._metric_from("Config hardening", findings)
+    card = report_gather._metric_from("config_hardening", findings)
     assert card.value == "62%"
     assert card.detail == "Secure Score: 62%"
     assert card.state == "strong"
@@ -69,7 +69,7 @@ def test_gather_redacts_secret_hinting_evidence_from_findings(monkeypatch):
             ],
         )]
 
-    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"Config hardening": leaky})
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"config_hardening": leaky})
     findings, _meta = asyncio.run(report_gather.gather("ciso", 168))
     ev = {e.key: e.value for f in findings for e in f.evidence}
     assert ev["client_secret"] == "«redacted»"
@@ -84,7 +84,7 @@ def test_metric_from_no_headline_is_unquantified():
 
     f = Finding(source="tenable", finding_type=FindingType.posture, severity=Severity.info,
                 title="Tenable authentication failed — vulnerability summary unavailable")
-    card = report_gather._metric_from("Vulnerability exposure", [f])
+    card = report_gather._metric_from("vulnerability_exposure", [f])
     assert card.value == "—"
     assert card.state == "not-assessed"
     assert card.detail == f.title
@@ -98,31 +98,31 @@ def test_gather_map_has_all_four_personas():
 
 def test_ciso_map_is_the_six_pillars():
     assert list(report_gather.GATHER_MAP["ciso"]) == [
-        "Config hardening", "Attack validation", "Vulnerability exposure",
-        "Device compliance", "Data risk", "Endpoint coverage",
+        "config_hardening", "attack_validation", "vulnerability_exposure",
+        "device_compliance", "data_risk", "endpoint_coverage",
     ]
 
 
 def test_detection_engineer_gathers_its_own_groups():
     groups = set(report_gather.GATHER_MAP["detection_engineer"])
     assert groups == {
-        "Alerts (MITRE)", "Incidents", "Detection rules",
-        "Endpoint detections", "Weak techniques",
+        "alerts_mitre", "incidents", "detection_rules",
+        "endpoint_detections", "weak_techniques",
     }
     # it must NOT be the CISO pillar set
-    assert "Data risk" not in groups
+    assert "data_risk" not in groups
 
 
 def test_security_engineer_gathers_identity_and_exposure():
     groups = set(report_gather.GATHER_MAP["security_engineer"])
-    assert {"Conditional access", "Privileged roles", "Risky users",
-            "Vulnerability exposure", "Device compliance"} <= groups
+    assert {"conditional_access", "privileged_roles", "risky_users",
+            "vulnerability_exposure", "device_compliance"} <= groups
 
 
 def test_threat_hunter_gathers_incidents_and_detections():
     groups = set(report_gather.GATHER_MAP["threat_hunter"])
-    assert {"Incidents", "Alerts (MITRE)", "Endpoint detections",
-            "Endpoint coverage"} <= groups
+    assert {"incidents", "alerts_mitre", "endpoint_detections",
+            "endpoint_coverage"} <= groups
 
 
 def test_gather_runs_only_the_personas_groups(monkeypatch):
@@ -131,9 +131,9 @@ def test_gather_runs_only_the_personas_groups(monkeypatch):
                         severity=Severity.high, title="Suspicious PowerShell")]
 
     monkeypatch.setitem(report_gather.GATHER_MAP, "detection_engineer",
-                        {"Alerts (MITRE)": ok, "Weak techniques": ok})
+                        {"alerts_mitre": ok, "weak_techniques": ok})
     findings, meta = asyncio.run(report_gather.gather("detection-engineer", 168))
-    assert set(meta.assessed) == {"Alerts (MITRE)", "Weak techniques"}
+    assert set(meta.assessed) == {"alerts_mitre", "weak_techniques"}
     assert len(findings) == 2
 
 
@@ -143,16 +143,17 @@ def test_gather_rejects_unknown_persona():
         asyncio.run(report_gather.gather("nonsense", 168))
 
 
-def test_operational_persona_gets_no_metric_tiles(monkeypatch):
-    # Operational groups return lists, not one headline number — a tile would be
-    # meaningless, so pillar_metrics stays empty for them (CISO-only).
+def test_operational_persona_gets_a_count_tile_not_a_headline_metric(monkeypatch):
+    # Operational groups return lists, not one headline number — their tile is
+    # the finding COUNT (via _count_metric), unlike the CISO's headline metric.
     async def ok(window_hours):
         return [Finding(source="defender", finding_type=FindingType.alert,
                         severity=Severity.high, title="Suspicious PowerShell")]
 
-    monkeypatch.setitem(report_gather.GATHER_MAP, "threat_hunter", {"Incidents": ok})
+    monkeypatch.setitem(report_gather.GATHER_MAP, "threat_hunter", {"incidents": ok})
     _findings, meta = asyncio.run(report_gather.gather("threat-hunter", 168))
-    assert meta.pillar_metrics == []
+    assert [m.value for m in meta.pillar_metrics] == ["1"]
+    assert meta.pillar_metrics[0].label == "incidents"
 
 
 def test_ciso_still_gets_metric_tiles(monkeypatch):
@@ -163,7 +164,7 @@ def test_ciso_still_gets_metric_tiles(monkeypatch):
                         severity=Severity.low, title="Microsoft Secure Score: 90%",
                         evidence=[Evidence(key="headline", value="90%")])]
 
-    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"Config hardening": ok})
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"config_hardening": ok})
     _findings, meta = asyncio.run(report_gather.gather("ciso", 168))
     assert [m.value for m in meta.pillar_metrics] == ["90%"]
 
@@ -196,10 +197,10 @@ def test_gather_empty_but_healthy_group_is_assessed_not_dark(monkeypatch):
         return []
 
     monkeypatch.setitem(report_gather.GATHER_MAP, "security_engineer",
-                        {"Risky users": empty, "Stale devices": empty})
+                        {"risky_users": empty, "stale_devices": empty})
     findings, meta = asyncio.run(report_gather.gather("security_engineer", 168))
     assert findings == []
-    assert set(meta.assessed) == {"Risky users", "Stale devices"}
+    assert set(meta.assessed) == {"risky_users", "stale_devices"}
     assert meta.not_assessed == []
 
 
@@ -210,9 +211,9 @@ def test_gather_raising_group_still_lands_in_not_assessed(monkeypatch):
         raise ValueError("no creds")
 
     monkeypatch.setitem(report_gather.GATHER_MAP, "security_engineer",
-                        {"Risky users": boom})
+                        {"risky_users": boom})
     findings, meta = asyncio.run(report_gather.gather("security_engineer", 168))
-    assert meta.not_assessed == ["Risky users"]
+    assert meta.not_assessed == ["risky_users"]
     assert meta.assessed == []
     assert findings[0].finding_type is FindingType.posture
 
@@ -238,10 +239,10 @@ def test_gather_provenance_counts_distinct_sources_not_groups(monkeypatch):
                         severity=Severity.info, title="Rule A")]
 
     monkeypatch.setitem(report_gather.GATHER_MAP, "detection_engineer", {
-        "Alerts (MITRE)": defender_ok,
-        "Incidents": defender_ok2,
-        "Endpoint detections": lc_ok,
-        "Detection rules": lc_ok2,
+        "alerts_mitre": defender_ok,
+        "incidents": defender_ok2,
+        "endpoint_detections": lc_ok,
+        "detection_rules": lc_ok2,
     })
     _findings, meta = asyncio.run(report_gather.gather("detection_engineer", 168))
     assert len(meta.platforms_queried) == 2
@@ -295,3 +296,55 @@ def test_within_window_keeps_finding_with_unparsable_observed_at():
     f = Finding(source="defender", finding_type=FindingType.alert,
                 severity=Severity.high, title="Bad timestamp", observed_at="not-a-date")
     assert report_gather._within_window([f], 168) == [f]
+
+
+def test_gather_map_uses_stable_identifiers():
+    # keys are snake_case ids the i18n layer translates, not display labels
+    for persona, groups in report_gather.GATHER_MAP.items():
+        for gid in groups:
+            assert gid == gid.lower(), (persona, gid)
+            assert " " not in gid, (persona, gid)
+    assert "config_hardening" in report_gather.GATHER_MAP["ciso"]
+    assert "weak_techniques" in report_gather.GATHER_MAP["detection_engineer"]
+
+
+def test_operational_persona_gets_count_tiles(monkeypatch):
+    from f0_sectools_core.schema.findings import Finding, FindingType, Severity
+
+    async def three(window_hours):
+        return [
+            Finding(source="projectachilles", finding_type=FindingType.risk,
+                    severity=Severity.high, title="Weak coverage: T1059"),
+            Finding(source="projectachilles", finding_type=FindingType.risk,
+                    severity=Severity.high, title="Weak coverage: T1078"),
+            Finding(source="projectachilles", finding_type=FindingType.risk,
+                    severity=Severity.medium, title="Weak coverage: T1005"),
+        ]
+
+    async def empty(window_hours):
+        return []
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "detection_engineer",
+                        {"weak_techniques": three, "incidents": empty})
+    _findings, meta = asyncio.run(report_gather.gather("detection-engineer", 168))
+    tiles = {m.label: m for m in meta.pillar_metrics}
+    assert tiles["weak_techniques"].value == "3"
+    assert tiles["weak_techniques"].state == "needs-work"        # worst severity is high
+    assert tiles["weak_techniques"].severity_counts == (("high", 2), ("medium", 1))
+    # an empty group is CLEAR (muted), never green/"strong"
+    assert tiles["incidents"].value == "0"
+    assert tiles["incidents"].state == "clear"
+    assert tiles["incidents"].detail == "nothing_in_window"
+
+
+def test_count_tile_state_escalates_to_exposure_on_critical(monkeypatch):
+    from f0_sectools_core.schema.findings import Finding, FindingType, Severity
+
+    async def crit(window_hours):
+        return [Finding(source="tenable", finding_type=FindingType.risk,
+                        severity=Severity.critical, title="RCE")]
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "security_engineer",
+                        {"top_vulnerabilities": crit})
+    _f, meta = asyncio.run(report_gather.gather("security-engineer", 168))
+    assert meta.pillar_metrics[0].state == "exposure"

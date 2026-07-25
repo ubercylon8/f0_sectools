@@ -6,6 +6,9 @@
 
 Two detection signals stand out this window: a suspicious PowerShell execution and an outbound beaconing pattern.
 
+## Posture at a glance
+
+
 ## Findings
 
 The PowerShell execution warrants a tuning review; the beacon pattern is a hunting lead worth pivoting on.
