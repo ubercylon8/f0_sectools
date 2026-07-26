@@ -386,6 +386,11 @@ async def test_search_audit_log_reuses_inflight_identical_search(monkeypatch):
     ev = {e.key: e.value for e in second[0].evidence}
     assert ev["audit_query_id"] == "q-1"
     assert {e.key: e.value for e in first[0].evidence}["audit_query_id"] == "q-1"
+    # Close the loop on the wiring: the age tests exercise _pending_finding in
+    # isolation, so without this a typo'd or unthreaded reused_age_s would still
+    # pass everything. The two calls land microseconds apart, hence "0 min ago".
+    assert "min ago" in ev["note"]
+    assert "note" not in {e.key for e in first[0].evidence}  # only the REUSE says so
 
 
 @pytest.mark.asyncio
