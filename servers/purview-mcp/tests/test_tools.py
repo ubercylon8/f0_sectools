@@ -386,6 +386,11 @@ async def test_search_audit_log_reuses_inflight_identical_search(monkeypatch):
     ev = {e.key: e.value for e in second[0].evidence}
     assert ev["audit_query_id"] == "q-1"
     assert {e.key: e.value for e in first[0].evidence}["audit_query_id"] == "q-1"
+    # Close the loop on the wiring: the age tests exercise _pending_finding in
+    # isolation, so without this a typo'd or unthreaded reused_age_s would still
+    # pass everything. The two calls land microseconds apart, hence "0 min ago".
+    assert "min ago" in ev["note"]
+    assert "note" not in {e.key for e in first[0].evidence}  # only the REUSE says so
 
 
 @pytest.mark.asyncio
@@ -489,3 +494,32 @@ async def test_dlp_summary_claims_no_sampling_when_it_saw_everything():
     findings = await tools.get_dlp_summary(gc)
     assert all(e.key != "severity_basis" for e in findings[0].evidence)
     assert "sampled" not in findings[0].title
+
+
+def test_a_reused_search_reports_how_stale_it_is():
+    # Knowing a search was reused is not enough: its window was computed when it
+    # was CREATED, so "the last 24h" silently means "the 24h before then". The
+    # reuse TTL runs to 30 minutes, so a caller needs the age to tell a query
+    # started seconds ago from one started half an hour ago.
+    #
+    # Exercised directly rather than through a faked clock: `time.monotonic` is
+    # also what the poll loop measures its deadline with, so freezing it would
+    # spin that loop forever.
+    f = tools._pending_finding("q-age", "running", reused=True,
+                               window="w", reused_age_s=720.0)
+    note = {e.key: e.value for e in f.evidence}["note"]
+    assert "started 12 min ago" in note        # 720s -> 12 minutes
+    assert "reusing it" in note
+    assert "the window above is the one it was created with" in note
+
+
+def test_a_fresh_search_claims_no_reuse_age():
+    f = tools._pending_finding("q-new", "running", reused=False, window="w")
+    assert "note" not in {e.key for e in f.evidence}
+
+
+def test_a_reuse_without_a_known_age_omits_it_rather_than_guessing():
+    f = tools._pending_finding("q", "running", reused=True, window="w")
+    note = {e.key: e.value for e in f.evidence}["note"]
+    assert "reusing it" in note
+    assert "min ago" not in note
