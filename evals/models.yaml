@@ -7,10 +7,14 @@
 # small, so cap the context with a one-line Modelfile derive (no sudo):
 #   printf 'FROM <base-tag>\nPARAMETER num_ctx 16384\n' | ollama create <name> -f -
 # The `*:ctx16k` tags below are such derives of `-c256k` bases, created to fit ~30GB.
+#
+# 2026-07-25: the derives from the 2026-07-13 sweep had been removed from the box
+# and were re-pulled as plain base tags, so the tags below differ from that run
+# even where the display name matches. Qwen3 4B is deliberately OUT of the matrix
+# (operator's call) — its row stays absent rather than showing a stale number.
 - { tag: "gpt-oss:20b-c128k",     display: "GPT-OSS 20B" }
-- { tag: "qwen3:8b-c40k",         display: "Qwen3 8B" }
-- { tag: "qwen3:4b-ctx16k",       display: "Qwen3 4B" }
-- { tag: "qwen3.5:latest",        display: "Qwen3.5 (9.7B)" }
+- { tag: "qwen3:8b",              display: "Qwen3 8B" }
+- { tag: "qwen3.5:9b",            display: "Qwen3.5 (9.7B)" }
 - { tag: "gemma4:e4b",            display: "Gemma 4 E4B" }
 - { tag: "gemma4:12b",            display: "Gemma 4 12B" }
 - { tag: "granite4:tiny-h-c128k", display: "Granite 4 Tiny" }

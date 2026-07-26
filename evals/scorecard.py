@@ -20,6 +20,8 @@ from evals.run import (
     combined_tasks,
     combined_tool_schemas,
     load_tasks,
+    SuiteUnusable,
+    assert_suite_usable,
     run_suite,
     server_tool_schemas,
 )
@@ -96,6 +98,10 @@ async def run_matrix(
                 tools, tasks = await _tools_and_tasks(server)
                 async with factory(base_url, tag) as client:
                     rep = await run_suite(tools, tasks, client, runs=runs)
+                # A cell where the model never called a tool is not a 0% score —
+                # it is an unusable measurement. Record it as such so the table
+                # cannot publish a serving problem as a capability claim.
+                assert_suite_usable(rep, tag)
                 results["cells"][key] = {
                     "status": "ok",
                     "tool_rate": rep["overall_tool_rate"],
@@ -103,6 +109,8 @@ async def run_matrix(
                 }
             except ValueError:
                 raise  # e.g. tool-name collision in the combined registry — fail loud
+            except SuiteUnusable as e:
+                results["cells"][key] = {"status": "unusable", "error": str(e)[:400]}
             except Exception as e:  # noqa: BLE001 - one dead cell must not kill the sweep
                 results["cells"][key] = {"status": "error", "error": str(e)[:200]}
             _write_results(out_path, results)
@@ -113,6 +121,15 @@ SCORECARD_MD = EVALS / "SCORECARD.md"
 _FINDINGS_MARKER = (
     "<!-- findings below: hand-annotated, preserved when the table is regenerated -->"
 )
+
+
+def _combined_tool_count() -> int:
+    """Size of the composition registry, read from the live servers."""
+    import asyncio
+
+    from evals.run import combined_tool_schemas
+
+    return len(asyncio.run(combined_tool_schemas()))
 
 
 def render_scorecard_md(results: dict) -> str:
@@ -130,6 +147,9 @@ def render_scorecard_md(results: dict) -> str:
     """
     cells = results.get("cells", {})
     cell_pairs = [k.split("::", 1) for k in cells if "::" in k]
+    # Derived, never hardcoded: this legend read "28 tools" while the registry
+    # had grown to 51, so the document misdescribed the very test it reports.
+    tool_total = results.get("tool_total") or _combined_tool_count()
 
     servers = list(results.get("servers", []))
     for _, server in cell_pairs:
@@ -152,8 +172,10 @@ def render_scorecard_md(results: dict) -> str:
         f"· generated {results.get('date', '')}",
         "",
         "Each cell is **tool-selection% / argument-filling%** over the server's task "
-        "set. `all` = every server's 28 tools registered at once (composition test). "
-        "`err` = model/endpoint error; `–` = not run.",
+        f"set. `all` = every server's {tool_total} tools registered at once (composition "
+        "test). `err` = model/endpoint error; `ctx!` = the model emitted no tool "
+        "call on any task, which means the serving context could not hold the "
+        "schema — a setup problem, NOT a score of zero; `–` = not run.",
         "",
         head,
         sep,
@@ -164,6 +186,8 @@ def render_scorecard_md(results: dict) -> str:
             cell = cells.get(cell_key(m["tag"], s))
             if not cell:
                 row.append("–")
+            elif cell.get("status") == "unusable":
+                row.append("ctx!")
             elif cell.get("status") == "error":
                 row.append("err")
             else:

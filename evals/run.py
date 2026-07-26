@@ -296,11 +296,46 @@ async def run_suite(
             }
         )
     total = len(task_rows) or 1
+    silent = sum(1 for r in task_rows if all(c is None for c in r["calls"]))
     return {
         "tasks": task_rows,
         "overall_tool_rate": sum(r["tool_rate"] for r in task_rows) / total,
         "overall_args_rate": sum(r["args_rate"] for r in task_rows) / total,
+        "no_call_rate": silent / total,
+        "schema_kb": round(len(json.dumps(tools)) / 1024, 1),
+        "tool_count": len(tools),
     }
+
+
+class SuiteUnusable(RuntimeError):
+    """The suite produced no usable measurement — not a score of zero.
+
+    A tool-capable model that is bad at selection still CALLS something; it
+    picks the wrong tool. Emitting no tool call on a single task can be a
+    refusal, but emitting none across an ENTIRE task set means the model never
+    saw a usable tool list, and the overwhelming cause is a serving context too
+    small to hold the schema.
+
+    This exists because the alternative is worse than a crash: the run scores
+    0%/0%, which is indistinguishable from "this model cannot drive our tools"
+    and would publish a false claim about the very thesis the scorecard tests.
+    Observed 2026-07-26 — four models scored 0% on the 51-tool composition purely
+    because they were served with Ollama's 4096-token default `num_ctx` while the
+    schema alone is ~32 KB. The one model carrying an explicit num_ctx scored 87%.
+    """
+
+
+def assert_suite_usable(report: dict, model: str) -> None:
+    """Raise if a report is an artifact of the serving setup rather than a result."""
+    if report.get("no_call_rate", 0) < 1.0:
+        return
+    raise SuiteUnusable(
+        f"{model}: no tool call on ANY of {len(report['tasks'])} tasks. The tool "
+        f"schema is {report.get('schema_kb')} KB across {report.get('tool_count')} "
+        "tools; a serving context that cannot hold it yields exactly this. Raise the "
+        "context window (Ollama: PARAMETER num_ctx in a Modelfile derive; vLLM: "
+        "--max-model-len) and re-run. Refusing to report this as 0%."
+    )
 
 
 def format_report(server: str, model: str, report: dict) -> str:
@@ -345,6 +380,7 @@ async def _amain(args: argparse.Namespace) -> None:
         tasks = load_tasks(args.server)
     async with ModelClient(args.base_url, args.model, api_key) as client:
         report = await run_suite(tools, tasks, client, runs=args.runs)
+    assert_suite_usable(report, args.model)
     if args.server == "all":
         print(format_combined_report(args.model, report, aggregate_by_origin(tasks, report)))
     else:

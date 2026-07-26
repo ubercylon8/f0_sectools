@@ -198,3 +198,31 @@ async def test_run_matrix_with_devnull_out_path_does_not_crash():
         "2026-01-01", client_factory=_fake_factory("get_secure_score"),
     )
     assert res["cells"][cell_key("m1", "defender")]["status"] == "ok"
+
+
+def test_an_unusable_cell_renders_as_ctx_not_a_number():
+    # The whole point: a serving problem must be visibly distinct from a score.
+    results = {
+        "base_url": "http://x/v1", "runs": 1, "date": "2026-07-26",
+        "models": [{"tag": "m1", "display": "M1"}],
+        "servers": ["all"],
+        "tool_total": 51,
+        "cells": {
+            "m1::all": {"status": "unusable", "error": "no tool call on ANY of 97 tasks"},
+        },
+    }
+    md = render_scorecard_md(results)
+    assert "| M1 | ctx! |" in md
+    assert "0%" not in md
+    assert "NOT a score of zero" in md      # the legend explains the marker
+
+
+def test_the_legend_reports_the_real_registry_size():
+    # This read "28 tools" while the registry had grown to 51 — the document
+    # misdescribed the very test it reports.
+    results = {
+        "base_url": "", "runs": 1, "date": "d", "models": [], "servers": ["all"],
+        "tool_total": 51, "cells": {},
+    }
+    assert "51 tools registered at once" in render_scorecard_md(results)
+    assert "28 tools" not in render_scorecard_md(results)
