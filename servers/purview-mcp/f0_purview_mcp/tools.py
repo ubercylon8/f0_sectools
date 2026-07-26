@@ -411,16 +411,24 @@ async def _audit_records(gc: Any, query_id: str, limit: int) -> list[Finding]:
 
 
 def _pending_finding(
-    query_id: str, status: str, reused: bool = False, window: str = ""
+    query_id: str, status: str, reused: bool = False, window: str = "",
+    reused_age_s: float | None = None,
 ) -> Finding:
     evidence = [Evidence(key="audit_query_id", value=query_id),
                 Evidence(key="status", value=status)]
     if window:
         evidence.append(Evidence(key="window", value=window))
     if reused:
+        # Say how OLD the reused query is, not merely that it was reused. Its
+        # window was computed when it was CREATED, so "the last 24h" silently
+        # means "the 24h before then" — without the age a caller cannot tell a
+        # query started seconds ago from one started half an hour ago, and the
+        # reuse TTL runs to 30 minutes.
+        age = "" if reused_age_s is None else f" (started {round(reused_age_s / 60)} min ago)"
         evidence.append(Evidence(
             key="note",
-            value="identical search already in flight — reusing it, no new query created",
+            value=f"identical search already in flight{age} — reusing it, no new "
+                  "query created; the window above is the one it was created with",
         ))
     return Finding(
         source="purview",
@@ -479,15 +487,28 @@ async def search_audit_log(
         body["userPrincipalNameFilters"] = [user]
     key = (activity, user, round(hours_back, 2))
     now = time.monotonic()
-    # No lock between this read and the write below: MCP-over-stdio is single-
-    # flight per session, so two truly concurrent identical calls (the only way
-    # to race) don't occur in practice; the dedupe targets sequential retries.
+    # No lock between this read and the write below. Two things make that a
+    # deliberate choice rather than an oversight:
+    #
+    #   - It cannot fire under the transport in use: MCP-over-stdio is
+    #     single-flight per session, and the dedupe exists for SEQUENTIAL
+    #     retries (a model resubmitting while a query runs), not concurrency.
+    #   - If it ever did fire, the cost is ONE duplicate server-side query —
+    #     i.e. the optimization not applying, which is exactly the pre-dedupe
+    #     behaviour. Nothing is corrupted and no result is wrong.
+    #
+    # A lock would have to be held across the POST below to actually close the
+    # window, which would serialize unrelated searches behind an unrelated
+    # network call — a real cost paid against a benign, unreachable race.
+    # Revisit if a concurrent transport is ever added.
     cached = _RECENT_SEARCHES.get(key)
     reused = bool(cached and now - cached[1] < _REUSE_TTL_S)
+    reused_age_s: float | None = None
     try:
         if reused and cached:
             query_id = cached[0]
             window = cached[2]  # the ORIGINAL queried window, not a fresh one
+            reused_age_s = now - cached[1]
             status = "running"
         else:
             window = f"{window_start} to {window_end}"
@@ -503,7 +524,8 @@ async def search_audit_log(
                 _RECENT_SEARCHES[key] = (query_id, now, window)
         status = await _poll_until_terminal(gc, query_id, status)
         if status not in ("succeeded", "failed", "cancelled"):
-            return [_pending_finding(query_id, status, reused=reused, window=window)]
+            return [_pending_finding(query_id, status, reused=reused, window=window,
+                                     reused_age_s=reused_age_s)]
         if status != "succeeded":
             return [
                 Finding(
@@ -527,7 +549,11 @@ async def search_audit_log(
 
 
 async def get_audit_results(gc: Any, audit_query_id: str, limit: int = 25) -> list[Finding]:
-    """Fetch results of a previously submitted audit search."""
+    """Fetch results of a previously submitted audit search.
+
+    Blocks for up to ~15s polling the query first, matching search_audit_log —
+    a model that expects an instant read otherwise polls this in a tight loop.
+    """
     limit = clamp_limit(limit)
     if not _QUERY_ID_RE.match(audit_query_id or ""):
         return [_invalid("audit_query_id", audit_query_id)]

@@ -20,6 +20,31 @@ ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDER = "/ABSOLUTE/PATH/TO/sec-tools"
 
 
+def _gated_write_tools() -> set[str]:
+    """Names of every gated-write tool the pa-actions server actually registers.
+
+    Derived from the live FastMCP registry rather than hardcoded, so adding a
+    fifth gated write cannot silently escape opencode's "ask" approval: the tool
+    appears here the moment it is registered, and the assertion below fails until
+    the permission is wired.
+
+    A gated write is identified by its `confirmation_token` parameter — the same
+    signal scripts/gen_docs.py uses to badge these tools in the reference docs.
+    """
+    import asyncio
+    import importlib
+
+    module = importlib.import_module("f0_pa_actions_mcp.server")
+    tools = asyncio.run(module.mcp.list_tools())
+    gated = {
+        t.name
+        for t in tools
+        if "confirmation_token" in (t.inputSchema or {}).get("properties", {})
+    }
+    assert gated, "no gated-write tools found — the detection signal has changed"
+    return gated
+
+
 def _server_scripts() -> set[str]:
     """Entry-point names of every workspace server (e.g. f0-defender-mcp)."""
     scripts: set[str] = set()
@@ -118,8 +143,8 @@ def test_every_server_wired_into_opencode_config():
     # Runtime defense-in-depth: when an operator DOES enable the server, every
     # WRITE tool call must hit opencode's interactive "ask" approval (a TUI
     # prompt the model cannot forge). Reads stay friction-free.
-    for write_tool in ("run_test", "schedule_test", "set_schedule_status", "cancel_tasks"):
-        assert cfg["permission"][f"f0-pa-actions_{write_tool}"] == "ask", write_tool
+    for write_tool in sorted(_gated_write_tools()):
+        assert cfg["permission"].get(f"f0-pa-actions_{write_tool}") == "ask", write_tool
     # Never touch the operator's model/provider setup from the project config.
     assert "model" not in cfg and "provider" not in cfg
 
