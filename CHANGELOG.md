@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.3.0] — 2026-07-25
+## [0.2.1] — 2026-07-25
 
 Twenty-seven merged PRs since 0.2.0. Two themes: **persona posture reports** as a
 shareable deliverable, and a **read-tool audit** that found several tools were
