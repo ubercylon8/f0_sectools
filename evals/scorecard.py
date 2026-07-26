@@ -17,11 +17,11 @@ import yaml
 from evals.run import (
     SERVER_MODULES,
     ModelClient,
+    SuiteUnusable,
+    assert_suite_usable,
     combined_tasks,
     combined_tool_schemas,
     load_tasks,
-    SuiteUnusable,
-    assert_suite_usable,
     run_suite,
     server_tool_schemas,
 )
