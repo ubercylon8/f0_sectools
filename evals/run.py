@@ -146,11 +146,17 @@ def aggregate_by_origin(tasks: list[dict], report: dict) -> dict:
 class ModelClient:
     """Minimal OpenAI-compatible chat client for tool-calling evals."""
 
+    # 180s, not 60s: the composition run puts a ~32 KB tool schema in front of an
+    # 8-12B model on a laptop GPU, and that is genuinely slow — qwen3:8b measured
+    # 73s for a single 51-tool call while taking 20s for the same prompt with 6.
+    # At 60s those cells failed as bare timeouts and were reported as `err`, which
+    # reads like the model or endpoint is broken rather than the clock being wrong.
     def __init__(self, base_url: str, model: str, api_key: str | None = None,
-                 timeout: float = 60.0) -> None:
+                 timeout: float = 180.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key or "not-needed"
+        self.timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
 
     async def __aenter__(self) -> ModelClient:
@@ -193,7 +199,15 @@ class ModelClient:
             return resp.json()["choices"][0]["message"]
         if last_exc is None:  # pragma: no cover - unreachable
             raise RuntimeError("model call failed with no captured error")
-        raise last_exc
+        # httpx.ReadTimeout and friends stringify to "" — re-raising them as-is
+        # produced scorecard cells reading `error: ` with no cause at all, which
+        # is how a 60s timeout masqueraded as an unexplained endpoint failure.
+        # Always carry the exception TYPE so a blank message cannot hide one.
+        detail = str(last_exc) or "no message"
+        raise RuntimeError(
+            f"{type(last_exc).__name__}: {detail} "
+            f"(model={self.model}, tools={len(tools)}, timeout={self.timeout}s)"
+        ) from last_exc
 
     async def call(self, prompt: str, tools: list[dict]) -> ToolCall | None:
         message = await self._post_chat([{"role": "user", "content": prompt}], tools)

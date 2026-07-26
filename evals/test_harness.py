@@ -134,8 +134,29 @@ async def test_model_client_raises_after_exhausting_retries(monkeypatch):
             side_effect=httpx.ConnectError("always down")
         )
         async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
-            with pytest.raises(httpx.TransportError):
+            with pytest.raises(RuntimeError) as exc:
                 await client.call("x", tools=[])
+    # The failure must NAME itself. httpx.ReadTimeout stringifies to "", which
+    # produced scorecard cells reading `error: ` with no cause — a 60s timeout
+    # masquerading as an unexplained endpoint failure. The type is always carried.
+    msg = str(exc.value)
+    assert "ConnectError" in msg
+    assert "model=m" in msg and "timeout=1.0" in msg
+    assert isinstance(exc.value.__cause__, httpx.TransportError)  # cause preserved
+
+
+@pytest.mark.asyncio
+async def test_an_empty_exception_message_still_names_its_type(monkeypatch):
+    monkeypatch.setattr("evals.run.asyncio.sleep", AsyncMock())
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            side_effect=httpx.ReadTimeout("")  # str() == "" — the real case
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            with pytest.raises(RuntimeError) as exc:
+                await client.call("x", tools=[])
+    assert "ReadTimeout" in str(exc.value)
+    assert "no message" in str(exc.value)
 
 
 @pytest.mark.asyncio

@@ -8,13 +8,23 @@
 #   printf 'FROM <base-tag>\nPARAMETER num_ctx 16384\n' | ollama create <name> -f -
 # The `*:ctx16k` tags below are such derives of `-c256k` bases, created to fit ~30GB.
 #
-# 2026-07-25: the derives from the 2026-07-13 sweep had been removed from the box
-# and were re-pulled as plain base tags, so the tags below differ from that run
-# even where the display name matches. Qwen3 4B is deliberately OUT of the matrix
-# (operator's call) — its row stays absent rather than showing a stale number.
-- { tag: "gpt-oss:20b-c128k",     display: "GPT-OSS 20B" }
-- { tag: "qwen3:8b",              display: "Qwen3 8B" }
-- { tag: "qwen3.5:9b",            display: "Qwen3.5 (9.7B)" }
-- { tag: "gemma4:e4b",            display: "Gemma 4 E4B" }
-- { tag: "gemma4:12b",            display: "Gemma 4 12B" }
+# 2026-07-26: EVERY row must be a context-capped derive, not a base tag. A base
+# tag is served with Ollama's 4096-token default, and the combined 51-tool schema
+# is ~32 KB (~8-10k tokens) — so the composition run silently receives no usable
+# tool list and the model calls nothing. Proven by A/B on identical prompts:
+#   gemma4:e4b         51 tools -> [None, None]
+#   gemma4:e4b-ctx16k  51 tools -> ['get_dlp_summary', 'get_dlp_summary']
+# The harness now refuses to score that case (evals/run.py: SuiteUnusable) rather
+# than reporting 0%, but the derives are what make the cell measurable at all.
+# Recreate with:  ollama create <name>-ctx16k -f <file containing>
+#   FROM <base-tag>
+#   PARAMETER num_ctx 16384
+# NB: ollama 0.30.6 rejects `-f -` (stdin) — the Modelfile must be a real file.
+# Qwen3 4B is deliberately OUT of the matrix (operator's call) — its row stays
+# absent rather than showing a stale number from an older sweep.
+- { tag: "gpt-oss:20b-ctx16k",    display: "GPT-OSS 20B" }
+- { tag: "qwen3:8b-ctx16k",       display: "Qwen3 8B" }
+- { tag: "qwen3.5:9b-ctx16k",     display: "Qwen3.5 (9.7B)" }
+- { tag: "gemma4:e4b-ctx16k",     display: "Gemma 4 E4B" }
+- { tag: "gemma4:12b-ctx16k",     display: "Gemma 4 12B" }
 - { tag: "granite4:tiny-h-c128k", display: "Granite 4 Tiny" }

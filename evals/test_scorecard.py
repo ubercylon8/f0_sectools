@@ -48,7 +48,21 @@ def _fake_factory(expect_tool):
 def test_load_models_reads_tag_and_display():
     models = load_models()
     assert models and all("tag" in m and "display" in m for m in models)
-    assert any(m["tag"] == "gpt-oss:20b-c128k" for m in models)
+
+
+def test_every_roster_model_declares_a_context():
+    # The invariant, not a literal tag: a BASE tag is served with Ollama's
+    # 4096-token default, and the 51-tool composition schema is ~32 KB, so the
+    # model receives no usable tool list and calls nothing — which the scorecard
+    # would otherwise have published as 0%. Every row must be a context-capped
+    # derive. Proven by A/B: gemma4:e4b returns None on 51 tools where
+    # gemma4:e4b-ctx16k returns the correct tool.
+    for m in load_models():
+        tag = m["tag"]
+        assert any(mark in tag for mark in ("ctx", "-c")), (
+            f"{tag} looks like a base tag; roster models must declare a context "
+            "(see the recipe at the top of evals/models.yaml)"
+        )
 
 
 def test_cell_key_format():
