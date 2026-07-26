@@ -252,3 +252,21 @@ async def test_a_partially_silent_suite_is_still_scored():
     rep = await run_suite(tools, tasks, Half(), runs=1)
     assert 0.0 < rep["no_call_rate"] < 1.0
     assert_suite_usable(rep, "m")  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_200_names_the_model_and_endpoint():
+    # A 200 whose body is not the expected shape would otherwise escape as a
+    # bare KeyError with no hint of which model or endpoint produced it — the
+    # same "failure that hides its cause" this module was fixed for.
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"unexpected": "shape"})
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            with pytest.raises(RuntimeError) as exc:
+                await client.call("x", tools=[])
+    msg = str(exc.value)
+    assert "KeyError" in msg
+    assert "model=m" in msg and "http://local/v1" in msg
+    assert isinstance(exc.value.__cause__, KeyError)

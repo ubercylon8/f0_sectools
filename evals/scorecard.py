@@ -96,6 +96,13 @@ async def run_matrix(
                 continue
             try:
                 tools, tasks = await _tools_and_tasks(server)
+                if server == "all":
+                    # Record the registry size HERE, where it is already known.
+                    # Without it the renderer has to re-derive the count by
+                    # importing all eight server packages, which turns formatting
+                    # a markdown table into a live dependency on every server
+                    # importing cleanly.
+                    results["tool_total"] = len(tools)
                 async with factory(base_url, tag) as client:
                     rep = await run_suite(tools, tasks, client, runs=runs)
                 # A cell where the model never called a tool is not a 0% score —
@@ -124,7 +131,12 @@ _FINDINGS_MARKER = (
 
 
 def _combined_tool_count() -> int:
-    """Size of the composition registry, read from the live servers."""
+    """Last-resort registry size, read from the live servers.
+
+    Only for results JSON written before `tool_total` was recorded (run_matrix
+    stores it now). Importing every server package to format a table is a heavy,
+    surprising dependency — it is the fallback, never the normal path.
+    """
     import asyncio
 
     from evals.run import combined_tool_schemas
