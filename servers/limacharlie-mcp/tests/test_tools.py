@@ -783,3 +783,74 @@ def test_detections_stay_quiet_on_a_partial_page():
     lc = FakeClient(detections=[{"cat": "c", "routing": {}} for _ in range(3)])
     findings = tools.list_detections(lc, limit=25)
     assert all("more results" not in f.title for f in findings)
+
+
+# ---------- dormancy is a scored posture signal, not a footnote ----------
+
+def _fleet(total, online, sleepers):
+    return FakeClient(
+        org_info={"oid": "org-1", "name": "Acme"},
+        sensors=[{"sid": f"s{i}", "is_online": i < online} for i in range(total)],
+        tag_count=sleepers,
+    )
+
+
+def test_a_mostly_dormant_fleet_is_scored_not_reported_as_info():
+    # Validation tenant: 1178 of 1252 sensors dormant — 6% able to report — and
+    # the finding still came back `info`, so the CISO report's endpoint-coverage
+    # tile rendered untroubled beside a detail line reading "1178 dormant
+    # sleepers". A fleet that collects nothing has a coverage problem however
+    # many sensors are "online".
+    findings = tools.get_org_overview(_fleet(total=100, online=90, sleepers=94))
+    assert findings[0].severity.value == "high"
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["headline"] == "6% telemetry-enabled"
+    assert ev["sensors_telemetry_enabled"] == "6"
+    assert ev["sensors_online"] == "90"  # still available, just not the headline
+
+
+def test_offline_sensors_alone_do_not_score():
+    # Deliberate: offline is transient — a powered-off laptop rejoins — so
+    # folding it into the score would flag every fleet with normal churn forever
+    # and drown the dormancy signal this exists to surface.
+    findings = tools.get_org_overview(_fleet(total=100, online=40, sleepers=0))
+    assert findings[0].severity.value == "info"
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["headline"] == "40 online"  # no dormancy story -> unchanged shape
+
+
+def test_an_unavailable_census_declines_to_score():
+    # Without the census dormancy is invisible; guessing would be worse than
+    # declining, so severity stays info and the headline keeps its old shape.
+    lc = FakeClient(
+        sensors=[{"sid": "s1", "is_online": True}],
+        raise_on={"count_sensors_with_tag": PermissionDeniedError("denied")},
+    )
+    findings = tools.get_org_overview(lc)
+    assert findings[0].severity.value == "info"
+    assert findings[0].evidence[0].value == "1 online"
+
+
+@pytest.mark.parametrize(
+    "sleepers,expected",
+    [(94, "high"), (50, "medium"), (20, "low"), (5, "info")],
+)
+def test_coverage_bands(sleepers, expected):
+    findings = tools.get_org_overview(_fleet(total=100, online=100, sleepers=sleepers))
+    assert findings[0].severity.value == expected
+
+
+def test_a_census_larger_than_the_capped_sensor_list_cannot_go_negative():
+    # list_sensors is capped at _OVERVIEW_SCAN while the tag census counts the
+    # whole fleet, so sleepers can exceed the sensors actually listed.
+    findings = tools.get_org_overview(_fleet(total=10, online=10, sleepers=999))
+    ev = {e.key: e.value for e in findings[0].evidence}
+    assert ev["sensors_telemetry_enabled"] == "0"
+    assert findings[0].severity.value == "high"
+
+
+def test_dormancy_guidance_names_the_intentional_case():
+    # The tool cannot know whether dormancy is deliberate (licensing, staged
+    # rollout); saying so is more useful than implying it is always a defect.
+    findings = tools.get_org_overview(_fleet(total=100, online=100, sleepers=94))
+    assert "accepted risk" in findings[0].recommended_action.summary

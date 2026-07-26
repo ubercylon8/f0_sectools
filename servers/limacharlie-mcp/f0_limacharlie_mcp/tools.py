@@ -613,6 +613,48 @@ def query_telemetry(
     return out
 
 
+# A fleet where most sensors collect nothing has a coverage problem no matter how
+# many are "online", so the overview scores it instead of always reporting `info`.
+# On the validation tenant 1178 of 1252 sensors were dormant — 6% able to report —
+# and the finding still came back `info`, which rendered the CISO report's endpoint
+# coverage tile as untroubled next to a detail line reading "1178 dormant sleepers".
+#
+# Bands are a judgment call, named here so they can be argued with rather than
+# reverse-engineered: below a quarter of the fleet reporting is a capability gap
+# worth a CISO's attention (`high`), and near-total coverage is unremarkable.
+_COVERAGE_BANDS = ((0.25, Severity.high), (0.60, Severity.medium), (0.90, Severity.low))
+
+
+def _telemetry_coverage(total: int, sleepers: int | None) -> tuple[int | None, float | None]:
+    """Sensors with telemetry enabled (i.e. not dormant), and their share of the fleet.
+
+    Scored on dormancy ALONE, deliberately not on online/offline. Offline is
+    transient — a powered-off laptop rejoins — so folding it in would flag every
+    fleet with normal churn forever and drown the signal this exists to surface.
+    Dormancy is a configuration state: an `lc:sleeper` sensor is enrolled and can
+    be online while collecting nothing, and it will never report until that
+    changes. `sensors_online` remains in the evidence for anyone who wants it.
+
+    Returns (None, None) when the census is unavailable or shows no dormancy:
+    without the census dormancy is invisible and guessing beats nothing, and with
+    zero sleepers there is no dormancy story to tell. `max(0, ...)` guards a
+    census counting the whole fleet while the sensor list came back capped.
+    """
+    if not sleepers or total <= 0:
+        return None, None
+    enabled = max(0, total - sleepers)
+    return enabled, enabled / total
+
+
+def _coverage_severity(ratio: float | None) -> Severity:
+    if ratio is None:
+        return Severity.info
+    for threshold, severity in _COVERAGE_BANDS:
+        if ratio < threshold:
+            return severity
+    return Severity.info
+
+
 def get_org_overview(lc: Any) -> list[Finding]:
     try:
         info = lc.org_info()
@@ -642,8 +684,13 @@ def get_org_overview(lc: Any) -> list[Finding]:
             f"Org '{name}': {len(sensors)} sensors ({sleepers} dormant sleepers), "
             f"{len(detections)} detections (24h)"
         )
+    enabled, ratio = _telemetry_coverage(len(sensors), sleepers)
     evidence = [
-        Evidence(key="headline", value=f"{online} online"),
+        Evidence(
+            key="headline",
+            value=f"{online} online" if ratio is None
+            else f"{round(ratio * 100)}% telemetry-enabled",
+        ),
         Evidence(key="sensors_total", value=str(len(sensors))),
         Evidence(key="sensors_online", value=str(online)),
         Evidence(key="dr_rules", value=str(n_rules)),
@@ -651,11 +698,13 @@ def get_org_overview(lc: Any) -> list[Finding]:
     ]
     if sleepers is not None:
         evidence.insert(3, Evidence(key="sensors_dormant_sleepers", value=str(sleepers)))
+        if enabled is not None:
+            evidence.insert(4, Evidence(key="sensors_telemetry_enabled", value=str(enabled)))
     return [
         Finding(
             source="limacharlie",
             finding_type=FindingType.posture,
-            severity=Severity.info,
+            severity=_coverage_severity(ratio),
             title=title,
             entity=Entity(kind=EntityKind.tenant, id=str(_first(info, "oid", default="org"))),
             evidence=evidence,
@@ -663,7 +712,9 @@ def get_org_overview(lc: Any) -> list[Finding]:
                 summary="Review online vs offline sensors and recent activity; "
                 "investigate a notable endpoint, or check detection coverage."
                 + (
-                    " Note: dormant (lc:sleeper) sensors report no telemetry."
+                    " Dormant (lc:sleeper) sensors report no telemetry, so they cannot "
+                    "detect anything — confirm whether that is intentional (licensing, "
+                    "staged rollout) and record it as an accepted risk if so."
                     if sleepers
                     else ""
                 )
