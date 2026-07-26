@@ -203,10 +203,12 @@ class ModelClient:
                 # a 200 whose body is not the shape we expect would otherwise
                 # escape as a bare KeyError with no hint of which model or
                 # endpoint produced it.
-                body = resp.text[:200].replace("\n", " ")
+                # not `body` — that name already holds the outgoing request
+                # payload a few lines above, and this is the RESPONSE text.
+                snippet = resp.text[:200].replace("\n", " ")
                 raise RuntimeError(
                     f"{type(e).__name__} parsing chat response "
-                    f"(model={self.model}, endpoint={self.base_url}): {body!r}"
+                    f"(model={self.model}, endpoint={self.base_url}): {snippet!r}"
                 ) from e
         if last_exc is None:  # pragma: no cover - unreachable
             raise RuntimeError("model call failed with no captured error")
