@@ -101,8 +101,11 @@ async def list_alerts(
 
 @mcp.tool()
 async def run_hunting_query(kql: str) -> list[dict[str, Any]]:
-    """Run a Microsoft Defender advanced hunting query (KQL) over M365 / Entra / devices (30d).
+    """Run a Microsoft Defender advanced hunting query (KQL) — a READ-ONLY search of
+    M365 / Entra / device telemetry (30d).
 
+    This only reads. To contain or reconnect a device use isolate_host /
+    release_host; this tool never changes a device's state.
     For LimaCharlie endpoint (EDR sensor) telemetry, use query_telemetry instead —
     this tool is Microsoft/Defender + KQL only. Construct a `kql` query string.
     For common hunts prefer the `hunt` tool (it builds the KQL for you); use this
@@ -139,7 +142,12 @@ async def hunt(
 async def isolate_host(
     device_id: str, comment: str, confirmation_token: str = ""
 ) -> list[dict[str, Any]]:
-    """Isolate a device from the network (GATED WRITE).
+    """CONTAIN a device: cut it off the network so it cannot communicate (GATED WRITE).
+
+    Use when asked to isolate, contain, quarantine, cut off, or take a host
+    offline — e.g. "isolate dev-1, I think it's compromised". This ACTS on the
+    device; it does not search or investigate. For telemetry use `hunt` or
+    `run_hunting_query`.
 
     Call WITHOUT confirmation_token first: returns the intended action only. An
     operator then approves it in `confirm_action.py --watch` and you call again
@@ -160,7 +168,11 @@ async def isolate_host(
 async def release_host(
     device_id: str, comment: str, confirmation_token: str = ""
 ) -> list[dict[str, Any]]:
-    """Release a device from isolation (GATED WRITE).
+    """RECONNECT a device: undo isolation so it can reach the network again (GATED WRITE).
+
+    Use when asked to release, un-isolate, restore, reconnect, or take a host back
+    out of isolation — e.g. "release dev-1, it's been cleaned". This ACTS on the
+    device; it does not search or investigate.
 
     Same two-step flow as isolate_host: call without confirmation_token to
     preview, then either an operator approves it in `confirm_action.py --watch`
