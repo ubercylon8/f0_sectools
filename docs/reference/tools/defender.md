@@ -74,12 +74,20 @@ Used by skills: [`defender-threat-hunt`](../../../skills/defender/threat-hunt/SK
 
 ## `hunt`
 
-Guided Microsoft Defender hunt — the server builds correct KQL, so you don't have to.
+SEARCH raw Defender telemetry for suspicious activity — the server writes the KQL.
 
-category: network | process | logon | email.
-indicator: what to look for — a domain/IP (network), a process name or
-command-line fragment (process); optional for logon/email. Prefer this over
-run_hunting_query unless the user gives you custom KQL.
+Searches the raw event tables, NOT the alerts Defender already raised (for
+those use list_alerts). Choose the category by what you are looking for:
+  logon   — failed sign-ins, sign-in failures, brute force, password spray
+  network — traffic to a domain or IP
+  process — a process name or command line
+  email   — phishing or malware-bearing mail
+
+indicator: REQUIRED for network (the domain or IP to match) and REQUIRED for
+process (the process name or command-line fragment to match) — name the thing
+the user asked about. Only logon and email take no indicator; they sweep on
+their own. Prefer this over run_hunting_query unless the user gives you
+custom KQL.
 
 | Parameter | Type | Default |
 |---|---|---|

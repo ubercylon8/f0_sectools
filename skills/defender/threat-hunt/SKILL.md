@@ -26,9 +26,13 @@ rows.
 ## Procedure
 
 1. State the **hypothesis** in one sentence (what behaviour, on what, why).
-2. Call the `hunt` tool with a `category` (network | process | logon | email) and
-   an `indicator` (a domain/IP for network, a process name for process; optional
-   for logon/email). It builds correct KQL for you — no field-name guessing.
+2. Call the `hunt` tool with the `category` matching what you are looking for —
+   `logon` (failed sign-ins, brute force, password spray), `network` (traffic to
+   a domain or IP), `process` (a process name or command line), `email` (phishing
+   or malware mail) — plus an `indicator` for network and process. It builds
+   correct KQL for you — no field-name guessing. Note that `logon` and `email`
+   carry a built-in filter (repeated logon *failures*; mail flagged phish or
+   malware), so an empty result means none of *those*, not no activity at all.
 3. Only for a custom query the user provides: call `run_hunting_query` with KQL
    (see `references/kql-starters.md` for vetted templates and field names).
 4. Read the returned rows (already capped). Note what supports or refutes the
