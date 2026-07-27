@@ -14,7 +14,9 @@ import respx
 
 from evals.run import (
     ModelClient,
+    SuiteUnusable,
     ToolCall,
+    assert_suite_usable,
     build_openai_tools,
     run_suite,
     score_task,
@@ -132,8 +134,29 @@ async def test_model_client_raises_after_exhausting_retries(monkeypatch):
             side_effect=httpx.ConnectError("always down")
         )
         async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
-            with pytest.raises(httpx.TransportError):
+            with pytest.raises(RuntimeError) as exc:
                 await client.call("x", tools=[])
+    # The failure must NAME itself. httpx.ReadTimeout stringifies to "", which
+    # produced scorecard cells reading `error: ` with no cause — a 60s timeout
+    # masquerading as an unexplained endpoint failure. The type is always carried.
+    msg = str(exc.value)
+    assert "ConnectError" in msg
+    assert "model=m" in msg and "timeout=1.0" in msg
+    assert isinstance(exc.value.__cause__, httpx.TransportError)  # cause preserved
+
+
+@pytest.mark.asyncio
+async def test_an_empty_exception_message_still_names_its_type(monkeypatch):
+    monkeypatch.setattr("evals.run.asyncio.sleep", AsyncMock())
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            side_effect=httpx.ReadTimeout("")  # str() == "" — the real case
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            with pytest.raises(RuntimeError) as exc:
+                await client.call("x", tools=[])
+    assert "ReadTimeout" in str(exc.value)
+    assert "no message" in str(exc.value)
 
 
 @pytest.mark.asyncio
@@ -165,3 +188,85 @@ async def test_run_suite_aggregates_rates():
     assert report["overall_args_rate"] == 0.5
     assert report["tasks"][0]["tool_rate"] == 1.0
     assert report["tasks"][1]["tool_rate"] == 0.0
+
+
+# ---------- a serving problem must never be published as a score ----------
+
+def _report(no_call_rate: float, n: int = 8) -> dict:
+    return {
+        "tasks": [{"prompt": f"p{i}", "calls": [None]} for i in range(n)],
+        "overall_tool_rate": 0.0,
+        "overall_args_rate": 0.0,
+        "no_call_rate": no_call_rate,
+        "schema_kb": 32.0,
+        "tool_count": 51,
+    }
+
+
+def test_a_suite_with_no_tool_calls_at_all_is_unusable_not_zero():
+    # Observed 2026-07-26: four models scored 0%/0% on the 51-tool composition
+    # purely because Ollama served them with its 4096-token default num_ctx
+    # while the schema alone is ~32 KB. Scoring that as 0% would publish a false
+    # claim about the exact thesis the scorecard exists to test.
+    with pytest.raises(SuiteUnusable) as exc:
+        assert_suite_usable(_report(1.0), "gemma4:e4b")
+    msg = str(exc.value)
+    assert "gemma4:e4b" in msg
+    assert "32.0 KB" in msg and "51" in msg      # actionable, not just "failed"
+    assert "num_ctx" in msg                       # names the fix
+
+
+def test_a_model_that_calls_the_wrong_tool_still_scores():
+    # The distinction that matters: a model bad at SELECTION still calls
+    # something. Only a model calling nothing at all signals a setup problem.
+    assert_suite_usable(_report(0.0), "m")
+    assert_suite_usable(_report(0.99), "m")   # even near-total silence scores
+
+
+@pytest.mark.asyncio
+async def test_run_suite_reports_the_silence_and_the_schema_size():
+    class Mute:
+        async def call(self, prompt, tools):
+            return None
+
+    tools = [{"type": "function", "function": {"name": "t", "parameters": {}}}]
+    tasks = [{"prompt": "p", "expect_tool": "t"}, {"prompt": "q", "expect_tool": "t"}]
+    rep = await run_suite(tools, tasks, Mute(), runs=1)
+    assert rep["no_call_rate"] == 1.0
+    assert rep["tool_count"] == 1
+    assert rep["schema_kb"] > 0
+
+
+@pytest.mark.asyncio
+async def test_a_partially_silent_suite_is_still_scored():
+    class Half:
+        def __init__(self):
+            self.n = 0
+
+        async def call(self, prompt, tools):
+            self.n += 1
+            return ToolCall(name="t", args={}) if self.n % 2 else None
+
+    tools = [{"type": "function", "function": {"name": "t", "parameters": {}}}]
+    tasks = [{"prompt": f"p{i}", "expect_tool": "t"} for i in range(4)]
+    rep = await run_suite(tools, tasks, Half(), runs=1)
+    assert 0.0 < rep["no_call_rate"] < 1.0
+    assert_suite_usable(rep, "m")  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_200_names_the_model_and_endpoint():
+    # A 200 whose body is not the expected shape would otherwise escape as a
+    # bare KeyError with no hint of which model or endpoint produced it — the
+    # same "failure that hides its cause" this module was fixed for.
+    with respx.mock as router:
+        router.post("http://local/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"unexpected": "shape"})
+        )
+        async with ModelClient("http://local/v1", "m", timeout=1.0) as client:
+            with pytest.raises(RuntimeError) as exc:
+                await client.call("x", tools=[])
+    msg = str(exc.value)
+    assert "KeyError" in msg
+    assert "model=m" in msg and "http://local/v1" in msg
+    assert isinstance(exc.value.__cause__, KeyError)

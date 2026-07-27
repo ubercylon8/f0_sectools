@@ -17,6 +17,8 @@ import yaml
 from evals.run import (
     SERVER_MODULES,
     ModelClient,
+    SuiteUnusable,
+    assert_suite_usable,
     combined_tasks,
     combined_tool_schemas,
     load_tasks,
@@ -94,8 +96,19 @@ async def run_matrix(
                 continue
             try:
                 tools, tasks = await _tools_and_tasks(server)
+                if server == "all":
+                    # Record the registry size HERE, where it is already known.
+                    # Without it the renderer has to re-derive the count by
+                    # importing all eight server packages, which turns formatting
+                    # a markdown table into a live dependency on every server
+                    # importing cleanly.
+                    results["tool_total"] = len(tools)
                 async with factory(base_url, tag) as client:
                     rep = await run_suite(tools, tasks, client, runs=runs)
+                # A cell where the model never called a tool is not a 0% score —
+                # it is an unusable measurement. Record it as such so the table
+                # cannot publish a serving problem as a capability claim.
+                assert_suite_usable(rep, tag)
                 results["cells"][key] = {
                     "status": "ok",
                     "tool_rate": rep["overall_tool_rate"],
@@ -103,6 +116,8 @@ async def run_matrix(
                 }
             except ValueError:
                 raise  # e.g. tool-name collision in the combined registry — fail loud
+            except SuiteUnusable as e:
+                results["cells"][key] = {"status": "unusable", "error": str(e)[:400]}
             except Exception as e:  # noqa: BLE001 - one dead cell must not kill the sweep
                 results["cells"][key] = {"status": "error", "error": str(e)[:200]}
             _write_results(out_path, results)
@@ -113,6 +128,20 @@ SCORECARD_MD = EVALS / "SCORECARD.md"
 _FINDINGS_MARKER = (
     "<!-- findings below: hand-annotated, preserved when the table is regenerated -->"
 )
+
+
+def _combined_tool_count() -> int:
+    """Last-resort registry size, read from the live servers.
+
+    Only for results JSON written before `tool_total` was recorded (run_matrix
+    stores it now). Importing every server package to format a table is a heavy,
+    surprising dependency — it is the fallback, never the normal path.
+    """
+    import asyncio
+
+    from evals.run import combined_tool_schemas
+
+    return len(asyncio.run(combined_tool_schemas()))
 
 
 def render_scorecard_md(results: dict) -> str:
@@ -130,6 +159,9 @@ def render_scorecard_md(results: dict) -> str:
     """
     cells = results.get("cells", {})
     cell_pairs = [k.split("::", 1) for k in cells if "::" in k]
+    # Derived, never hardcoded: this legend read "28 tools" while the registry
+    # had grown to 51, so the document misdescribed the very test it reports.
+    tool_total = results.get("tool_total") or _combined_tool_count()
 
     servers = list(results.get("servers", []))
     for _, server in cell_pairs:
@@ -152,8 +184,10 @@ def render_scorecard_md(results: dict) -> str:
         f"· generated {results.get('date', '')}",
         "",
         "Each cell is **tool-selection% / argument-filling%** over the server's task "
-        "set. `all` = every server's 28 tools registered at once (composition test). "
-        "`err` = model/endpoint error; `–` = not run.",
+        f"set. `all` = every server's {tool_total} tools registered at once (composition "
+        "test). `err` = model/endpoint error; `ctx!` = the model emitted no tool "
+        "call on any task, which means the serving context could not hold the "
+        "schema — a setup problem, NOT a score of zero; `–` = not run.",
         "",
         head,
         sep,
@@ -164,6 +198,8 @@ def render_scorecard_md(results: dict) -> str:
             cell = cells.get(cell_key(m["tag"], s))
             if not cell:
                 row.append("–")
+            elif cell.get("status") == "unusable":
+                row.append("ctx!")
             elif cell.get("status") == "error":
                 row.append("err")
             else:

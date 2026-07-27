@@ -48,7 +48,21 @@ def _fake_factory(expect_tool):
 def test_load_models_reads_tag_and_display():
     models = load_models()
     assert models and all("tag" in m and "display" in m for m in models)
-    assert any(m["tag"] == "gpt-oss:20b-c128k" for m in models)
+
+
+def test_every_roster_model_declares_a_context():
+    # The invariant, not a literal tag: a BASE tag is served with Ollama's
+    # 4096-token default, and the 51-tool composition schema is ~32 KB, so the
+    # model receives no usable tool list and calls nothing — which the scorecard
+    # would otherwise have published as 0%. Every row must be a context-capped
+    # derive. Proven by A/B: gemma4:e4b returns None on 51 tools where
+    # gemma4:e4b-ctx16k returns the correct tool.
+    for m in load_models():
+        tag = m["tag"]
+        assert any(mark in tag for mark in ("ctx", "-c")), (
+            f"{tag} looks like a base tag; roster models must declare a context "
+            "(see the recipe at the top of evals/models.yaml)"
+        )
 
 
 def test_cell_key_format():
@@ -112,6 +126,7 @@ def test_render_scorecard_md_table():
     results = {
         "date": "2026-01-01", "base_url": "http://x/v1", "runs": 1,
         "models": [{"tag": "m1", "display": "M1"}, {"tag": "m2", "display": "M2"}],
+        "tool_total": 51,
         "servers": ["defender", "all"],
         "cells": {
             "m1::defender": {"status": "ok", "tool_rate": 1.0, "args_rate": 1.0},
@@ -138,6 +153,7 @@ def test_render_scorecard_md_unions_cells_with_narrowed_metadata():
         # metadata narrowed to a single model/server by a resumed --models run
         "models": [{"tag": "m1", "display": "M1"}],
         "servers": ["defender"],
+        "tool_total": 51,
         "cells": {
             "m1::defender": {"status": "ok", "tool_rate": 1.0, "args_rate": 1.0},
             "m2::defender": {"status": "ok", "tool_rate": 0.5, "args_rate": 0.5},
@@ -172,6 +188,7 @@ def test_write_scorecard_preserves_findings_below_marker(tmp_path):
         "date": "2026-02-02", "base_url": "http://x/v1", "runs": 1,
         "models": [{"tag": "m1", "display": "M1"}],
         "servers": ["defender"],
+        "tool_total": 51,
         "cells": {
             "m1::defender": {"status": "ok", "tool_rate": 1.0, "args_rate": 1.0},
         },
@@ -198,3 +215,70 @@ async def test_run_matrix_with_devnull_out_path_does_not_crash():
         "2026-01-01", client_factory=_fake_factory("get_secure_score"),
     )
     assert res["cells"][cell_key("m1", "defender")]["status"] == "ok"
+
+
+def test_an_unusable_cell_renders_as_ctx_not_a_number():
+    # The whole point: a serving problem must be visibly distinct from a score.
+    results = {
+        "base_url": "http://x/v1", "runs": 1, "date": "2026-07-26",
+        "models": [{"tag": "m1", "display": "M1"}],
+        "servers": ["all"],
+        "tool_total": 51,
+        "cells": {
+            "m1::all": {"status": "unusable", "error": "no tool call on ANY of 97 tasks"},
+        },
+    }
+    md = render_scorecard_md(results)
+    assert "| M1 | ctx! |" in md
+    assert "0%" not in md
+    assert "NOT a score of zero" in md      # the legend explains the marker
+
+
+def test_the_legend_reports_the_real_registry_size():
+    # This read "28 tools" while the registry had grown to 51 — the document
+    # misdescribed the very test it reports.
+    results = {
+        "base_url": "", "runs": 1, "date": "d", "models": [], "servers": ["all"],
+        "tool_total": 51, "cells": {},
+    }
+    assert "51 tools registered at once" in render_scorecard_md(results)
+    assert "28 tools" not in render_scorecard_md(results)
+
+
+def test_rendering_a_table_does_not_import_the_servers(monkeypatch):
+    # This file's contract is "offline tests, no live model". A tool-count
+    # fallback that re-derives the registry by importing all eight server
+    # packages quietly broke that: formatting markdown became a live dependency
+    # on every server importing cleanly, so an unrelated break in (say) the
+    # Purview package would fail scorecard-RENDERING tests. run_matrix records
+    # `tool_total` where it is already known, and the fallback must not fire.
+    def _explode() -> int:
+        raise AssertionError("render must not re-derive the registry")
+
+    monkeypatch.setattr("evals.scorecard._combined_tool_count", _explode)
+    md = render_scorecard_md({
+        "base_url": "", "runs": 1, "date": "d", "models": [], "servers": ["all"],
+        "tool_total": 51, "cells": {},
+    })
+    assert "51 tools registered at once" in md
+
+
+@pytest.mark.asyncio
+async def test_run_matrix_records_the_registry_size_for_the_renderer(tmp_path):
+    async def fake_tools_and_tasks(server):
+        n = 51 if server == "all" else 6
+        tools = [{"type": "function", "function": {"name": f"t{i}"}} for i in range(n)]
+        return tools, [{"prompt": "p", "expect_tool": "t0"}]
+
+    import unittest.mock as mock
+    with mock.patch("evals.scorecard._tools_and_tasks", fake_tools_and_tasks):
+        results = await run_matrix(
+            base_url="http://x/v1",
+            models=[{"tag": "m1", "display": "M1"}],
+            servers=["all"],
+            runs=1,
+            out_path=tmp_path / "r.json",
+            date="2026-07-26",
+            client_factory=_fake_factory("t0"),
+        )
+    assert results["tool_total"] == 51

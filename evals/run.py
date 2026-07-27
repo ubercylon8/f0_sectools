@@ -146,11 +146,17 @@ def aggregate_by_origin(tasks: list[dict], report: dict) -> dict:
 class ModelClient:
     """Minimal OpenAI-compatible chat client for tool-calling evals."""
 
+    # 180s, not 60s: the composition run puts a ~32 KB tool schema in front of an
+    # 8-12B model on a laptop GPU, and that is genuinely slow — qwen3:8b measured
+    # 73s for a single 51-tool call while taking 20s for the same prompt with 6.
+    # At 60s those cells failed as bare timeouts and were reported as `err`, which
+    # reads like the model or endpoint is broken rather than the clock being wrong.
     def __init__(self, base_url: str, model: str, api_key: str | None = None,
-                 timeout: float = 60.0) -> None:
+                 timeout: float = 180.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key or "not-needed"
+        self.timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
 
     async def __aenter__(self) -> ModelClient:
@@ -190,10 +196,31 @@ class ModelClient:
                 if attempt < attempts - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
                 continue
-            return resp.json()["choices"][0]["message"]
+            try:
+                return resp.json()["choices"][0]["message"]
+            except (ValueError, KeyError, IndexError, TypeError) as e:
+                # Same class as the blank-timeout case below, different trigger:
+                # a 200 whose body is not the shape we expect would otherwise
+                # escape as a bare KeyError with no hint of which model or
+                # endpoint produced it.
+                # not `body` — that name already holds the outgoing request
+                # payload a few lines above, and this is the RESPONSE text.
+                snippet = resp.text[:200].replace("\n", " ")
+                raise RuntimeError(
+                    f"{type(e).__name__} parsing chat response "
+                    f"(model={self.model}, endpoint={self.base_url}): {snippet!r}"
+                ) from e
         if last_exc is None:  # pragma: no cover - unreachable
             raise RuntimeError("model call failed with no captured error")
-        raise last_exc
+        # httpx.ReadTimeout and friends stringify to "" — re-raising them as-is
+        # produced scorecard cells reading `error: ` with no cause at all, which
+        # is how a 60s timeout masqueraded as an unexplained endpoint failure.
+        # Always carry the exception TYPE so a blank message cannot hide one.
+        detail = str(last_exc) or "no message"
+        raise RuntimeError(
+            f"{type(last_exc).__name__}: {detail} "
+            f"(model={self.model}, tools={len(tools)}, timeout={self.timeout}s)"
+        ) from last_exc
 
     async def call(self, prompt: str, tools: list[dict]) -> ToolCall | None:
         message = await self._post_chat([{"role": "user", "content": prompt}], tools)
@@ -296,11 +323,46 @@ async def run_suite(
             }
         )
     total = len(task_rows) or 1
+    silent = sum(1 for r in task_rows if all(c is None for c in r["calls"]))
     return {
         "tasks": task_rows,
         "overall_tool_rate": sum(r["tool_rate"] for r in task_rows) / total,
         "overall_args_rate": sum(r["args_rate"] for r in task_rows) / total,
+        "no_call_rate": silent / total,
+        "schema_kb": round(len(json.dumps(tools)) / 1024, 1),
+        "tool_count": len(tools),
     }
+
+
+class SuiteUnusable(RuntimeError):
+    """The suite produced no usable measurement — not a score of zero.
+
+    A tool-capable model that is bad at selection still CALLS something; it
+    picks the wrong tool. Emitting no tool call on a single task can be a
+    refusal, but emitting none across an ENTIRE task set means the model never
+    saw a usable tool list, and the overwhelming cause is a serving context too
+    small to hold the schema.
+
+    This exists because the alternative is worse than a crash: the run scores
+    0%/0%, which is indistinguishable from "this model cannot drive our tools"
+    and would publish a false claim about the very thesis the scorecard tests.
+    Observed 2026-07-26 — four models scored 0% on the 51-tool composition purely
+    because they were served with Ollama's 4096-token default `num_ctx` while the
+    schema alone is ~32 KB. The one model carrying an explicit num_ctx scored 87%.
+    """
+
+
+def assert_suite_usable(report: dict, model: str) -> None:
+    """Raise if a report is an artifact of the serving setup rather than a result."""
+    if report.get("no_call_rate", 0) < 1.0:
+        return
+    raise SuiteUnusable(
+        f"{model}: no tool call on ANY of {len(report['tasks'])} tasks. The tool "
+        f"schema is {report.get('schema_kb')} KB across {report.get('tool_count')} "
+        "tools; a serving context that cannot hold it yields exactly this. Raise the "
+        "context window (Ollama: PARAMETER num_ctx in a Modelfile derive; vLLM: "
+        "--max-model-len) and re-run. Refusing to report this as 0%."
+    )
 
 
 def format_report(server: str, model: str, report: dict) -> str:
@@ -345,6 +407,7 @@ async def _amain(args: argparse.Namespace) -> None:
         tasks = load_tasks(args.server)
     async with ModelClient(args.base_url, args.model, api_key) as client:
         report = await run_suite(tools, tasks, client, runs=args.runs)
+    assert_suite_usable(report, args.model)
     if args.server == "all":
         print(format_combined_report(args.model, report, aggregate_by_origin(tasks, report)))
     else:
