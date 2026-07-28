@@ -283,7 +283,47 @@ async def get_test(pa: Any, test_id: str) -> list[Finding]:
     return [_not_found(test_id)]
 
 
-async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
+_INTERVALS = ("day", "hour")
+_DEFAULT_INTERVAL = "day"
+
+
+def _interval_finding(title: str, summary: str) -> Finding:
+    return Finding(
+        source="projectachilles",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title=title,
+        recommended_action=RecommendedAction(summary=summary),
+    )
+
+
+def _interval_ignored(interval: str) -> Finding:
+    """`interval` only shapes the TREND; the snapshot path drops it entirely.
+
+    A small model asked for an hour-by-hour trend, set interval="hour", and left
+    over_time at False (granite4:tiny, 3/3) — receiving a CURRENT SNAPSHOT in
+    answer to a trend question, with nothing marking the difference. The
+    docstring already says interval applies only to the trend; the model read it
+    and ignored it, so the tool says so at the point the mismatch happens rather
+    than returning data that answers a different question in silence.
+    """
+    return _interval_finding(
+        f"interval='{interval}' ignored — this is a current snapshot, not a trend",
+        "interval only applies to the trend. For an hour-by-hour or day-by-day "
+        "history, call again with over_time=true.",
+    )
+
+
+async def get_defense_score(pa: Any, days: int = 30, interval: str = "") -> list[Finding]:
+    """Current defense score (snapshot).
+
+    `interval` is accepted only so a mismatch can be REPORTED — it never changes
+    what this returns. See _interval_ignored.
+    """
+    notes: list[Finding] = []
+    asked = (interval or "").strip().lower()
+    if asked and asked != _DEFAULT_INTERVAL:
+        notes.append(_interval_ignored(interval))
     frm, to = _window(days)
     try:
         d = await pa.get(
@@ -314,6 +354,7 @@ async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
     if real is not None:
         evidence.append(Evidence(key="score_blocked_only", value=f"{float(real):.1f}%"))
     return [
+        *notes,
         Finding(
             source="projectachilles",
             finding_type=FindingType.posture,
@@ -324,11 +365,24 @@ async def get_defense_score(pa: Any, days: int = 30) -> list[Finding]:
             recommended_action=RecommendedAction(
                 summary="Investigate the lowest-scoring techniques and unprotected results."
             ),
-        )
+        ),
     ]
 
 
 async def get_defense_score_trend(pa: Any, days: int = 30, interval: str = "day") -> list[Finding]:
+    # Validated before the call: an unrecognised interval would otherwise reach
+    # the API, which may quietly fall back to its own default and return a
+    # differently-binned trend under the caller's label. Never silently
+    # reinterpret an argument (same rule as find_tests' `by`).
+    asked = (interval or "").strip().lower() or _DEFAULT_INTERVAL
+    if asked not in _INTERVALS:
+        return [
+            _interval_finding(
+                f"Unsupported interval '{interval}'",
+                "Use interval = day | hour.",
+            )
+        ]
+    interval = asked
     frm, to = _window(days)
     try:
         d = await pa.get(

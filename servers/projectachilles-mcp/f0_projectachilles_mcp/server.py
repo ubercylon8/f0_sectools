@@ -36,12 +36,17 @@ async def get_defense_score(
 
     over_time=false (default) returns the CURRENT score (a snapshot). over_time=true
     returns the TREND over the period — use it for any "improving", "declining",
-    "over time", or "history" question. interval (day|hour) applies only to the trend.
+    "over time", "history", "day by day", or "hour by hour" question.
+    interval (day|hour) is IGNORED unless over_time=true — asking for an hourly or
+    daily breakdown means you want the trend, so set BOTH.
     """
     async with _client() as pa:
         if over_time:
             return _render(await tools.get_defense_score_trend(pa, days, interval))
-        return _render(await tools.get_defense_score(pa, days))
+        # interval is passed through so the snapshot path can REPORT that it was
+        # ignored — a small model that sets interval="hour" but leaves over_time
+        # false is asking for a trend and would otherwise get a snapshot silently.
+        return _render(await tools.get_defense_score(pa, days, interval))
 
 
 @mcp.tool()

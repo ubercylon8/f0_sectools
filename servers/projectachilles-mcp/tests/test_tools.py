@@ -63,6 +63,45 @@ async def test_get_defense_score_trend_requests_any_stage_scoring():
 
 
 @pytest.mark.asyncio
+async def test_snapshot_reports_an_interval_it_cannot_honour():
+    # granite4:tiny sets interval="hour" and leaves over_time false (3/3),
+    # asking for a trend and receiving a snapshot. The snapshot must SAY the
+    # interval was dropped rather than answer a different question in silence.
+    pa = FakeClient(responses={"/analytics/defense-score": {"score": 52.1}})
+    findings = await tools.get_defense_score(pa, interval="hour")
+    assert len(findings) == 2
+    assert "ignored" in findings[0].title
+    assert "over_time=true" in findings[0].recommended_action.summary
+    # The score itself is still returned — this warns, it does not withhold.
+    assert "52.1" in findings[1].title
+
+
+@pytest.mark.asyncio
+async def test_snapshot_is_silent_when_the_interval_is_moot():
+    # No interval, or the default one, means nothing was asked for and dropped.
+    pa = FakeClient(responses={"/analytics/defense-score": {"score": 52.1}})
+    for interval in ("", "day", "DAY", "  "):
+        findings = await tools.get_defense_score(pa, interval=interval)
+        assert len(findings) == 1, f"unexpected note for interval={interval!r}"
+
+
+@pytest.mark.asyncio
+async def test_trend_rejects_an_unknown_interval_before_calling_the_api():
+    pa = FakeClient(responses={"/analytics/defense-score/trend": [{"score": 50}]})
+    findings = await tools.get_defense_score_trend(pa, interval="hourly")
+    assert "Unsupported interval" in findings[0].title
+    assert pa.calls == [], "an unknown interval must not reach the API"
+
+
+@pytest.mark.asyncio
+async def test_trend_normalises_interval_case():
+    pa = FakeClient(responses={"/analytics/defense-score/trend": [
+        {"score": 50}, {"score": 55}]})
+    await tools.get_defense_score_trend(pa, interval="HOUR")
+    assert pa.calls[0][1]["interval"] == "hour"
+
+
+@pytest.mark.asyncio
 async def test_get_defense_score_surfaces_risk_adjusted_fields():
     # Dashboard triple: score (risk-adjusted), rawScore (before exclusions),
     # realScore (blocked-only), riskAcceptedCount (excluded executions).
