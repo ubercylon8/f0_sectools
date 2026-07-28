@@ -4,6 +4,7 @@ Loads the script by path (scripts/ is not a package) — same pattern as
 scripts/tests/test_gen_docs.py.
 """
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -178,3 +179,57 @@ def test_eta_is_none_when_nothing_remains():
              for i in (1, 2, 3) for s in ("defender", "entra", "all")}
     e = dash.eta(_timed(cells))
     assert e["seconds"] == 0.0
+
+
+def _write_run(d: Path, date: str, models, servers, rate):
+    cells = {f"{m}::{s}": {"status": "ok", "tool_rate": rate, "args_rate": rate}
+             for m in models for s in servers}
+    (d / f"{date}.json").write_text(json.dumps({
+        "date": date,
+        "models": [{"tag": m, "display": m.upper()} for m in models],
+        "servers": servers,
+        "cells": cells,
+    }))
+
+
+def test_trend_renders_a_gap_for_a_model_absent_from_a_run(tmp_path):
+    # Rosters really do differ: 2026-07-13 included Qwen3 4B and covered six
+    # servers; the current run drops it and covers eight plus `all`. A missing
+    # model must be a GAP, never a line interpolated across it.
+    _write_run(tmp_path, "2026-01-01", ["m1", "m2"], ["defender"], 0.9)
+    _write_run(tmp_path, "2026-01-02", ["m1"], ["defender"], 1.0)
+    t = dash.trend(tmp_path)
+    m2 = t["models"]["M2"]
+    assert [p["args_rate"] for p in m2] == [0.9, None]
+
+
+def test_trend_marks_points_whose_roster_differs_from_the_latest(tmp_path):
+    _write_run(tmp_path, "2026-01-01", ["m1"], ["defender"], 0.9)
+    _write_run(tmp_path, "2026-01-02", ["m1"], ["defender", "entra"], 1.0)
+    t = dash.trend(tmp_path)
+    pts = t["models"]["M1"]
+    assert pts[0]["roster_differs"] is True    # 1 server vs the latest 2
+    assert pts[1]["roster_differs"] is False
+    assert pts[0]["servers"] == ["defender"]
+
+
+def test_trend_averages_only_ok_cells(tmp_path):
+    _write_run(tmp_path, "2026-01-01", ["m1"], ["defender", "entra"], 1.0)
+    p = tmp_path / "2026-01-01.json"
+    data = json.loads(p.read_text())
+    data["cells"]["m1::entra"] = {"status": "error", "error": "x"}
+    p.write_text(json.dumps(data))
+    # A broken cell is not a zero — averaging it in would invent a decline.
+    assert dash.trend(tmp_path)["models"]["M1"][0]["args_rate"] == 1.0
+
+
+def test_trend_skips_agentic_and_malformed_files(tmp_path):
+    _write_run(tmp_path, "2026-01-01", ["m1"], ["defender"], 1.0)
+    (tmp_path / "agentic-2026-01-01.json").write_text('{"different": "schema"}')
+    (tmp_path / "2026-01-09.json").write_text("{ broken")
+    t = dash.trend(tmp_path)
+    assert [r["date"] for r in t["runs"]] == ["2026-01-01"]
+
+
+def test_trend_is_empty_for_an_empty_dir(tmp_path):
+    assert dash.trend(tmp_path) == {"runs": [], "models": {}}

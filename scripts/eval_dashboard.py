@@ -174,3 +174,68 @@ def eta(
     # is unmeasured, so this is a floor, not an estimate.
     status = "partial" if (remaining_all and mean_all is None) else "ok"
     return {**out, "status": status, "seconds": round(seconds, 1)}
+
+
+def trend(results_dir: Path) -> dict[str, Any]:
+    """Per-model mean args_rate across every matrix run on disk.
+
+    Rosters differ between runs (2026-07-13 covered six servers and included
+    Qwen3 4B; the current run covers eight plus `all` and drops it). A trend
+    line that silently averages different task sets is worse than none, so a
+    model absent from a run yields a GAP and every point carries the roster it
+    was computed over.
+    """
+    runs: list[dict[str, Any]] = []
+    for path in sorted(results_dir.glob("*.json")):
+        if path.name.startswith(_AGENTIC_PREFIX):
+            continue
+        try:
+            data = load_results(path)
+        except ValueError:
+            continue  # a half-written or foreign file is skipped, not fatal
+        if not data.get("models") or not data.get("servers"):
+            continue
+        runs.append(data)
+
+    if not runs:
+        return {"runs": [], "models": {}}
+
+    latest_roster = set(runs[-1].get("servers") or [])
+    names: list[str] = []
+    for data in runs:
+        for m in data["models"]:
+            display = m.get("display", m["tag"])
+            if display not in names:
+                names.append(display)
+
+    models: dict[str, list[dict[str, Any]]] = {n: [] for n in names}
+    for data in runs:
+        servers = data.get("servers") or []
+        cells = data.get("cells") or {}
+        differs = set(servers) != latest_roster
+        present = {m.get("display", m["tag"]): m["tag"] for m in data["models"]}
+        for name in names:
+            tag = present.get(name)
+            rate = None
+            if tag is not None:
+                # Only `ok` cells: a broken cell is not a zero, and averaging
+                # one in would invent a decline that never happened.
+                rates = [
+                    c["args_rate"]
+                    for s in servers
+                    if (c := cells.get(_cell_key(tag, s))) is not None
+                    and c.get("status") == "ok"
+                    and c.get("args_rate") is not None
+                ]
+                rate = _mean(rates)
+            models[name].append({
+                "date": data.get("date", ""),
+                "args_rate": rate,
+                "servers": servers,
+                "roster_differs": differs,
+            })
+    return {
+        "runs": [{"date": d.get("date", ""), "servers": d.get("servers") or []}
+                 for d in runs],
+        "models": models,
+    }
