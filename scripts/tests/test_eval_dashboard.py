@@ -415,3 +415,55 @@ def test_progress_counts_only_cells_in_this_run_scope():
     p = dash.progress(r)
     assert p["total"] == 4          # 2 models x 2 in-scope servers
     assert p["done"] == 2           # m1::defender, m1::entra — not m1::all
+
+
+def _write_tasks(d, server, tasks):
+    (d / server).mkdir(parents=True, exist_ok=True)
+    import yaml
+    (d / server / "tasks.yaml").write_text(yaml.safe_dump(tasks))
+
+
+def test_task_inventory_keys_come_from_the_glob_not_from_input(tmp_path):
+    # The inventory is built by globbing the evals dir. A query parameter can
+    # then only ever be a dict KEY — it is never joined to a path, so
+    # ?server=../../.env.defender simply misses.
+    _write_tasks(tmp_path, "defender", [{"prompt": "p1", "expect_tool": "list_incidents"}])
+    _write_tasks(tmp_path, "tenable", [{"prompt": "p2", "expect_tool": "list_assets"}])
+    inv = dash.task_inventory(tmp_path)
+    assert sorted(inv) == ["defender", "tenable"]
+    assert inv["defender"][0]["prompt"] == "p1"
+    assert "../../.env.defender" not in inv
+
+
+def test_task_inventory_skips_a_malformed_task_file(tmp_path):
+    _write_tasks(tmp_path, "defender", [{"prompt": "p1", "expect_tool": "t"}])
+    (tmp_path / "broken").mkdir()
+    (tmp_path / "broken" / "tasks.yaml").write_text("{ not: valid: yaml:")
+    inv = dash.task_inventory(tmp_path)
+    assert "defender" in inv and "broken" not in inv
+
+
+def test_servers_view_reports_counts_and_an_example(tmp_path):
+    _write_tasks(tmp_path, "defender", [
+        {"prompt": "List the active high-severity incidents.",
+         "expect_tool": "list_incidents", "expect_args": {"severity_min": "high"}},
+        {"prompt": "another", "expect_tool": "list_alerts"},
+    ])
+    results = {"cells": {"m1::defender": {"status": "ok", "tool_count": 7,
+                                          "schema_kb": 6.2}}}
+    v = dash.servers_view(tmp_path, results)
+    row = next(r for r in v["servers"] if r["server"] == "defender")
+    assert row["task_count"] == 2
+    assert row["tool_count"] == 7 and row["schema_kb"] == 6.2
+    assert row["example"]["expect_tool"] == "list_incidents"
+    assert row["example"]["expect_args"] == {"severity_min": "high"}
+
+
+def test_servers_view_leaves_tool_count_unknown_for_an_unrun_server(tmp_path):
+    # A server with tasks but no recorded cell: say the count is unknown rather
+    # than importing the server package to compute it.
+    _write_tasks(tmp_path, "purview", [{"prompt": "p", "expect_tool": "t"}])
+    v = dash.servers_view(tmp_path, {"cells": {}})
+    row = next(r for r in v["servers"] if r["server"] == "purview")
+    assert row["task_count"] == 1
+    assert row["tool_count"] is None and row["schema_kb"] is None

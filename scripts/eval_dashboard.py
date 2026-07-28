@@ -26,8 +26,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = ROOT / "evals" / "results"
+TASKS_DIR = ROOT / "evals"
 PAGE = Path(__file__).resolve().parent / "dashboard" / "index.html"
 
 # Agentic runs use a different schema (trajectories, not model x server cells).
@@ -434,3 +437,50 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def task_inventory(evals_dir: Path) -> dict[str, list[dict[str, Any]]]:
+    """Every server's task set, keyed by directory name.
+
+    Keys come from globbing the evals directory — never from a request. That is
+    what lets a query parameter be a dict key rather than a path component, so
+    `?server=../../.env.defender` misses instead of traversing.
+
+    Works retroactively: this is the only source of detail for result files
+    written before cells carried their own task rows.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for path in sorted(evals_dir.glob("*/tasks.yaml")):
+        try:
+            tasks = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, OSError):
+            continue  # a malformed task file must not blank the whole page
+        if isinstance(tasks, list) and tasks:
+            out[path.parent.name] = tasks
+    return out
+
+
+def servers_view(evals_dir: Path, results: dict[str, Any]) -> dict[str, Any]:
+    """Per-server cards: how many tasks, how many tools, how big the schema.
+
+    tool_count/schema_kb are read from whichever cell recorded them — never by
+    importing the server package. A server with tasks but no cell reports None,
+    which the page renders as unknown rather than zero.
+    """
+    inv = task_inventory(evals_dir)
+    measured: dict[str, dict[str, Any]] = {}
+    for key, cell in (results.get("cells") or {}).items():
+        server = key.rsplit("::", 1)[-1]
+        if server not in measured and cell.get("tool_count") is not None:
+            measured[server] = cell
+    rows = []
+    for server, tasks in inv.items():
+        cell = measured.get(server, {})
+        rows.append({
+            "server": server,
+            "task_count": len(tasks),
+            "tool_count": cell.get("tool_count"),
+            "schema_kb": cell.get("schema_kb"),
+            "example": tasks[0],
+        })
+    return {"servers": rows}
