@@ -22,6 +22,12 @@
 - prompt: "List our detection and response rules."
   expect_tool: list_dr_rules
 
+# Exercises `namespace`, which no task previously named — so its free-string
+# schema had never been measured. Baseline for the Literal-enum A/B.
+- prompt: "List the D&R rules in the managed namespace."
+  expect_tool: list_dr_rules
+  expect_args: { namespace: managed }
+
 - prompt: "What detections have fired in the last 24 hours?"
   expect_tool: list_detections
 
