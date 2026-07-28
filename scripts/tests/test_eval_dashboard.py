@@ -384,3 +384,34 @@ def test_observer_is_thread_safe():
     assert not errors, errors
     # Every key observed after the baseline poll carries a non-negative timing.
     assert all(v >= 0 for v in obs.timings.values())
+
+
+def test_matrix_still_shows_a_server_dropped_from_the_run_metadata():
+    # run_matrix OVERWRITES results["servers"] with whatever --servers was
+    # passed, so resuming a sweep with a narrower list erases the wider one from
+    # metadata while its cells remain on disk. render_scorecard_md already
+    # unions the two for this reason; the dashboard must too, or it silently
+    # hides a completed result.
+    r = _results(servers=["defender", "entra"])          # `all` no longer in metadata
+    r["cells"]["m1::all"] = {"status": "ok", "tool_rate": 0.92, "args_rate": 0.90}
+    m = dash.matrix(r)
+    assert m["servers"] == ["defender", "entra", "all"]  # union, metadata order first
+    row = next(x for x in m["rows"] if x["tag"] == "m1")
+    by = {c["server"]: c for c in row["cells"]}
+    assert by["all"]["args_rate"] == 0.90
+    # m2 has no `all` cell and `all` is not in this run — that is "skipped",
+    # not "pending": this sweep is never going to fill it.
+    row2 = next(x for x in m["rows"] if x["tag"] == "m2")
+    by2 = {c["server"]: c for c in row2["cells"]}
+    assert by2["all"]["status"] == "skipped"
+    assert by2["defender"]["status"] == "pending"
+
+
+def test_progress_counts_only_cells_in_this_run_scope():
+    # A carried-over cell from a wider earlier run must not inflate this run's
+    # done count, or the progress bar reports work this sweep never did.
+    r = _results(servers=["defender", "entra"])
+    r["cells"]["m1::all"] = {"status": "ok", "tool_rate": 0.92, "args_rate": 0.90}
+    p = dash.progress(r)
+    assert p["total"] == 4          # 2 models x 2 in-scope servers
+    assert p["done"] == 2           # m1::defender, m1::entra — not m1::all

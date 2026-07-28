@@ -40,6 +40,8 @@
   th:first-child, td:first-child { text-align:left; white-space:nowrap; }
   td.cell { cursor:default; border-radius:4px; font-size:12px; }
   td.pending { color:var(--dim); background:var(--pend); }
+  td.skipped { color:var(--dim); background:repeating-linear-gradient(45deg,
+               var(--pend), var(--pend) 4px, transparent 4px, transparent 8px); }
   td.broken { background:rgba(248,81,73,.18); color:var(--bad); font-weight:600; }
   .spark { display:flex; align-items:flex-end; gap:3px; height:34px; }
   .spark i { width:12px; background:var(--accent); border-radius:2px 2px 0 0; }
@@ -72,8 +74,10 @@
 
 <div class="panel">
   <div class="legend">
-    mean argument-filling per run · striped = model absent from that run ·
-    amber = different server roster
+    mean argument-filling per run · <b>blue</b> = same server roster as the
+    latest run (comparable) · <b>amber</b> = a different roster (do not compare
+    directly) · <b>striped</b> = no data, either dropped from the roster or not
+    yet run — hover to see which
   </div>
   <div id="trend"></div>
 </div>
@@ -139,7 +143,12 @@ function renderMatrix(m) {
   const rows = (m.rows || []).map(r => "<tr><td>" + esc(r.display) + "</td>" +
     r.cells.map(c => {
       if (c.status === "pending")
-        return '<td class="cell pending" title="not run yet">·</td>';
+        return '<td class="cell pending" title="queued — not run yet">·</td>';
+      // Not in this run's scope at all. Saying "pending" would promise work
+      // that is not queued; this column survives only because earlier cells
+      // for it exist on disk.
+      if (c.status === "skipped")
+        return '<td class="cell skipped" title="not part of this run">–</td>';
       if (c.status !== "ok")
         return '<td class="cell broken" title="' + esc(c.error) + '">' +
                (c.status === "unusable" ? "ctx!" : "err") + "</td>";

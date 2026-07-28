@@ -51,17 +51,39 @@ def _cell_key(tag: str, server: str) -> str:
     return f"{tag}::{server}"
 
 
+def _all_servers(results: dict[str, Any]) -> list[str]:
+    """Metadata servers PLUS any server that only appears in cells.
+
+    run_matrix overwrites results["servers"] with whatever --servers it was
+    given, so resuming a sweep with a narrower list erases the wider one from
+    metadata while its cells stay on disk. render_scorecard_md unions the two
+    for exactly this reason; rendering metadata alone silently hides a
+    completed result.
+    """
+    servers = list(results.get("servers") or [])
+    for key in results.get("cells") or {}:
+        server = key.rsplit("::", 1)[-1]
+        if server not in servers:
+            servers.append(server)
+    return servers
+
+
 def progress(results: dict[str, Any]) -> dict[str, Any]:
-    """Counts by state, the failures worth waking someone for, and what is next."""
+    """Counts by state, the failures worth waking someone for, and what is next.
+
+    Scoped to THIS run's servers: a cell carried over from a wider earlier run
+    must not inflate the done count with work this sweep never did.
+    """
     models = results.get("models") or []
     servers = results.get("servers") or []
     cells = results.get("cells") or {}
+    in_scope = {k: v for k, v in cells.items() if k.rsplit("::", 1)[-1] in servers}
 
     failed = [
         {"key": k, "status": c.get("status"), "error": c.get("error", "")}
         for k, c in cells.items()
         if c.get("status") not in ("ok", None)
-    ]
+    ]  # failures are reported wherever they are, in scope or not
     # run_matrix iterates models outer, servers inner and skips present cells,
     # so the next cell to execute is the first pending one in that same order.
     current = None
@@ -79,17 +101,24 @@ def progress(results: dict[str, Any]) -> dict[str, Any]:
         "date": results.get("date"),
         "runs": results.get("runs"),
         "total": total,
-        "done": len(cells),
-        "pending": total - len(cells),
-        "ok": sum(1 for c in cells.values() if c.get("status") == "ok"),
+        "done": len(in_scope),
+        "pending": total - len(in_scope),
+        "ok": sum(1 for c in in_scope.values() if c.get("status") == "ok"),
         "failed": sorted(failed, key=lambda f: f["key"]),
         "current": current,
     }
 
 
 def matrix(results: dict[str, Any]) -> dict[str, Any]:
-    """The grid. A cell never run is `pending` — never a zero score."""
-    servers = results.get("servers") or []
+    """The grid. A cell never run is `pending` — never a zero score.
+
+    Columns are the UNION of metadata and cells, so a server dropped from a
+    resumed run keeps showing the results it already has. Within such a column
+    an empty cell is `skipped` rather than `pending`: this sweep is never going
+    to fill it, and saying "pending" would promise work that is not queued.
+    """
+    scope = set(results.get("servers") or [])
+    servers = _all_servers(results)
     cells = results.get("cells") or {}
     rows = []
     for m in results.get("models") or []:
@@ -97,7 +126,8 @@ def matrix(results: dict[str, Any]) -> dict[str, Any]:
         for s in servers:
             c = cells.get(_cell_key(m["tag"], s))
             if c is None:
-                row_cells.append({"server": s, "status": "pending",
+                row_cells.append({"server": s,
+                                  "status": "pending" if s in scope else "skipped",
                                   "tool_rate": None, "args_rate": None, "error": ""})
             else:
                 row_cells.append({
