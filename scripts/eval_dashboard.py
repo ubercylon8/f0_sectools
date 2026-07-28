@@ -164,6 +164,9 @@ def eta(
     mean_all = _mean(all_times)
     out = {
         "samples": samples,
+        # Carried so the page can say "establishing (1/3)" rather than a bare
+        # "establishing…", which reads the same as broken.
+        "needed": MIN_ETA_SAMPLES,
         "mean_per_server": mean_ps,
         "mean_all": mean_all,
         "remaining_per_server": remaining_per_server,

@@ -347,3 +347,12 @@ def test_trend_distinguishes_absent_from_not_yet_run(tmp_path):
     assert t["models"]["M2"][1]["reason"] == "absent"     # dropped from roster
     assert t["models"]["M3"][1]["reason"] == "pending"    # queued, not run yet
     assert t["models"]["M1"][1]["reason"] is None         # has data
+
+
+def test_eta_reports_how_many_samples_it_still_needs():
+    # "establishing…" with no sense of progress is indistinguishable from
+    # broken. The payload carries the threshold so the page need not hardcode it.
+    r = _timed({"m1::defender": {"status": "ok", "elapsed_s": 300.0}})
+    e = dash.eta(r)
+    assert e["needed"] == dash.MIN_ETA_SAMPLES == 3
+    assert e["samples"] == 1

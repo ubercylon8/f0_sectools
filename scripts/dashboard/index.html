@@ -112,7 +112,8 @@ function renderProgress(p) {
 
   const e = p.eta || {};
   document.getElementById("s-eta").textContent =
-    e.status === "establishing" ? "establishing…"
+    e.status === "establishing"
+      ? "establishing (" + (e.samples || 0) + "/" + (e.needed || 3) + ")"
     : e.status === "partial" ? "> " + fmtDur(e.seconds)
     : fmtDur(e.seconds);
 
