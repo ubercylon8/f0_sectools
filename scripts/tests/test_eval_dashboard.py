@@ -233,3 +233,68 @@ def test_trend_skips_agentic_and_malformed_files(tmp_path):
 
 def test_trend_is_empty_for_an_empty_dir(tmp_path):
     assert dash.trend(tmp_path) == {"runs": [], "models": {}}
+
+
+# --- security: these are non-negotiable -------------------------------------
+
+@pytest.mark.parametrize("path", [
+    "/.env.defender",
+    "/../.env.defender",
+    "/%2e%2e%2f.env.entra",
+    "/../../etc/passwd",
+    "/evals/results/2026-07-28.json",
+    "/scripts/eval_dashboard.py",
+    "/static/../../.env.defender",
+])
+def test_no_url_reaches_the_filesystem(path):
+    # Serving this repo with `python -m http.server` would expose
+    # .env.defender over HTTP. This server maps NO url to a path: routing is
+    # an exact-match dict, so traversal is impossible by construction.
+    assert dash.route(path) is None
+
+
+def test_only_the_three_api_routes_and_root_resolve():
+    assert dash.route("/") == "page"
+    assert dash.route("/api/progress") == "progress"
+    assert dash.route("/api/matrix") == "matrix"
+    assert dash.route("/api/trend") == "trend"
+    assert dash.route("/api/progress/") is None      # exact match only
+    assert dash.route("/api/PROGRESS") is None
+    assert dash.route("/api") is None
+
+
+def test_server_binds_loopback_only():
+    # 0.0.0.0 would expose the dashboard to the network.
+    assert dash.HOST == "127.0.0.1"
+
+
+# --- payloads ---------------------------------------------------------------
+
+def test_build_payload_reports_when_no_run_exists(tmp_path):
+    status, body = dash.build_payload("progress", tmp_path, {})
+    assert status == 200
+    assert body["error"] == "no results found"
+    assert body["total"] == 0
+
+
+def test_build_payload_survives_a_half_written_file(tmp_path):
+    # run_matrix rewrites the whole file each cell; a poll can land mid-write.
+    (tmp_path / "2026-01-01.json").write_text('{"cells": {"a": ')
+    status, body = dash.build_payload("progress", tmp_path, {})
+    assert status == 200
+    assert body["stale"] is True
+
+
+def test_build_payload_progress_includes_eta(tmp_path):
+    _write_run(tmp_path, "2026-01-01", ["m1", "m2"], ["defender", "all"], 1.0)
+    p = tmp_path / "2026-01-01.json"
+    data = json.loads(p.read_text())
+    del data["cells"]["m2::all"]
+    del data["cells"]["m2::defender"]
+    for k in data["cells"]:
+        data["cells"][k]["elapsed_s"] = 100.0
+    p.write_text(json.dumps(data))
+    status, body = dash.build_payload("progress", tmp_path, {})
+    assert status == 200
+    assert body["done"] == 2
+    assert "eta" in body and body["eta"]["samples"] == 2

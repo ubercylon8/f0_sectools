@@ -18,7 +18,9 @@ so it cannot disturb a sweep in flight.
 """
 from __future__ import annotations
 
+import argparse
 import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -239,3 +241,97 @@ def trend(results_dir: Path) -> dict[str, Any]:
                  for d in runs],
         "models": models,
     }
+
+
+HOST = "127.0.0.1"  # never 0.0.0.0 — this must not be reachable off-box
+DEFAULT_PORT = 8765
+
+# Exact-match routing. There is deliberately no directory handler and no
+# url->path mapping anywhere in this file: `.env.defender` and friends live in
+# this repo, and a traversal bug would hand them out over HTTP. A url that is
+# not one of these four keys does not resolve to anything at all.
+_ROUTES = {
+    "/": "page",
+    "/api/progress": "progress",
+    "/api/matrix": "matrix",
+    "/api/trend": "trend",
+}
+
+
+def route(path: str) -> str | None:
+    """Exact-match only. Returns None for anything unrecognised."""
+    return _ROUTES.get(path)
+
+
+def build_payload(
+    name: str, results_dir: Path, observed: dict[str, float]
+) -> tuple[int, dict[str, Any]]:
+    """Shape one API response. Never raises for a bad/absent results file."""
+    if name == "trend":
+        return 200, trend(results_dir)
+
+    path = latest_results_path(results_dir)
+    if path is None:
+        if name == "progress":
+            return 200, {"error": "no results found", "total": 0, "done": 0,
+                         "pending": 0, "ok": 0, "failed": [], "current": None,
+                         "stale": False}
+        return 200, {"servers": [], "rows": [], "error": "no results found"}
+    try:
+        results = load_results(path)
+    except ValueError:
+        # Half-written file: report staleness, let the page keep its last good
+        # state. A dashboard that blanks during a long run trains distrust.
+        return 200, {"stale": True, "total": 0, "done": 0, "pending": 0, "ok": 0,
+                     "failed": [], "current": None}
+
+    if name == "matrix":
+        return 200, {**matrix(results), "stale": False}
+    return 200, {**progress(results), "eta": eta(results, observed), "stale": False}
+
+
+class _Handler(BaseHTTPRequestHandler):
+    results_dir = RESULTS_DIR
+    observed: dict[str, float] = {}
+
+    def do_GET(self) -> None:  # noqa: N802 - stdlib API
+        name = route(self.path)
+        if name is None:
+            self.send_error(404, "not found")
+            return
+        if name == "page":
+            self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+            return
+        status, body = build_payload(name, self.results_dir, self.observed)
+        self._send(status, json.dumps(body).encode(), "application/json")
+
+    def _send(self, status: int, body: bytes, ctype: str) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        pass  # a poll every 5s would drown the console
+
+
+def serve(port: int = DEFAULT_PORT, host: str = HOST) -> None:
+    httpd = ThreadingHTTPServer((host, port), _Handler)
+    print(f"eval dashboard: http://{host}:{port}  (ctrl-c to stop)")
+    print(f"reading {RESULTS_DIR} — read-only, safe to run during a sweep")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--port", type=int, default=DEFAULT_PORT)
+    serve(p.parse_args().port)
+
+
+if __name__ == "__main__":
+    main()
