@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f0_sectools — eval scorecard</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --line:#262b36; --fg:#e6e9ef; --dim:#8b93a7;
+    --mid:#d29922; --bad:#f85149; --pend:#20242e; --accent:#58a6ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f7f9; --panel:#fff; --line:#e2e5ea; --fg:#1a1d23; --dim:#5c6370;
+            --pend:#eceef2; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px; background:var(--bg); color:var(--fg);
+         font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:20px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           padding:16px; margin-bottom:16px; }
+  .stats { display:flex; flex-wrap:wrap; gap:28px; }
+  .stat .v { font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .stat .k { color:var(--dim); font-size:12px; text-transform:uppercase;
+             letter-spacing:.04em; }
+  .bar { height:6px; background:var(--pend); border-radius:3px; overflow:hidden;
+         margin-top:14px; }
+  .bar > i { display:block; height:100%; background:var(--accent); transition:width .4s; }
+  .alert { border-left:3px solid var(--bad); background:rgba(248,81,73,.08);
+           padding:10px 12px; border-radius:6px; margin-top:14px; }
+  .alert b { color:var(--bad); }
+  .alert div { color:var(--dim); font-size:12px; margin-top:4px;
+               font-family:ui-monospace,monospace; word-break:break-word; }
+  .scroll { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; min-width:760px; }
+  th,td { padding:7px 9px; text-align:center; border-bottom:1px solid var(--line);
+          font-variant-numeric:tabular-nums; }
+  th { color:var(--dim); font-weight:500; font-size:12px; }
+  th:first-child, td:first-child { text-align:left; white-space:nowrap; }
+  td.cell { cursor:default; border-radius:4px; font-size:12px; }
+  td.pending { color:var(--dim); background:var(--pend); }
+  td.broken { background:rgba(248,81,73,.18); color:var(--bad); font-weight:600; }
+  .spark { display:flex; align-items:flex-end; gap:3px; height:34px; }
+  .spark i { width:12px; background:var(--accent); border-radius:2px 2px 0 0; }
+  .spark i.gap { background:repeating-linear-gradient(45deg,var(--pend),
+                 var(--pend) 3px,transparent 3px,transparent 6px); height:100%; }
+  .spark i.differs { background:var(--mid); }
+  .trend-row { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+  .trend-row .name { width:130px; color:var(--dim); font-size:12px; }
+  .stale { color:var(--mid); }
+  .legend { color:var(--dim); font-size:12px; margin-bottom:10px; }
+</style>
+</head>
+<body>
+<h1>Small-model tool-calling scorecard</h1>
+<div class="sub" id="sub">loading…</div>
+
+<div class="panel">
+  <div class="stats">
+    <div class="stat"><div class="v" id="s-done">–</div><div class="k">cells done</div></div>
+    <div class="stat"><div class="v" id="s-ok">–</div><div class="k">ok</div></div>
+    <div class="stat"><div class="v" id="s-fail">–</div><div class="k">failed</div></div>
+    <div class="stat"><div class="v" id="s-cur">–</div><div class="k">running now</div></div>
+    <div class="stat"><div class="v" id="s-eta">–</div><div class="k">est. remaining</div></div>
+  </div>
+  <div class="bar"><i id="bar" style="width:0"></i></div>
+  <div id="alerts"></div>
+</div>
+
+<div class="panel scroll"><table id="matrix"></table></div>
+
+<div class="panel">
+  <div class="legend">
+    mean argument-filling per run · striped = model absent from that run ·
+    amber = different server roster
+  </div>
+  <div id="trend"></div>
+</div>
+
+<script>
+const esc = s => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+const fmtPct = v => v === null || v === undefined ? "–" : Math.round(v * 100) + "%";
+
+function fmtDur(s) {
+  if (s === null || s === undefined) return "–";
+  if (s < 60) return Math.round(s) + "s";
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return h ? h + "h " + m + "m" : m + "m";
+}
+
+function scoreColor(v) {
+  if (v === null || v === undefined) return "";
+  const hue = 4 + v * 130;                 // red -> green
+  return "background:hsla(" + hue + ",62%,45%," + (0.18 + v * 0.30) + ")";
+}
+
+async function get(url) {
+  const r = await fetch(url, {cache: "no-store"});
+  if (!r.ok) throw new Error(url + " -> " + r.status);
+  return r.json();
+}
+
+function renderProgress(p) {
+  document.getElementById("s-done").textContent = p.done + "/" + p.total;
+  document.getElementById("s-ok").textContent = p.ok === undefined ? "–" : p.ok;
+  document.getElementById("s-fail").textContent = (p.failed || []).length;
+  document.getElementById("s-cur").textContent =
+    p.current ? p.current.replace("::", " · ") : (p.total ? "complete" : "–");
+
+  const e = p.eta || {};
+  document.getElementById("s-eta").textContent =
+    e.status === "establishing"
+      ? "establishing (" + (e.samples || 0) + "/" + (e.needed || 3) + ")"
+    : e.status === "partial" ? "> " + fmtDur(e.seconds)
+    : fmtDur(e.seconds);
+
+  document.getElementById("bar").style.width =
+    (p.total ? (p.done / p.total) * 100 : 0) + "%";
+
+  document.getElementById("sub").innerHTML =
+    (p.error ? esc(p.error) : "run " + esc(p.date || "?") + " · runs/task " + esc(p.runs || "?"))
+    + (p.stale ? ' · <span class="stale">stale read</span>' : "");
+
+  // An `unusable` cell means the model made NO tool call on a whole task set —
+  // a serving problem (context too small for the schema), not a capability
+  // result. Surfacing it early is this panel's real job.
+  document.getElementById("alerts").innerHTML = (p.failed || []).map(f =>
+    '<div class="alert"><b>' + esc(f.status) + "</b> — " + esc(f.key) +
+    "<div>" + esc(f.error) + "</div></div>"
+  ).join("");
+}
+
+function renderMatrix(m) {
+  const head = "<tr><th>Model</th>" +
+    (m.servers || []).map(s => "<th>" + esc(s) + "</th>").join("") + "</tr>";
+  const rows = (m.rows || []).map(r => "<tr><td>" + esc(r.display) + "</td>" +
+    r.cells.map(c => {
+      if (c.status === "pending")
+        return '<td class="cell pending" title="not run yet">·</td>';
+      if (c.status !== "ok")
+        return '<td class="cell broken" title="' + esc(c.error) + '">' +
+               (c.status === "unusable" ? "ctx!" : "err") + "</td>";
+      return '<td class="cell" style="' + scoreColor(c.args_rate) + '" title="tool ' +
+             fmtPct(c.tool_rate) + " · args " + fmtPct(c.args_rate) + '">' +
+             fmtPct(c.tool_rate) + "/" + fmtPct(c.args_rate) + "</td>";
+    }).join("") + "</tr>").join("");
+  document.getElementById("matrix").innerHTML = head + rows;
+}
+
+function renderTrend(t) {
+  const names = Object.keys(t.models || {});
+  document.getElementById("trend").innerHTML = names.map(n => {
+    const bars = t.models[n].map(p => {
+      // A model with no data is a GAP, never a line drawn across it — and the
+      // two ways to have no data are different facts: dropped from the roster
+      // vs still queued in a sweep that is running.
+      if (p.args_rate === null) {
+        const why = p.reason === "pending" ? "not run yet" : "model not in this run";
+        return '<i class="gap" title="' + esc(p.date) + ": " + why + '"></i>';
+      }
+      const cls = p.roster_differs ? "differs" : "";
+      const title = esc(p.date) + ": " + fmtPct(p.args_rate) + " over " +
+                    p.servers.length + " server(s)" +
+                    (p.roster_differs ? " — different roster" : "");
+      return '<i class="' + cls + '" style="height:' +
+             Math.max(4, p.args_rate * 34) + 'px" title="' + title + '"></i>';
+    }).join("");
+    return '<div class="trend-row"><div class="name">' + esc(n) +
+           '</div><div class="spark">' + bars + "</div></div>";
+  }).join("");
+}
+
+async function tick() {
+  try {
+    const [p, m] = await Promise.all([get("/api/progress"), get("/api/matrix")]);
+    renderProgress(p);
+    renderMatrix(m);
+  } catch (err) {
+    // Keep the last good render: a page that blanks on one failed poll during
+    // an 18h run teaches you to stop trusting it.
+    document.getElementById("sub").innerHTML =
+      '<span class="stale">poll failed — showing last good state</span>';
+  }
+}
+
+get("/api/trend").then(renderTrend).catch(() => {});
+tick();
+setInterval(tick, 5000);
+setInterval(() => get("/api/trend").then(renderTrend).catch(() => {}), 60000);
+</script>
+</body>
+</html>

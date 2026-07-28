@@ -282,3 +282,28 @@ async def test_run_matrix_records_the_registry_size_for_the_renderer(tmp_path):
             client_factory=_fake_factory("t0"),
         )
     assert results["tool_total"] == 51
+
+
+@pytest.mark.asyncio
+async def test_run_matrix_records_elapsed_per_cell(tmp_path, monkeypatch):
+    # A cell's duration is the only basis a dashboard has for an ETA, and the
+    # results JSON carried no timing at all. Every completed cell records it.
+    import evals.scorecard as sc
+
+    ticks = iter([100.0, 130.5, 200.0, 260.0])
+    monkeypatch.setattr(sc, "_now", lambda: next(ticks))
+
+    out = tmp_path / "r.json"
+    results = await sc.run_matrix(
+        models=[{"tag": "m1", "display": "M1"}],
+        servers=["defender", "entra"],
+        base_url="http://x/v1",
+        runs=1,
+        out_path=out,
+        date="2026-01-01",
+        client_factory=_fake_factory("get_secure_score"),
+    )
+    assert results["cells"]["m1::defender"]["elapsed_s"] == 30.5
+    assert results["cells"]["m1::entra"]["elapsed_s"] == 60.0
+    # and it survives the round-trip to disk
+    assert json.loads(out.read_text())["cells"]["m1::defender"]["elapsed_s"] == 30.5
