@@ -52,11 +52,51 @@
   .trend-row .name { width:130px; color:var(--dim); font-size:12px; }
   .stale { color:var(--mid); }
   .legend { color:var(--dim); font-size:12px; margin-bottom:10px; }
+  .intro { line-height:1.6; max-width:70ch; }
+  .intro p { margin:0 0 10px; }
+  .example { background:var(--pend); border-radius:8px; padding:12px 14px;
+             margin-top:12px; font-size:13px; }
+  .example code { font-family:ui-monospace,monospace; color:var(--accent); }
+  .example .lbl { color:var(--dim); text-transform:uppercase; font-size:11px;
+                  letter-spacing:.04em; display:block; margin-bottom:2px; }
+  .example .row { margin-bottom:8px; }
+  .cards { display:flex; flex-wrap:wrap; gap:10px; }
+  .card { background:var(--pend); border-radius:8px; padding:10px 12px;
+          min-width:130px; }
+  .card .n { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .card .s { color:var(--dim); font-size:12px; }
+  .warn { border-left:3px solid var(--mid); background:rgba(210,153,34,.08);
+          padding:10px 12px; border-radius:6px; margin-top:12px; font-size:13px;
+          line-height:1.55; }
 </style>
 </head>
 <body>
 <h1>Small-model tool-calling scorecard</h1>
 <div class="sub" id="sub">loading…</div>
+
+<div class="panel intro">
+  <p><b>What this measures.</b> Each MCP server exposes a handful of tools. A
+  <i>task</i> is a natural-language ask plus the tool that should answer it and the
+  arguments that must be filled. Every task is replayed against a locally-served
+  small model, several times.</p>
+  <p><b>tool-selection</b> is how often the model picked the right tool.
+  <b>argument-filling</b> is how often it also filled the arguments correctly — so
+  argument-filling can never exceed tool-selection. 100%/100% means every task, every
+  run. A tool that scores badly is a <i>tool design</i> problem, not a model problem:
+  the fix is to simplify the tool, not lower the bar.</p>
+  <div class="example" id="example">loading an example task…</div>
+  <div class="warn">
+    <b>Reading the numbers.</b> A cell is a small number of runs per task, so a
+    sub-100% score is a noisy estimate rather than a precise measurement — the same
+    cell can land several points apart on consecutive runs. Treat a failure as real
+    only when it <b>reproduces</b>. Cells at 100% have proven stable on re-run.
+  </div>
+</div>
+
+<div class="panel">
+  <div class="legend">servers under test — tools registered, schema size, tasks</div>
+  <div class="cards" id="cards">…</div>
+</div>
 
 <div class="panel">
   <div class="stats">
@@ -182,6 +222,32 @@ function renderTrend(t) {
   }).join("");
 }
 
+function renderServers(s) {
+  const rows = s.servers || [];
+  document.getElementById("cards").innerHTML = rows.map(r =>
+    '<div class="card"><div class="n">' + esc(r.server) + '</div>' +
+    '<div class="s">' + (r.tool_count === null ? "? tools" : r.tool_count + " tools") +
+    " · " + (r.schema_kb === null ? "? KB" : r.schema_kb + " KB") +
+    " · " + r.task_count + " tasks</div></div>"
+  ).join("");
+
+  // One real task, end to end. A concrete example teaches more than definitions,
+  // and reading it from the live task set means it cannot drift from reality.
+  const first = rows.find(r => r.example);
+  if (!first) return;
+  const ex = first.example;
+  const args = ex.expect_args
+    ? '<div class="row"><span class="lbl">must fill</span><code>' +
+      esc(JSON.stringify(ex.expect_args)) + "</code></div>"
+    : "";
+  document.getElementById("example").innerHTML =
+    '<div class="row"><span class="lbl">example task · ' + esc(first.server) +
+    '</span></div>' +
+    '<div class="row"><span class="lbl">someone asks</span>\u201c' + esc(ex.prompt) + '\u201d</div>' +
+    '<div class="row"><span class="lbl">right answer</span>call <code>' +
+    esc(ex.expect_tool) + "</code></div>" + args;
+}
+
 async function tick() {
   try {
     const [p, m] = await Promise.all([get("/api/progress"), get("/api/matrix")]);
@@ -196,6 +262,7 @@ async function tick() {
 }
 
 get("/api/trend").then(renderTrend).catch(() => {});
+get("/api/servers").then(renderServers).catch(() => {});
 tick();
 setInterval(tick, 5000);
 setInterval(() => get("/api/trend").then(renderTrend).catch(() => {}), 60000);

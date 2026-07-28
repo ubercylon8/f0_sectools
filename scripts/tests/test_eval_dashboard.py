@@ -553,3 +553,29 @@ def test_no_definitions_after_the_entrypoint():
     entry = next(i for i, ln in enumerate(lines) if ln.startswith('if __name__'))
     after = [ln for ln in lines[entry:] if ln.startswith(("def ", "class "))]
     assert not after, f"defined after the entrypoint, unreachable as a script: {after}"
+
+
+def test_page_explains_what_is_measured_and_stays_self_contained():
+    html = dash.PAGE.read_text(encoding="utf-8")
+    for forbidden in ("http://", "https://", "//cdn", "integrity="):
+        assert forbidden not in html, f"page must not reference {forbidden!r}"
+    # /api/cell is asserted by the drill-down test, which owns that feature.
+    for endpoint in ("/api/progress", "/api/matrix", "/api/trend", "/api/servers"):
+        assert endpoint in html
+    # The two rates are jargon; the page must define them where they are read.
+    assert "tool-selection" in html and "argument-filling" in html
+    # And it must state the runs=3 caveat rather than leaving it to a commit log.
+    assert "reproduce" in html.lower()
+
+
+def test_servers_view_prefers_an_example_that_asserts_arguments(tmp_path):
+    # The example teaches what "argument-filling" means; one with no asserted
+    # args shows only half the story.
+    _write_tasks(tmp_path, "defender", [
+        {"prompt": "no args here", "expect_tool": "get_secure_score"},
+        {"prompt": "this one has args", "expect_tool": "list_incidents",
+         "expect_args": {"severity_min": "high"}},
+    ])
+    v = dash.servers_view(tmp_path, {"cells": {}})
+    row = next(r for r in v["servers"] if r["server"] == "defender")
+    assert row["example"]["prompt"] == "this one has args"

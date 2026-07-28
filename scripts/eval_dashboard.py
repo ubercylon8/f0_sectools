@@ -556,12 +556,16 @@ def servers_view(evals_dir: Path, results: dict[str, Any]) -> dict[str, Any]:
     rows = []
     for server, tasks in inv.items():
         cell = measured.get(server, {})
+        # Prefer an example that asserts arguments: the example exists to show
+        # what "argument-filling" means, and a task with no expect_args
+        # demonstrates only half of it.
+        example = next((t for t in tasks if t.get("expect_args")), tasks[0])
         rows.append({
             "server": server,
             "task_count": len(tasks),
             "tool_count": cell.get("tool_count"),
             "schema_kb": cell.get("schema_kb"),
-            "example": tasks[0],
+            "example": example,
         })
     return {"servers": rows}
 
