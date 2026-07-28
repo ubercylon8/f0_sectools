@@ -86,3 +86,31 @@ Run the matrix (evict between models on a memory-constrained box, as with the sc
 
 Results render to `evals/AGENTIC.md` (a skill × model matrix). Ministral 3 was removed
 from `models.yaml` — it emits no OpenAI `tool_calls`, so it scores 0 on both evals.
+
+## Watching a sweep (dashboard)
+
+A full matrix at `runs=3` takes 12-18 hours, and `SCORECARD.md` is only written
+at the end. To watch it live:
+
+```bash
+uv run python scripts/eval_dashboard.py     # http://127.0.0.1:8765
+```
+
+Read-only and safe to start, stop, or restart mid-sweep — it only reads
+`evals/results/*.json`, which `run_matrix` rewrites after every cell.
+
+It shows progress with a column-weighted ETA (the `all` column is several times
+slower per cell, so a single pooled mean under-estimates badly), the matrix as a
+heatmap that fills in live, and each model's trend across past runs. Any
+`error`/`unusable` cell is raised as an alert — `unusable` means the model made
+no tool call at all on a whole task set, which is a serving problem (context too
+small for the schema), not a capability result.
+
+Two distinctions the views keep deliberately visible, because collapsing them
+would misreport coverage as a result: a `pending` cell is never drawn as a low
+score, and in the trend a model *dropped from the roster* reads differently from
+one *not yet reached* by a running sweep.
+
+> **Never** serve this repo with `python -m http.server` - it would expose
+> `.env.defender` and every other credential file over HTTP. The dashboard maps
+> no URL to a filesystem path and binds `127.0.0.1` only.

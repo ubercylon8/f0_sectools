@@ -298,3 +298,52 @@ def test_build_payload_progress_includes_eta(tmp_path):
     assert status == 200
     assert body["done"] == 2
     assert "eta" in body and body["eta"]["samples"] == 2
+
+
+def test_page_exists_and_is_self_contained():
+    html = dash.PAGE.read_text(encoding="utf-8")
+    # No CDN, no external anything: the repo ships local-only by policy and the
+    # page must render with the network unplugged.
+    for forbidden in ("http://", "https://", "//cdn", "integrity="):
+        assert forbidden not in html, f"page must not reference {forbidden!r}"
+    # It polls the three endpoints the server actually exposes.
+    for endpoint in ("/api/progress", "/api/matrix", "/api/trend"):
+        assert endpoint in html
+
+
+def test_observer_times_cells_that_appear_while_it_watches():
+    # A sweep started before elapsed_s existed carries no timing. We cannot know
+    # how long a cell took if it finished before we looked — but the gap between
+    # successive appearances is a fair estimate for cells we DO watch land.
+    clock = iter([0.0, 100.0, 400.0])
+    obs = dash.Observer(clock=lambda: next(clock))
+    assert obs.observe({"a::defender"}) == {}          # first look: baseline only
+    assert obs.observe({"a::defender", "a::entra"}) == {"a::entra": 100.0}
+    t = obs.observe({"a::defender", "a::entra", "a::all", "b::defender"})
+    # two cells appeared across a 300s gap -> 150s each
+    assert t["a::all"] == 150.0 and t["b::defender"] == 150.0
+
+
+def test_observer_ignores_a_poll_with_no_new_cells():
+    clock = iter([0.0, 10.0, 20.0])
+    obs = dash.Observer(clock=lambda: next(clock))
+    obs.observe({"a::defender"})
+    obs.observe({"a::defender"})
+    assert obs.observe({"a::defender", "a::entra"}) == {"a::entra": 20.0}
+
+
+def test_trend_distinguishes_absent_from_not_yet_run(tmp_path):
+    # A model dropped from the roster and a model still queued in a live sweep
+    # both have no data — but they are not the same fact, and a tooltip saying
+    # "not in this run" is simply false for the second.
+    _write_run(tmp_path, "2026-01-01", ["m1", "m2"], ["defender"], 1.0)
+    _write_run(tmp_path, "2026-01-02", ["m1", "m3"], ["defender"], 1.0)
+    p = tmp_path / "2026-01-02.json"
+    data = json.loads(p.read_text())
+    del data["cells"]["m3::defender"]      # in the roster, not yet reached
+    p.write_text(json.dumps(data))
+
+    t = dash.trend(tmp_path)
+    assert t["models"]["M2"][1]["reason"] == "absent"     # dropped from roster
+    assert t["models"]["M3"][1]["reason"] == "pending"    # queued, not run yet
+    assert t["models"]["M1"][1]["reason"] is None         # has data

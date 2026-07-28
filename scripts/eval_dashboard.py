@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -230,11 +231,18 @@ def trend(results_dir: Path) -> dict[str, Any]:
                     and c.get("args_rate") is not None
                 ]
                 rate = _mean(rates)
+            # Two different facts look identical as "no data": a model dropped
+            # from the roster, and one still queued in a sweep that is running.
+            # Labelling the second "not in this run" would be a plain untruth.
+            reason = None
+            if rate is None:
+                reason = "pending" if tag is not None else "absent"
             models[name].append({
                 "date": data.get("date", ""),
                 "args_rate": rate,
                 "servers": servers,
                 "roster_differs": differs,
+                "reason": reason,
             })
     return {
         "runs": [{"date": d.get("date", ""), "servers": d.get("servers") or []}
@@ -290,9 +298,41 @@ def build_payload(
     return 200, {**progress(results), "eta": eta(results, observed), "stale": False}
 
 
+class Observer:
+    """Times cells by watching them appear.
+
+    A sweep that started before cells recorded their own `elapsed_s` carries no
+    timing at all, which would leave the ETA stuck at `establishing` forever. We
+    cannot know how long a cell took if it finished before we started looking —
+    but for cells that land WHILE we watch, the gap between successive
+    appearances is a fair estimate. When several appear between two polls the
+    gap is split evenly across them.
+    """
+
+    def __init__(self, clock: Any = time.monotonic) -> None:
+        self._clock = clock
+        self._seen: set[str] = set()
+        self._mark: float | None = None
+        self.timings: dict[str, float] = {}
+
+    def observe(self, keys: Any) -> dict[str, float]:
+        now = self._clock()
+        keys = set(keys)
+        if self._mark is None:          # first look: baseline, time nothing
+            self._seen, self._mark = keys, now
+            return self.timings
+        new = keys - self._seen
+        if new:
+            per = (now - self._mark) / len(new)
+            for k in new:
+                self.timings[k] = per
+            self._seen, self._mark = keys, now
+        return self.timings
+
+
 class _Handler(BaseHTTPRequestHandler):
     results_dir = RESULTS_DIR
-    observed: dict[str, float] = {}
+    observer = Observer()
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib API
         name = route(self.path)
@@ -302,8 +342,23 @@ class _Handler(BaseHTTPRequestHandler):
         if name == "page":
             self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             return
-        status, body = build_payload(name, self.results_dir, self.observed)
+        status, body = build_payload(name, self.results_dir, self._observed())
         self._send(status, json.dumps(body).encode(), "application/json")
+
+    def _observed(self) -> dict[str, float]:
+        """Feed the observer the current cell set so it can time new arrivals.
+
+        A second read of the results file, deliberately: it keeps build_payload's
+        signature a plain dict (easy to test) and the file is small enough that
+        re-reading it every five seconds costs nothing.
+        """
+        path = latest_results_path(self.results_dir)
+        if path is None:
+            return self.observer.timings
+        try:
+            return self.observer.observe((load_results(path).get("cells") or {}).keys())
+        except (ValueError, OSError):
+            return self.observer.timings
 
     def _send(self, status: int, body: bytes, ctype: str) -> None:
         self.send_response(status)
