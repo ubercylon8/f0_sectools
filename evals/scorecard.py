@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 import yaml
@@ -55,6 +56,16 @@ async def _tools_and_tasks(server: str):
     return await server_tool_schemas(server), load_tasks(server)
 
 
+def _now() -> float:
+    """Monotonic clock behind one indirection.
+
+    Tests stub THIS, not `time.monotonic` — patching the global time module
+    also stops asyncio's timekeeping, which drains a stubbed clock on internal
+    calls the test never made.
+    """
+    return time.monotonic()
+
+
 def _load_results(out_path: Path) -> dict:
     # size check (not just exists()) matters for --no-write, which points
     # out_path at os.devnull: that path exists and reads back as "", which
@@ -94,6 +105,7 @@ async def run_matrix(
             key = cell_key(tag, server)
             if key in results["cells"] and not force:
                 continue
+            started = _now()
             try:
                 tools, tasks = await _tools_and_tasks(server)
                 if server == "all":
@@ -120,6 +132,11 @@ async def run_matrix(
                 results["cells"][key] = {"status": "unusable", "error": str(e)[:400]}
             except Exception as e:  # noqa: BLE001 - one dead cell must not kill the sweep
                 results["cells"][key] = {"status": "error", "error": str(e)[:200]}
+            # A cell that took nine minutes to FAIL still consumed nine minutes;
+            # timing every terminal branch keeps a progress ETA honest when cells
+            # break. The ValueError branch above re-raises and aborts the sweep,
+            # so it deliberately never reaches here — nothing left to estimate.
+            results["cells"][key]["elapsed_s"] = round(_now() - started, 1)
             _write_results(out_path, results)
     return results
 
