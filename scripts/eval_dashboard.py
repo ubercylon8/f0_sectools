@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -316,21 +317,26 @@ class Observer:
         self._clock = clock
         self._seen: set[str] = set()
         self._mark: float | None = None
+        self._lock = threading.Lock()
         self.timings: dict[str, float] = {}
 
     def observe(self, keys: Any) -> dict[str, float]:
-        now = self._clock()
-        keys = set(keys)
-        if self._mark is None:          # first look: baseline, time nothing
-            self._seen, self._mark = keys, now
+        # Locked because this is a shared singleton and ThreadingHTTPServer
+        # gives every request its own thread; correctness should not depend on
+        # callers happening to be serialised.
+        with self._lock:
+            now = self._clock()
+            keys = set(keys)
+            if self._mark is None:      # first look: baseline, time nothing
+                self._seen, self._mark = keys, now
+                return self.timings
+            new = keys - self._seen
+            if new:
+                per = (now - self._mark) / len(new)
+                for k in new:
+                    self.timings[k] = per
+                self._seen, self._mark = keys, now
             return self.timings
-        new = keys - self._seen
-        if new:
-            per = (now - self._mark) / len(new)
-            for k in new:
-                self.timings[k] = per
-            self._seen, self._mark = keys, now
-        return self.timings
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -345,7 +351,11 @@ class _Handler(BaseHTTPRequestHandler):
         if name == "page":
             self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             return
-        status, body = build_payload(name, self.results_dir, self._observed())
+        # Only `progress` consumes timings, so only it pays for the observation.
+        # Observing on `matrix` too meant a second file read AND two threads
+        # racing the shared Observer every five seconds, for data matrix ignores.
+        observed = self._observed() if name == "progress" else {}
+        status, body = build_payload(name, self.results_dir, observed)
         self._send(status, json.dumps(body).encode(), "application/json")
 
     def _observed(self) -> dict[str, float]:
@@ -368,6 +378,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 

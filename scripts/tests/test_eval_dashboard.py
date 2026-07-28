@@ -356,3 +356,31 @@ def test_eta_reports_how_many_samples_it_still_needs():
     e = dash.eta(r)
     assert e["needed"] == dash.MIN_ETA_SAMPLES == 3
     assert e["samples"] == 1
+
+
+def test_observer_is_thread_safe():
+    # ThreadingHTTPServer gives every request its own thread and the Observer is
+    # a shared singleton, so observe() must not corrupt its own state under
+    # concurrent calls. (Flagged in review on PR #86.)
+    import threading
+
+    obs = dash.Observer()
+    keys, errors = set(), []
+
+    def worker(n):
+        try:
+            for i in range(20):
+                keys.add(f"m{n}::s{i}")
+                obs.observe(set(keys))
+        except Exception as exc:  # noqa: BLE001 - the assertion is "no exception"
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, errors
+    # Every key observed after the baseline poll carries a non-negative timing.
+    assert all(v >= 0 for v in obs.timings.values())
