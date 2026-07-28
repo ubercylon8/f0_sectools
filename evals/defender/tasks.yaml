@@ -29,13 +29,20 @@
 - prompt: "Pull the most recent Defender alerts."
   expect_tool: list_alerts
 
+# The indicator is asserted, not just the category: network and process are in
+# _INDICATOR_REQUIRED, so hunt(category=process, indicator="") returns a
+# "needs an indicator" guidance finding and NO telemetry. Scoring only the
+# category marked that empty-indicator call a 100% pass — a tool call that
+# returns no data was being reported as success.
 - prompt: "Hunt for PowerShell process launches in the last day."
   expect_tool: hunt
   expect_args: { category: process }
+  expect_args_contains: { indicator: powershell }
 
 - prompt: "Check for network connections to evil.com."
   expect_tool: hunt
   expect_args: { category: network }
+  expect_args_contains: { indicator: evil.com }
 
 - prompt: "Any suspicious failed sign-ins?"
   expect_tool: hunt
