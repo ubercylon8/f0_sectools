@@ -10,7 +10,9 @@ ProjectAchilles defense score — how well controls block/detect simulated attac
 
 over_time=false (default) returns the CURRENT score (a snapshot). over_time=true
 returns the TREND over the period — use it for any "improving", "declining",
-"over time", or "history" question. interval (day|hour) applies only to the trend.
+"over time", "history", "day by day", or "hour by hour" question.
+interval (day|hour) is IGNORED unless over_time=true — asking for an hourly or
+daily breakdown means you want the trend, so set BOTH.
 
 | Parameter | Type | Default |
 |---|---|---|

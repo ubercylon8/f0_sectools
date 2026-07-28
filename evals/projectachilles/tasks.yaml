@@ -12,6 +12,12 @@
   expect_tool: get_defense_score
   expect_args: { over_time: true }
 
+# Exercises `interval`, which no task previously named — so its free-string
+# schema had never been measured. Baseline for the Literal-enum A/B.
+- prompt: "Show the defense score trend hour by hour for the last 2 days."
+  expect_tool: get_defense_score
+  expect_args: { over_time: true, interval: hour }
+
 - prompt: "Which MITRE techniques are we weakest against?"
   expect_tool: get_weak_techniques
 
