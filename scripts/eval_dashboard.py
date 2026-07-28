@@ -106,3 +106,71 @@ def matrix(results: dict[str, Any]) -> dict[str, Any]:
         rows.append({"tag": m["tag"], "display": m.get("display", m["tag"]),
                      "cells": row_cells})
     return {"servers": servers, "rows": rows}
+
+
+MIN_ETA_SAMPLES = 3
+_ALL = "all"
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def eta(
+    results: dict[str, Any], observed: dict[str, float] | None = None
+) -> dict[str, Any]:
+    """Projected seconds remaining, weighted by column.
+
+    The `all` column registers every tool at once — a ~32KB schema prefix on
+    each call, measured 4-15x slower than a single server's. Pooling both into
+    one mean under-estimates a sweep badly, since the `all` cells dominate
+    whatever is left. So: two means, projected against their own remainders.
+
+    `observed` carries timings the server measured itself, for a sweep that
+    began before cells recorded their own duration.
+    """
+    observed = observed or {}
+    models = results.get("models") or []
+    servers = results.get("servers") or []
+    cells = results.get("cells") or {}
+
+    per_server_times: list[float] = []
+    all_times: list[float] = []
+    for key, cell in cells.items():
+        secs = cell.get("elapsed_s")
+        if secs is None:
+            secs = observed.get(key)
+        if secs is None:
+            continue
+        bucket = all_times if key.rsplit("::", 1)[-1] == _ALL else per_server_times
+        bucket.append(float(secs))
+
+    remaining_all = 0
+    remaining_per_server = 0
+    for m in models:
+        for s in servers:
+            if _cell_key(m["tag"], s) in cells:
+                continue
+            if s == _ALL:
+                remaining_all += 1
+            else:
+                remaining_per_server += 1
+
+    samples = len(per_server_times) + len(all_times)
+    mean_ps = _mean(per_server_times)
+    mean_all = _mean(all_times)
+    out = {
+        "samples": samples,
+        "mean_per_server": mean_ps,
+        "mean_all": mean_all,
+        "remaining_per_server": remaining_per_server,
+        "remaining_all": remaining_all,
+    }
+    if samples < MIN_ETA_SAMPLES:
+        return {**out, "status": "establishing", "seconds": None}
+
+    seconds = (mean_ps or 0.0) * remaining_per_server + (mean_all or 0.0) * remaining_all
+    # `all` cells remain but none has been timed: the slowest part of the sweep
+    # is unmeasured, so this is a floor, not an estimate.
+    status = "partial" if (remaining_all and mean_all is None) else "ok"
+    return {**out, "status": status, "seconds": round(seconds, 1)}
