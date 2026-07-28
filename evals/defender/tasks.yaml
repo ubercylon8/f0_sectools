@@ -61,6 +61,7 @@
 
 - prompt: "Contain host dev-1, add a note that it's part of incident 42."
   expect_tool: isolate_host
+  expect_args_contains: { device_id: dev-1 }
 
 - prompt: "Release dev-1 from isolation, it's been cleaned."
   expect_tool: release_host
@@ -68,3 +69,4 @@
 
 - prompt: "Take dev-1 back out of network isolation."
   expect_tool: release_host
+  expect_args_contains: { device_id: dev-1 }

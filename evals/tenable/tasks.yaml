@@ -35,3 +35,4 @@
 
 - prompt: "List the assets that have the Log4j vulnerability, plugin 182252."
   expect_tool: list_vulnerability_assets
+  expect_args_contains: { plugin_id: "182252" }

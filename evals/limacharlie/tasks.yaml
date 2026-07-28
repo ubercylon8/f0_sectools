@@ -35,7 +35,7 @@
 
 - prompt: "Did web-01 connect to microsoft.com in the last 15 minutes?"
   expect_tool: query_telemetry
-  expect_args_contains: { domain: "microsoft.com" }
+  expect_args_contains: { domain: "microsoft.com", hostname: "web-01" }
 
 - prompt: "Which LimaCharlie sensors carry the tag lc:sleeper?"
   expect_tool: list_sensors
