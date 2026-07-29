@@ -579,3 +579,10 @@ def test_servers_view_prefers_an_example_that_asserts_arguments(tmp_path):
     v = dash.servers_view(tmp_path, {"cells": {}})
     row = next(r for r in v["servers"] if r["server"] == "defender")
     assert row["example"]["prompt"] == "this one has args"
+
+
+def test_page_wires_cell_drilldown():
+    html = dash.PAGE.read_text(encoding="utf-8")
+    assert "/api/cell?model=" in html
+    assert "openCell" in html          # the click handler exists
+    assert "not recorded" in html      # the honest fallback for older runs

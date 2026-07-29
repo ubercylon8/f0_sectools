@@ -38,7 +38,7 @@
           font-variant-numeric:tabular-nums; }
   th { color:var(--dim); font-weight:500; font-size:12px; }
   th:first-child, td:first-child { text-align:left; white-space:nowrap; }
-  td.cell { cursor:default; border-radius:4px; font-size:12px; }
+  td.cell { cursor:pointer; border-radius:4px; font-size:12px; }
   td.pending { color:var(--dim); background:var(--pend); }
   td.skipped { color:var(--dim); background:repeating-linear-gradient(45deg,
                var(--pend), var(--pend) 4px, transparent 4px, transparent 8px); }
@@ -68,6 +68,15 @@
   .warn { border-left:3px solid var(--mid); background:rgba(210,153,34,.08);
           padding:10px 12px; border-radius:6px; margin-top:12px; font-size:13px;
           line-height:1.55; }
+  .drill { margin-top:14px; border-top:1px solid var(--line); padding-top:12px; }
+  .drill h3 { font-size:14px; margin:0 0 2px; }
+  .drill .meta { color:var(--dim); font-size:12px; margin-bottom:10px; }
+  .task { border-bottom:1px solid var(--line); padding:8px 0; font-size:13px; }
+  .task:last-child { border-bottom:0; }
+  .task .p { margin-bottom:3px; }
+  .task .d { color:var(--dim); font-size:12px; font-family:ui-monospace,monospace; }
+  .task .bad { color:var(--bad); }
+  .task .rate { float:right; font-variant-numeric:tabular-nums; color:var(--dim); }
 </style>
 </head>
 <body>
@@ -110,7 +119,10 @@
   <div id="alerts"></div>
 </div>
 
-<div class="panel scroll"><table id="matrix"></table></div>
+<div class="panel">
+  <div class="scroll"><table id="matrix"></table></div>
+  <div class="drill" id="drill" style="display:none"></div>
+</div>
 
 <div class="panel">
   <div class="legend">
@@ -182,17 +194,18 @@ function renderMatrix(m) {
     (m.servers || []).map(s => "<th>" + esc(s) + "</th>").join("") + "</tr>";
   const rows = (m.rows || []).map(r => "<tr><td>" + esc(r.display) + "</td>" +
     r.cells.map(c => {
+      const click = ' onclick="openCell(\'' + esc(r.tag) + "','" + esc(c.server) + "')\"";
       if (c.status === "pending")
-        return '<td class="cell pending" title="queued — not run yet">·</td>';
+        return '<td' + click + ' class="cell pending" title="queued — not run yet">·</td>';
       // Not in this run's scope at all. Saying "pending" would promise work
       // that is not queued; this column survives only because earlier cells
       // for it exist on disk.
       if (c.status === "skipped")
-        return '<td class="cell skipped" title="not part of this run">–</td>';
+        return '<td' + click + ' class="cell skipped" title="not part of this run">–</td>';
       if (c.status !== "ok")
-        return '<td class="cell broken" title="' + esc(c.error) + '">' +
+        return '<td' + click + ' class="cell broken" title="' + esc(c.error) + '">' +
                (c.status === "unusable" ? "ctx!" : "err") + "</td>";
-      return '<td class="cell" style="' + scoreColor(c.args_rate) + '" title="tool ' +
+      return '<td' + click + ' class="cell" style="' + scoreColor(c.args_rate) + '" title="tool ' +
              fmtPct(c.tool_rate) + " · args " + fmtPct(c.args_rate) + '">' +
              fmtPct(c.tool_rate) + "/" + fmtPct(c.args_rate) + "</td>";
     }).join("") + "</tr>").join("");
@@ -246,6 +259,45 @@ function renderServers(s) {
     '<div class="row"><span class="lbl">someone asks</span>\u201c' + esc(ex.prompt) + '\u201d</div>' +
     '<div class="row"><span class="lbl">right answer</span>call <code>' +
     esc(ex.expect_tool) + "</code></div>" + args;
+}
+
+async function openCell(model, server) {
+  const el = document.getElementById("drill");
+  el.style.display = "block";
+  el.innerHTML = "loading…";
+  let d;
+  try {
+    d = await get("/api/cell?model=" + encodeURIComponent(model) +
+                  "&server=" + encodeURIComponent(server));
+  } catch (e) { el.innerHTML = "could not load that cell"; return; }
+  if (!d.found) { el.innerHTML = "no result recorded for that cell"; return; }
+
+  const meta = [
+    d.tool_count == null ? null : d.tool_count + " tools",
+    d.schema_kb == null ? null : d.schema_kb + " KB schema",
+    d.tasks.length + " tasks",
+    d.recorded ? null : "outcomes not recorded for this run",
+  ].filter(Boolean).join(" · ");
+
+  const rows = d.tasks.map(t => {
+    const failed = t.recorded && t.args_rate !== null && t.args_rate < 1;
+    // `calls` is what the model ACTUALLY chose — the misroute, by name.
+    const wrong = (t.calls || []).filter(c => c && c !== t.expect_tool);
+    const detail = !t.recorded
+      ? "expects " + esc(t.expect_tool) + " · not recorded"
+      : "expects " + esc(t.expect_tool) +
+        (wrong.length ? ' · <span class="bad">called ' +
+          esc([...new Set(wrong)].join(", ")) + "</span>" : "");
+    const rate = t.recorded
+      ? '<span class="rate">' + fmtPct(t.tool_rate) + "/" + fmtPct(t.args_rate) + "</span>"
+      : "";
+    return '<div class="task">' + rate + '<div class="p">' +
+           (failed ? "✗ " : t.recorded ? "✓ " : "· ") + esc(t.prompt) +
+           '</div><div class="d">' + detail + "</div></div>";
+  }).join("");
+
+  el.innerHTML = "<h3>" + esc(model) + " · " + esc(server) + "</h3>" +
+                 '<div class="meta">' + esc(meta) + "</div>" + rows;
 }
 
 async function tick() {
