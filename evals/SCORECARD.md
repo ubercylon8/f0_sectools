@@ -1,17 +1,17 @@
 # Small-model tool-calling scorecard
 
-Endpoint `http://localhost:11434/v1` · runs/task 3 · generated 2026-07-28
+Endpoint `http://localhost:11434/v1` · runs/task 3 · generated 2026-07-29
 
 Each cell is **tool-selection% / argument-filling%** over the server's task set. `all` = every server's 51 tools registered at once (composition test). `err` = model/endpoint error; `ctx!` = the model emitted no tool call on any task, which means the serving context could not hold the schema — a setup problem, NOT a score of zero; `–` = not run.
 
 | Model | defender | entra | intune | limacharlie | projectachilles | projectachilles-actions | purview | tenable | all |
 |---|---|---|---|---|---|---|---|---|---|
-| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/93% | 96%/90% | 100%/100% | 100%/90% | 92%/90% |
-| Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | – |
-| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/93% | 100%/100% | 100%/100% | 100%/100% | – |
-| Gemma 4 E4B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 71%/71% | 100%/100% | 100%/100% | 80%/80% | – |
-| Gemma 4 12B | 100%/100% | 96%/96% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 96%/96% | 100%/100% | – |
-| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 93%/93% | 86%/71% | 94%/88% | 100%/100% | 100%/100% | – |
+| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 83%/77% | 100%/100% | 100%/90% | 96%/94% |
+| Qwen3 8B | err | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 95%/94% |
+| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/93% | 100%/100% | 100%/100% | 100%/100% | 99%/97% |
+| Gemma 4 E4B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 71%/71% | 100%/100% | 100%/100% | 80%/80% | 97%/97% |
+| Gemma 4 12B | 100%/100% | 96%/96% | 100%/100% | 100%/100% | 100%/100% | 100%/94% | 96%/96% | 100%/100% | 99%/98% |
+| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 93%/93% | 86%/71% | 94%/81% | 100%/100% | 100%/100% | 87%/84% |
 
 <!-- findings below: hand-annotated, preserved when the table is regenerated -->
 
@@ -20,93 +20,121 @@ Each cell is **tool-selection% / argument-filling%** over the server's task set.
 > regenerated (the writer keeps all content from the marker onward). The findings
 > come from a `runs=3` triage of the notable cells.
 
-## Findings
+## Findings (2026-07-29)
 
-**Every model is perfect per-server (100%/100%)** on all six platforms — Defender,
-Entra, LimaCharlie, ProjectAchilles, Intune, and the new **Tenable** server — except
-Gemma 4 12B's Defender gated-write gap (below) and a low-confidence ProjectAchilles dip
-on Gemma 4 E4B (88% at `runs=1` → 96% at `runs=3`). **Intune's and Tenable's 6 tools each
-are cleanly small-model-safe: 100%/100% per-server for every model.**
+This run is the first trustworthy one: every cell measured on a free GPU, per-task
+detail persisted, and a **second independent sample** of the 2026-07-28 matrix to
+separate real defects from sampling noise.
 
-**The cost shows up only in composition.** Registering all **34 tools** at once (6
-servers) is the hard test. **Qwen3.5 drives the full registry at 100%/98%**; Qwen3 8B and
-Qwen3 4B 98%; Gemma 4 E4B, Gemma 4 12B, and Granite 4 Tiny 97%; GPT-OSS 20B 91%/90% (its
-combined misroutes are all pre-existing cross-platform collisions — see below). No model
-errors.
+## Reproducibility: the matrix is stable
 
-**Adding Tenable costs ZERO routing accuracy — verified, not assumed.** A per-origin
-`--server all` probe at `runs=3` on **GPT-OSS 20B** (the only model whose combined score
-moved, 96→91) shows the **`tenable` origin at 100% tool-selection with zero misroutes**,
-and **nothing misroutes *to* a Tenable tool** from any other server. The 34-tool combined
-drop is entirely the **pre-existing, non-Tenable cross-platform collisions**:
-`defender → query_telemetry`/`list_sensors` (the documented hunting/sensor overlap) and
-`limacharlie → list_managed_devices` (Intune's device tool grabbing an endpoint prompt).
-Tenable's 6 tools compose cleanly. Tenable's only blemish is args 88% (tool-selection
-100%) — a single argument-fill miss on one of its 8 tasks, not a routing collision.
+**43 of 48 comparable cells reproduced exactly** across two independent full sweeps.
+Only five moved:
 
-**Adding Intune costs ZERO routing accuracy — verified, not assumed.** A per-origin
-`--server all` probe at `runs=3` on the two "dropped" models (GPT-OSS 20B and Granite 4
-Tiny) shows the **`intune` origin at 100% with zero misroutes**, and **nothing misroutes
-*to* an Intune tool**. Intune's 6 tools compose cleanly into the 28-tool registry. The
-combined-column movement vs the old 22-tool figures is **not** an Intune collision — it's
-(a) `runs=1` matrix variance (GPT-OSS's old 22-tool 100% was a single pass that missed the
-ambiguous hunting prompt) surfacing the **pre-existing `defender → query_telemetry` hunting
-residual** that **#2.5 deliberately left** ("*unqualified 'hunt for PowerShell'*" is
-genuinely ambiguous), plus a defender `list_incidents`/`get_fleet_health` intra-platform
-wobble. The remaining collisions are all **pre-existing, non-Intune** — see #2.5 below.
-The `--server all` per-origin report names them:
+| Cell | 07-28 | 07-29 |
+|---|---|---|
+| GPT-OSS × projectachilles | 100%/93% | 100%/100% |
+| GPT-OSS × projectachilles-actions | 96%/90% | **83%/77%** |
+| GPT-OSS × all | 90%/87% | 96%/94% |
+| Gemma 4 12B × projectachilles-actions | 100%/100% | **100%/94%** |
+| Granite × projectachilles-actions | 94%/88% | **94%/81%** |
 
-- **Hunting tools collide.** Defender's `run_hunting_query` and LimaCharlie's
-  `query_telemetry` are both "run a hunting query"; Qwen3 8B routed Defender hunting
-  prompts to `query_telemetry` and LimaCharlie prompts back to Defender's
-  `get_secure_score`.
-- **"Overview / health / posture" prompts collide** across `get_secure_score`
-  (Defender), `get_org_overview` (LimaCharlie), and `get_fleet_health`
-  (ProjectAchilles) — e.g. Granite routed a LimaCharlie prompt to `get_fleet_health`.
+Read a sub-100% cell as a noisy point estimate, not a measurement to the percentage
+point. **Treat a failure as real only when it reproduces** — most here do.
 
-> **Update (2026-07-11, roadmap #2.5) — descriptions rewritten, verified.** The 5
-> colliding descriptions were platform-anchored + cross-referenced ("for X, use
-> `<other>` instead"). A targeted `runs=3` probe of the exact colliding prompts against
-> the full 22-tool registry, on **both** Qwen3 8B and Granite 4 Tiny, confirms: the
-> **overview/health collision is fully cleared** (LimaCharlie→`get_org_overview`,
-> Microsoft→`get_secure_score`, PA→`get_fleet_health`, all 3/3), and **platform-named
-> hunting now routes correctly**. One residual: an unqualified *"hunt for PowerShell
-> processes"* still picks `query_telemetry` (which has a `powershell_activity` preset)
-> — a genuinely ambiguous ask, left as-is rather than overfit. The `all`-column table
-> numbers above predate the reword (the full 42-task combined run is flaky on this
-> Ollama box); the targeted probe is the cleaner evidence.
+## ⚠️ Three of the five moves are the same server, all downward
 
-Originally **tool-description defects, not model failures** — now addressed for the
-overview/health and named-hunting cases.
+`projectachilles-actions` dropped on **three independent models** between the two
+sweeps. That is the one server whose tool descriptions changed in between: a rewrite of
+`run_test` / `schedule_test` intended to stop Granite putting a hostname into `tag`
+(which silently turns a one-host run into a FLEET run on a gated write).
 
-**Both Gemma models dip on Defender — reproducibly (confirmed at `runs=3`, identical
-to `runs=1`, so not variance).** Gemma 4 12B (75%/75%) does not select `isolate_host`
-for "isolate device dev-1" (0/2) and misses one `release_host` phrasing — a 12B-specific
-gap on the **gated-write** actions. Gemma 4 E4B (92%/92%) instead mis-routes one specific
-`run_hunting_query` prompt every time. Both are stable across three runs — worth a
-description/prompt revisit for those tools, not a sampling artifact.
+Three models moving the same direction on the one edited server is not noise. **The fix
+appears to have made things worse and is not merged**; it sits unmerged pending a proper
+A/B. The models still at 100%/100% on that server (Qwen3 8B, Qwen3.5, Gemma E4B) are at
+ceiling and could not have shown a drop, so every model with room to move, moved down.
 
-**Ministral 3 was removed from the model set (2026-07-12) — it cannot drive the tools
-at all.** Ollama labels it "tool-capable", but against the OpenAI tool-calling interface
-it emitted **no `tool_calls`** — it narrated intent in prose ("*I'll check your Microsoft
-Secure Score… Let me fetch the latest data*") instead of returning a structured call
-(0% on every server, an incidental 14% on `all`). This is the scorecard's sharpest
-divider: a model can be conversationally tool-aware yet unusable by an agent that
-dispatches tools programmatically. Dropped from `models.yaml` as unusable for this
-repo's purpose — kept here as the instructive negative result.
+The lesson is the one this repo keeps relearning: **a description change is a
+measurement, not an edit.** It was committed without an A/B because the GPU was busy,
+and the next sweep found the cost.
 
-**Gemma 4 E4B dips on ProjectAchilles (88% at `runs=1` → 96% at `runs=3`)** — one flaky
-`get_defense_score` prompt (2/3), genuine low-confidence variance rather than a stable
-miss (contrast the Defender dips above, which reproduce exactly). An earlier `qwen3:4b`
-`err` under sweep memory pressure likewise cleared to 100%/100% on a free box — transient,
-not a capability limit.
+## Defender: 100%/100% on every model that ran
 
-## Notes
+Unchanged across both samples. Two description-only fixes got it there — no schema, no
+code, no arguments:
 
-- **Seven models measured** (49/49 cells: 6 servers + combined). Ministral 3 was dropped
-  from `models.yaml` (see above). `qwen3:4b` forced a 256k context on its pulled tag and
-  OOM'd this ~30 GB box on load; it runs as a small-context derive (`qwen3:4b-ctx16k`,
-  `num_ctx=16384` via a one-line Modelfile — see `models.yaml`). Same weights, tiny KV
-  cache, no OOM. The Ollama multi-model memory note is in [`README.md`](README.md).
-- Matrix run at `runs=1` (temperature 0); the notable cells above were re-checked at
-  `runs=3`. One resident model at a time (Ollama evicted between models).
+- **PR #82** — the gated-write descriptions gave the action eight words and ~60 to gating
+  mechanics. `isolate_host` / `release_host` now lead with what they DO, plus the
+  operator vocabulary that reaches for them. Gemma 4 12B: 75% → 96%.
+- **PR #83** — `hunt` described its mechanism and never what it finds, so "Any suspicious
+  failed sign-ins?" routed to `list_alerts` on **both** Gemma 4 12B (0/5) and Qwen3.5
+  (0/3). 96% → 100%.
+
+Qwen3 8B shows `err` on defender — a cold-start timeout, not a capability result. See below.
+
+## Composition: registering all 51 tools costs little
+
+The `all` column is complete for the first time.
+
+| Model | all |
+|---|---|
+| Gemma 4 12B | 99%/98% |
+| Qwen3.5 (9.7B) | 99%/97% |
+| Gemma 4 E4B | 97%/97% |
+| GPT-OSS 20B | 96%/94% |
+| Qwen3 8B | 95%/94% |
+| Granite 4 Tiny | 87%/84% |
+
+**Five of six models hold 94%+ argument-filling with every tool registered at once**
+(~34 KB of schema). Composition is a real but modest cost, not a cliff. An earlier
+single cell suggesting otherwise was measured under CPU spill and is void.
+
+## Stable defects (reproduce across both samples)
+
+- **`find_tests` "cyber-hygiene control checks"** — args 0% on Gemma E4B, Granite and
+  Qwen3.5. The most broadly-failing task in the repo; known to be description-sensitive
+  (the category-vs-keyword choice).
+- **Gemma 4 E4B × projectachilles 71%/71%** — the largest single dip, reproduced exactly.
+- **Granite × projectachilles 86%/71%** — reproduced exactly. Also misroutes `get_test`
+  ("what does the Kerberoast test cover") and the tag-scoped `list_test_executions`.
+- **`schedule_test` "every sunday at 23:00"** — right tool, wrong arguments. Granite puts
+  the hostname into `tag` 5/5.
+
+## Open: Tenable scores differently in a sweep than in isolation
+
+GPT-OSS × tenable and Gemma E4B × tenable both reproduced their dips **in sweep
+conditions** (100%/90% and 80%/80%, twice each) yet both returned **100%/100%** when the
+same cell was run on its own. Two samples per condition, consistent within each. The
+control that ruled out systematic sweep bias used cells already at 100%, which could not
+move, so it does not cover this. Cause unknown; recorded rather than explained away.
+
+## Harness defect: the first cell after a model switch can time out
+
+`qwen3:8b::defender` failed with `ReadTimeout` after 16 minutes — on a **7-tool** server,
+where GPT-OSS finished the same set in 80 seconds. It was that model's **first** cell; its
+next seven servers all passed. The sweep evicts each model between cells, so the first
+request includes loading ~7.5 GB from disk, and the 180 s ceiling is per-request. Load
+time counts against it, then three retries at 180 s each burn the rest.
+
+Fix by warming the model before timing, or by allowing the first call after an eviction a
+larger budget. Recorded as `error` rather than as a score, which is correct: the harness
+must never publish a serving failure as a capability number.
+
+## Check GPU residency before trusting any timing
+
+The 2026-07-28 sweep ran with a stale **llama.cpp** server holding **12.8 GB of 16.3 GB
+VRAM**, so every model silently spilled to CPU (Ollama reported 77–98% CPU). Freeing it
+took cells from ~33 min to ~4 min. It also produced a plausible but entirely false
+conclusion that the 51-tool registry could not fit in 16 GB — the `all` column above
+disproves it. Scores appear unaffected (same weights, same logits, no timeouts) but every
+timing from that period is void. `ollama ps` shows the CPU/GPU split;
+`nvidia-smi --query-compute-apps` shows who holds the memory.
+
+## Per-task detail is now persisted
+
+Each cell carries its task rows: the prompt, that task's own rates, and `calls` — the
+tools the model actually chose, which names a misroute. The local dashboard
+(`uv run python scripts/eval_dashboard.py`) renders it: click any cell to see which task
+failed and what was called instead. This distinguishes a **misroute** (wrong tool named)
+from a **no-call** (model emitted nothing) — two failure modes an aggregate percentage
+cannot tell apart, and which want opposite fixes.
