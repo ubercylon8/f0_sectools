@@ -25,9 +25,13 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = ROOT / "evals" / "results"
+TASKS_DIR = ROOT / "evals"
 PAGE = Path(__file__).resolve().parent / "dashboard" / "index.html"
 
 # Agentic runs use a different schema (trajectories, not model x server cells).
@@ -297,20 +301,101 @@ _ROUTES = {
     "/api/progress": "progress",
     "/api/matrix": "matrix",
     "/api/trend": "trend",
+    "/api/cell": "cell",
+    "/api/servers": "servers",
 }
 
 
 def route(path: str) -> str | None:
-    """Exact-match only. Returns None for anything unrecognised."""
-    return _ROUTES.get(path)
+    """Exact-match on the PATH; a query string is ignored, never a path part.
+
+    Splitting here is what lets /api/cell take model/server parameters while
+    keeping the property that no url is joined to a filesystem path: the
+    parameters are consumed downstream as dict keys only.
+    """
+    return _ROUTES.get(path.split("?", 1)[0])
+
+
+def _params(path: str) -> dict[str, str]:
+    """Parse a query string into a flat dict. Values are never path components."""
+    return {k: v[0] for k, v in parse_qs(urlsplit(path).query).items() if v}
+
+
+def cell_view(
+    evals_dir: Path, results: dict[str, Any], model: str, server: str
+) -> dict[str, Any]:
+    """One cell, task by task, failures first.
+
+    `model` and `server` are dict keys — into the cells map and the globbed task
+    inventory respectively. Neither is ever joined to a path.
+
+    Two sources, deliberately. Persisted rows give outcomes but only exist for
+    runs made after cells started carrying them; the YAML inventory gives the
+    prompts for every run ever made. A cell without rows still shows WHAT was
+    asked, marked unrecorded, rather than an empty panel.
+    """
+    cell = (results.get("cells") or {}).get(_cell_key(model, server))
+    inv = task_inventory(evals_dir).get(server)
+    if cell is None or inv is None:
+        return {"found": False, "model": model, "server": server}
+
+    rows = cell.get("tasks")
+    if rows:
+        by_prompt = {t.get("prompt"): t for t in inv}
+        tasks = [{
+            "prompt": r.get("prompt"),
+            "expect_tool": r.get("expect_tool"),
+            "expect_args": (by_prompt.get(r.get("prompt")) or {}).get("expect_args"),
+            "tool_rate": r.get("tool_rate"),
+            "args_rate": r.get("args_rate"),
+            "runs": r.get("runs"),
+            "calls": r.get("calls") or [],
+            "recorded": True,
+        } for r in rows]
+        # Failures first: the panel exists to answer "why is this cell 86%".
+        tasks.sort(key=lambda t: (t["args_rate"] if t["args_rate"] is not None else 1.0,
+                                  t["tool_rate"] if t["tool_rate"] is not None else 1.0))
+        recorded = True
+    else:
+        tasks = [{
+            "prompt": t.get("prompt"),
+            "expect_tool": t.get("expect_tool"),
+            "expect_args": t.get("expect_args"),
+            "tool_rate": None, "args_rate": None, "runs": None,
+            "calls": [], "recorded": False,
+        } for t in inv]
+        recorded = False
+
+    return {
+        "found": True, "model": model, "server": server,
+        "status": cell.get("status"),
+        "tool_rate": cell.get("tool_rate"), "args_rate": cell.get("args_rate"),
+        "schema_kb": cell.get("schema_kb"), "tool_count": cell.get("tool_count"),
+        "recorded": recorded, "tasks": tasks,
+    }
 
 
 def build_payload(
-    name: str, results_dir: Path, observed: dict[str, float]
+    name: str, results_dir: Path, observed: dict[str, float],
+    params: dict[str, str] | None = None,
+    tasks_dir: Path | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """Shape one API response. Never raises for a bad/absent results file."""
     if name == "trend":
         return 200, trend(results_dir)
+
+    evals_dir = tasks_dir or TASKS_DIR
+    if name in ("cell", "servers"):
+        path = latest_results_path(results_dir)
+        try:
+            results = load_results(path) if path else {"cells": {}}
+        except ValueError:
+            results = {"cells": {}}
+        if name == "servers":
+            return 200, servers_view(evals_dir, results)
+        p = params or {}
+        return 200, cell_view(evals_dir, results, p.get("model", ""),
+                              p.get("server", ""))
 
     path = latest_results_path(results_dir)
     if path is None:
@@ -385,7 +470,8 @@ class _Handler(BaseHTTPRequestHandler):
         # Observing on `matrix` too meant a second file read AND two threads
         # racing the shared Observer every five seconds, for data matrix ignores.
         observed = self._observed() if name == "progress" else {}
-        status, body = build_payload(name, self.results_dir, observed)
+        status, body = build_payload(name, self.results_dir, observed,
+                                     _params(self.path))
         self._send(status, json.dumps(body).encode(), "application/json")
 
     def _observed(self) -> dict[str, float]:
@@ -430,6 +516,58 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve(p.parse_args().port)
+
+
+
+def task_inventory(evals_dir: Path) -> dict[str, list[dict[str, Any]]]:
+    """Every server's task set, keyed by directory name.
+
+    Keys come from globbing the evals directory — never from a request. That is
+    what lets a query parameter be a dict key rather than a path component, so
+    `?server=../../.env.defender` misses instead of traversing.
+
+    Works retroactively: this is the only source of detail for result files
+    written before cells carried their own task rows.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for path in sorted(evals_dir.glob("*/tasks.yaml")):
+        try:
+            tasks = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, OSError):
+            continue  # a malformed task file must not blank the whole page
+        if isinstance(tasks, list) and tasks:
+            out[path.parent.name] = tasks
+    return out
+
+
+def servers_view(evals_dir: Path, results: dict[str, Any]) -> dict[str, Any]:
+    """Per-server cards: how many tasks, how many tools, how big the schema.
+
+    tool_count/schema_kb are read from whichever cell recorded them — never by
+    importing the server package. A server with tasks but no cell reports None,
+    which the page renders as unknown rather than zero.
+    """
+    inv = task_inventory(evals_dir)
+    measured: dict[str, dict[str, Any]] = {}
+    for key, cell in (results.get("cells") or {}).items():
+        server = key.rsplit("::", 1)[-1]
+        if server not in measured and cell.get("tool_count") is not None:
+            measured[server] = cell
+    rows = []
+    for server, tasks in inv.items():
+        cell = measured.get(server, {})
+        # Prefer an example that asserts arguments: the example exists to show
+        # what "argument-filling" means, and a task with no expect_args
+        # demonstrates only half of it.
+        example = next((t for t in tasks if t.get("expect_args")), tasks[0])
+        rows.append({
+            "server": server,
+            "task_count": len(tasks),
+            "tool_count": cell.get("tool_count"),
+            "schema_kb": cell.get("schema_kb"),
+            "example": example,
+        })
+    return {"servers": rows}
 
 
 if __name__ == "__main__":

@@ -307,3 +307,32 @@ async def test_run_matrix_records_elapsed_per_cell(tmp_path, monkeypatch):
     assert results["cells"]["m1::entra"]["elapsed_s"] == 60.0
     # and it survives the round-trip to disk
     assert json.loads(out.read_text())["cells"]["m1::defender"]["elapsed_s"] == 30.5
+
+
+@pytest.mark.asyncio
+async def test_run_matrix_persists_per_task_detail(tmp_path):
+    # run_suite already computes per-task rows including `calls` — the ordered
+    # tool names the model actually chose, which NAMES a misroute. Discarding
+    # them meant every "which task failed?" question needed a fresh GPU run.
+    import yaml
+
+    out = tmp_path / "r.json"
+    await run_matrix(
+        models=[{"tag": "m1", "display": "M1"}],
+        servers=["defender"],
+        base_url="http://x/v1",
+        runs=2,
+        out_path=out,
+        date="2026-01-01",
+        client_factory=_fake_factory("get_secure_score"),
+    )
+    cell = json.loads(out.read_text())["cells"]["m1::defender"]
+    assert cell["tool_count"] > 0
+    assert cell["schema_kb"] > 0
+    assert cell["no_call_rate"] == 0.0
+    rows = cell["tasks"]
+    assert len(rows) == len(yaml.safe_load(Path("evals/defender/tasks.yaml").read_text()))
+    first = rows[0]
+    assert set(first) >= {"prompt", "expect_tool", "tool_rate", "args_rate", "runs", "calls"}
+    assert first["runs"] == 2
+    assert len(first["calls"]) == 2          # one entry per run — names the misroute

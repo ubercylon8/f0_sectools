@@ -1,18 +1,17 @@
 # Small-model tool-calling scorecard
 
-Endpoint `http://localhost:11434/v1` · runs/task 1 · generated 2026-07-13
+Endpoint `http://localhost:11434/v1` · runs/task 3 · generated 2026-07-28
 
-Each cell is **tool-selection% / argument-filling%** over the server's task set. `all` = every server's 34 tools registered at once (composition test). `err` = model/endpoint error; `–` = not run.
+Each cell is **tool-selection% / argument-filling%** over the server's task set. `all` = every server's 51 tools registered at once (composition test). `err` = model/endpoint error; `ctx!` = the model emitted no tool call on any task, which means the serving context could not hold the schema — a setup problem, NOT a score of zero; `–` = not run.
 
-| Model | defender | entra | intune | limacharlie | projectachilles | tenable | all |
-|---|---|---|---|---|---|---|---|
-| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 91%/90% |
-| Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
-| Qwen3 4B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 98%/98% |
-| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/98% |
-| Gemma 4 E4B | 92%/92% | 100%/100% | 100%/100% | 100%/100% | 88%/88% | 100%/100% | 97%/97% |
-| Gemma 4 12B | 75%/75% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 97%/97% |
-| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 97%/97% |
+| Model | defender | entra | intune | limacharlie | projectachilles | projectachilles-actions | purview | tenable | all |
+|---|---|---|---|---|---|---|---|---|---|
+| GPT-OSS 20B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/93% | 96%/90% | 100%/100% | 100%/90% | 92%/90% |
+| Qwen3 8B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | – |
+| Qwen3.5 (9.7B) | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 100%/93% | 100%/100% | 100%/100% | 100%/100% | – |
+| Gemma 4 E4B | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 71%/71% | 100%/100% | 100%/100% | 80%/80% | – |
+| Gemma 4 12B | 100%/100% | 96%/96% | 100%/100% | 100%/100% | 100%/100% | 100%/100% | 96%/96% | 100%/100% | – |
+| Granite 4 Tiny | 100%/100% | 100%/100% | 100%/100% | 93%/93% | 86%/71% | 94%/88% | 100%/100% | 100%/100% | – |
 
 <!-- findings below: hand-annotated, preserved when the table is regenerated -->
 

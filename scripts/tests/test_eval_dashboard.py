@@ -415,3 +415,189 @@ def test_progress_counts_only_cells_in_this_run_scope():
     p = dash.progress(r)
     assert p["total"] == 4          # 2 models x 2 in-scope servers
     assert p["done"] == 2           # m1::defender, m1::entra — not m1::all
+
+
+def _write_tasks(d, server, tasks):
+    (d / server).mkdir(parents=True, exist_ok=True)
+    import yaml
+    (d / server / "tasks.yaml").write_text(yaml.safe_dump(tasks))
+
+
+def test_task_inventory_keys_come_from_the_glob_not_from_input(tmp_path):
+    # The inventory is built by globbing the evals dir. A query parameter can
+    # then only ever be a dict KEY — it is never joined to a path, so
+    # ?server=../../.env.defender simply misses.
+    _write_tasks(tmp_path, "defender", [{"prompt": "p1", "expect_tool": "list_incidents"}])
+    _write_tasks(tmp_path, "tenable", [{"prompt": "p2", "expect_tool": "list_assets"}])
+    inv = dash.task_inventory(tmp_path)
+    assert sorted(inv) == ["defender", "tenable"]
+    assert inv["defender"][0]["prompt"] == "p1"
+    assert "../../.env.defender" not in inv
+
+
+def test_task_inventory_skips_a_malformed_task_file(tmp_path):
+    _write_tasks(tmp_path, "defender", [{"prompt": "p1", "expect_tool": "t"}])
+    (tmp_path / "broken").mkdir()
+    (tmp_path / "broken" / "tasks.yaml").write_text("{ not: valid: yaml:")
+    inv = dash.task_inventory(tmp_path)
+    assert "defender" in inv and "broken" not in inv
+
+
+def test_servers_view_reports_counts_and_an_example(tmp_path):
+    _write_tasks(tmp_path, "defender", [
+        {"prompt": "List the active high-severity incidents.",
+         "expect_tool": "list_incidents", "expect_args": {"severity_min": "high"}},
+        {"prompt": "another", "expect_tool": "list_alerts"},
+    ])
+    results = {"cells": {"m1::defender": {"status": "ok", "tool_count": 7,
+                                          "schema_kb": 6.2}}}
+    v = dash.servers_view(tmp_path, results)
+    row = next(r for r in v["servers"] if r["server"] == "defender")
+    assert row["task_count"] == 2
+    assert row["tool_count"] == 7 and row["schema_kb"] == 6.2
+    assert row["example"]["expect_tool"] == "list_incidents"
+    assert row["example"]["expect_args"] == {"severity_min": "high"}
+
+
+def test_servers_view_leaves_tool_count_unknown_for_an_unrun_server(tmp_path):
+    # A server with tasks but no recorded cell: say the count is unknown rather
+    # than importing the server package to compute it.
+    _write_tasks(tmp_path, "purview", [{"prompt": "p", "expect_tool": "t"}])
+    v = dash.servers_view(tmp_path, {"cells": {}})
+    row = next(r for r in v["servers"] if r["server"] == "purview")
+    assert row["task_count"] == 1
+    assert row["tool_count"] is None and row["schema_kb"] is None
+
+
+def test_route_ignores_the_query_string_but_still_exact_matches_the_path():
+    assert dash.route("/api/cell?model=m1&server=defender") == "cell"
+    assert dash.route("/api/matrix?anything=1") == "matrix"
+    # The path half is still exact-match: a query string does not smuggle a path.
+    assert dash.route("/api/cell/extra?model=m1") is None
+    assert dash.route("/.env.defender?x=1") is None
+    assert dash.route("/../.env.defender?model=m1") is None
+
+
+def test_cell_view_orders_failures_first_and_names_the_misroute(tmp_path):
+    _write_tasks(tmp_path, "defender", [
+        {"prompt": "good one", "expect_tool": "list_incidents"},
+        {"prompt": "bad one", "expect_tool": "isolate_host"},
+    ])
+    results = {"cells": {"m1::defender": {
+        "status": "ok", "tool_rate": 0.5, "args_rate": 0.5,
+        "tasks": [
+            {"prompt": "good one", "expect_tool": "list_incidents",
+             "tool_rate": 1.0, "args_rate": 1.0, "runs": 2,
+             "calls": ["list_incidents", "list_incidents"]},
+            {"prompt": "bad one", "expect_tool": "isolate_host",
+             "tool_rate": 0.0, "args_rate": 0.0, "runs": 2,
+             "calls": ["run_hunting_query", "run_hunting_query"]},
+        ]}}}
+    v = dash.cell_view(tmp_path, results, "m1", "defender")
+    assert v["found"] is True and v["recorded"] is True
+    # Failures first — the reason anyone opens this panel.
+    assert v["tasks"][0]["prompt"] == "bad one"
+    assert v["tasks"][0]["calls"] == ["run_hunting_query", "run_hunting_query"]
+
+
+def test_cell_view_falls_back_to_inventory_for_a_run_without_task_rows(tmp_path):
+    # Cells written before per-task persistence: show WHAT was asked, and be
+    # explicit that the outcome was not recorded rather than rendering blank.
+    _write_tasks(tmp_path, "defender", [
+        {"prompt": "only one", "expect_tool": "list_incidents",
+         "expect_args": {"severity_min": "high"}},
+    ])
+    results = {"cells": {"m1::defender": {"status": "ok", "tool_rate": 1.0,
+                                          "args_rate": 1.0}}}
+    v = dash.cell_view(tmp_path, results, "m1", "defender")
+    assert v["found"] is True
+    assert v["recorded"] is False
+    assert v["tasks"][0]["prompt"] == "only one"
+    assert v["tasks"][0]["tool_rate"] is None
+    assert v["tasks"][0]["expect_args"] == {"severity_min": "high"}
+
+
+def test_cell_view_not_found_for_unknown_model_or_traversal_shaped_server(tmp_path):
+    _write_tasks(tmp_path, "defender", [{"prompt": "p", "expect_tool": "t"}])
+    results = {"cells": {"m1::defender": {"status": "ok"}}}
+    assert dash.cell_view(tmp_path, results, "nope", "defender")["found"] is False
+    # The parameter is a dict key. There is no such key, so it misses — no path
+    # is ever constructed from it.
+    v = dash.cell_view(tmp_path, results, "m1", "../../.env.defender")
+    assert v["found"] is False
+
+
+def test_build_payload_cell_reads_params(tmp_path):
+    _write_tasks(tmp_path, "defender", [{"prompt": "p", "expect_tool": "t"}])
+    (tmp_path / "2026-01-01.json").write_text(json.dumps(
+        {"date": "2026-01-01", "models": [{"tag": "m1", "display": "M1"}],
+         "servers": ["defender"],
+         "cells": {"m1::defender": {"status": "ok", "tool_rate": 1.0, "args_rate": 1.0}}}))
+    # tasks_dir is passed explicitly: otherwise this reads the REAL evals/
+    # inventory and passes by accident rather than by test.
+    status, body = dash.build_payload("cell", tmp_path, {},
+                                      {"model": "m1", "server": "defender"},
+                                      tasks_dir=tmp_path)
+    assert status == 200 and body["found"] is True
+    assert body["tasks"][0]["prompt"] == "p"
+
+
+def test_no_definitions_after_the_entrypoint():
+    # Running as a script executes top-to-bottom: main() blocks in serve_forever(),
+    # so anything defined BELOW `if __name__ == "__main__"` never exists at request
+    # time. Appending a function to the end of this file put task_inventory after
+    # the entrypoint — every unit test passed (pytest imports, never runs main)
+    # while the live server raised NameError on the first /api/cell request.
+    src = (Path(__file__).resolve().parents[1] / "eval_dashboard.py").read_text()
+    lines = src.splitlines()
+    entry = next(i for i, ln in enumerate(lines) if ln.startswith('if __name__'))
+    after = [ln for ln in lines[entry:] if ln.startswith(("def ", "class "))]
+    assert not after, f"defined after the entrypoint, unreachable as a script: {after}"
+
+
+def test_page_explains_what_is_measured_and_stays_self_contained():
+    html = dash.PAGE.read_text(encoding="utf-8")
+    for forbidden in ("http://", "https://", "//cdn", "integrity="):
+        assert forbidden not in html, f"page must not reference {forbidden!r}"
+    # /api/cell is asserted by the drill-down test, which owns that feature.
+    for endpoint in ("/api/progress", "/api/matrix", "/api/trend", "/api/servers"):
+        assert endpoint in html
+    # The two rates are jargon; the page must define them where they are read.
+    assert "tool-selection" in html and "argument-filling" in html
+    # And it must state the runs=3 caveat rather than leaving it to a commit log.
+    assert "reproduce" in html.lower()
+
+
+def test_servers_view_prefers_an_example_that_asserts_arguments(tmp_path):
+    # The example teaches what "argument-filling" means; one with no asserted
+    # args shows only half the story.
+    _write_tasks(tmp_path, "defender", [
+        {"prompt": "no args here", "expect_tool": "get_secure_score"},
+        {"prompt": "this one has args", "expect_tool": "list_incidents",
+         "expect_args": {"severity_min": "high"}},
+    ])
+    v = dash.servers_view(tmp_path, {"cells": {}})
+    row = next(r for r in v["servers"] if r["server"] == "defender")
+    assert row["example"]["prompt"] == "this one has args"
+
+
+def test_page_wires_cell_drilldown():
+    html = dash.PAGE.read_text(encoding="utf-8")
+    assert "/api/cell?model=" in html
+    assert "openCell" in html          # the click handler exists
+    assert "not recorded" in html      # the honest fallback for older runs
+
+
+def test_matrix_cells_carry_no_inline_event_handlers():
+    # PR #87 review: the old renderMatrix concatenated model/server names into a
+    # single-quoted JS string inside onclick="...", while esc() escaped " but not
+    # '. Not reachable (both come from committed config, never from a request)
+    # but a live injection for any future caller that passes a less-trusted
+    # value. Values now ride as data-* attributes read by a delegated listener,
+    # so nothing lands in executable context.
+    html = dash.PAGE.read_text(encoding="utf-8")
+    assert "onclick=" not in html
+    assert "data-model=" in html and "addEventListener" in html
+    # esc() also now covers the single quote, so it is correct for both
+    # attribute-quoting styles rather than only double.
+    assert "&#39;" in html

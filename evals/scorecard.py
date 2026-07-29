@@ -125,6 +125,14 @@ async def run_matrix(
                     "status": "ok",
                     "tool_rate": rep["overall_tool_rate"],
                     "args_rate": rep["overall_args_rate"],
+                    # Kept, not discarded: `tasks` carries each prompt's own rate
+                    # and `calls` — the tools the model actually chose, which is
+                    # what names a misroute. Recomputing this later costs a GPU
+                    # run; storing it costs ~4KB a cell.
+                    "tasks": rep["tasks"],
+                    "schema_kb": rep["schema_kb"],
+                    "tool_count": rep["tool_count"],
+                    "no_call_rate": rep["no_call_rate"],
                 }
             except ValueError:
                 raise  # e.g. tool-name collision in the combined registry — fail loud
