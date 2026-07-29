@@ -221,7 +221,7 @@
 <script>
 const esc = s => String(s == null ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-  .replace(/"/g, "&quot;");
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const fmtPct = v => v === null || v === undefined ? "–" : Math.round(v * 100) + "%";
 
 function fmtDur(s) {
@@ -288,7 +288,7 @@ function renderMatrix(m) {
     (m.servers || []).map(s => "<th>" + esc(s) + "</th>").join("") + "</tr>";
   const rows = (m.rows || []).map(r => "<tr><td>" + esc(r.display) + "</td>" +
     r.cells.map(c => {
-      const click = ' onclick="openCell(\'' + esc(r.tag) + "','" + esc(c.server) + "')\"";
+      const click = ' data-model="' + esc(r.tag) + '" data-server="' + esc(c.server) + '"';
       if (c.status === "pending")
         return '<td' + click + ' class="cell pending" title="queued — not run yet">·</td>';
       // Not in this run's scope at all. Saying "pending" would promise work
@@ -305,6 +305,14 @@ function renderMatrix(m) {
     }).join("") + "</tr>").join("");
   document.getElementById("matrix").innerHTML = head + rows;
 }
+
+// Delegated once, not re-bound per render: the matrix innerHTML is replaced on
+// every poll, so per-cell listeners would leak. Reading data-* attributes also
+// means no value is ever concatenated into executable context.
+document.getElementById("matrix").addEventListener("click", ev => {
+  const td = ev.target.closest("td[data-model]");
+  if (td) openCell(td.dataset.model, td.dataset.server);
+});
 
 function renderTrend(t) {
   const names = Object.keys(t.models || {});

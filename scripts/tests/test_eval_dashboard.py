@@ -586,3 +586,18 @@ def test_page_wires_cell_drilldown():
     assert "/api/cell?model=" in html
     assert "openCell" in html          # the click handler exists
     assert "not recorded" in html      # the honest fallback for older runs
+
+
+def test_matrix_cells_carry_no_inline_event_handlers():
+    # PR #87 review: the old renderMatrix concatenated model/server names into a
+    # single-quoted JS string inside onclick="...", while esc() escaped " but not
+    # '. Not reachable (both come from committed config, never from a request)
+    # but a live injection for any future caller that passes a less-trusted
+    # value. Values now ride as data-* attributes read by a delegated listener,
+    # so nothing lands in executable context.
+    html = dash.PAGE.read_text(encoding="utf-8")
+    assert "onclick=" not in html
+    assert "data-model=" in html and "addEventListener" in html
+    # esc() also now covers the single quote, so it is correct for both
+    # attribute-quoting styles rather than only double.
+    assert "&#39;" in html
