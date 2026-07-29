@@ -35,12 +35,21 @@ Only five moved:
 |---|---|---|
 | GPT-OSS × projectachilles | 100%/93% | 100%/100% |
 | GPT-OSS × projectachilles-actions | 96%/90% | **83%/77%** |
-| GPT-OSS × all | 90%/87% | 96%/94% |
+| GPT-OSS × all | 92%/90% | 96%/94% |
 | Gemma 4 12B × projectachilles-actions | 100%/100% | **100%/94%** |
 | Granite × projectachilles-actions | 94%/88% | **94%/81%** |
 
 Read a sub-100% cell as a noisy point estimate, not a measurement to the percentage
 point. **Treat a failure as real only when it reproduces** — most here do.
+
+One caveat on that GPT-OSS `all` row. That cell was measured three times: **92%/90%**
+in the original sweep (under CPU spill), **90%/87%** in an aborted re-run on a free GPU,
+and **96%/94%** in the final sweep. The table cites the first, which is the published
+07-28 value; the aborted run had overwritten it in the results file, so an earlier draft
+of this table compared against a mutated baseline. Two free-GPU measurements of the same
+cell landing 7 points apart also says the composition column is the least stable in the
+matrix, which is worth knowing before leaning on any single `all` number. No other cell
+was affected: the aborted run wrote exactly one before being stopped.
 
 ## ⚠️ Three of the five moves are the same server, all downward
 
