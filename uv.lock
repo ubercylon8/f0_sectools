@@ -848,7 +848,7 @@ wheels = [
 
 [[package]]
 name = "limacharlie"
-version = "5.5.1"
+version = "5.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -862,12 +862,11 @@ dependencies = [
     { name = "rich" },
     { name = "tabulate" },
     { name = "termcolor" },
-    { name = "toon-format" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/02/33/202006c4faabd5126456515246d7e289d46faa97ae72a5d6036857c44a4e/limacharlie-5.5.1.tar.gz", hash = "sha256:57e32934cdf67a49d8bd2e806812887d76fc9dfde804cd35926714f0e4da394d", size = 580345, upload-time = "2026-06-22T12:50:07.879Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/66/86c2e437f2975911aeb56279a3cf166bc163258d55413869c9498048f64a/limacharlie-5.6.1.tar.gz", hash = "sha256:5eadd132b7f3dc3e9bfdf1e49bde6c912f36c174b283d21d27104d6f87f6ff4e", size = 663870, upload-time = "2026-07-30T14:24:04.323Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/86/420ca629bd51294515fd6e0e5eb2f0e19ea0d7e61f19a766c94cc5339bd6/limacharlie-5.5.1-py3-none-any.whl", hash = "sha256:61262f56821e656ad5868b606cdc2ba64b2f8b07fcb502c211c680b249ab7328", size = 368693, upload-time = "2026-06-22T12:50:06.115Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/ab/d33496289bf048fa9529ee430583e724f20e85301fd135b6d903cc49f150/limacharlie-5.6.1-py3-none-any.whl", hash = "sha256:aced59493603fb0e8cc600e9b826e31738a58d27218752253809911fb927f464", size = 418201, upload-time = "2026-07-30T14:24:02.781Z" },
 ]
 
 [[package]]
@@ -1466,7 +1465,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.32.3"
+version = "2.33.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -1474,9 +1473,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/70/2bf7780ad2d390a8d301ad0b550f1581eadbd9a20f896afe06353c2a2913/requests-2.32.3.tar.gz", hash = "sha256:55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760", size = 131218, upload-time = "2024-05-29T15:37:49.536Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/64/8860370b167a9721e8956ae116825caff829224fbca0ca6e7bf8ddef8430/requests-2.33.0.tar.gz", hash = "sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652", size = 134232, upload-time = "2026-03-25T15:10:41.586Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/9b/335f9764261e915ed497fcdeb11df5dfd6f7bf257d4a6a2a686d80da4d54/requests-2.32.3-py3-none-any.whl", hash = "sha256:70761cfe03c773ceb22aa2f671b4757976145175cdfca038c02654d061d6dcc6", size = 64928, upload-time = "2024-05-29T15:37:47.027Z" },
+    { url = "https://files.pythonhosted.org/packages/56/5d/c814546c2333ceea4ba42262d8c4d55763003e767fa169adc693bd524478/requests-2.33.0-py3-none-any.whl", hash = "sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b", size = 65017, upload-time = "2026-03-25T15:10:40.382Z" },
 ]
 
 [[package]]
