@@ -10,7 +10,7 @@ dependencies = [
     "f0-sectools-core",
     "mcp>=1.0",
     "python-dotenv>=1.0",
-    "limacharlie>=5.5",
+    "limacharlie>=5.6.1",
     # limacharlie>=5.5 requires a pre-release of toon-format; request it
     # explicitly so uv enables the pre-release for this package only.
     "toon-format>=0.9.0b1",
