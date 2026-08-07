@@ -12,8 +12,8 @@ jobs:
   pip-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       - name: Export resolved deps
         run: uv export --frozen --format requirements-txt --no-hashes --all-packages > requirements-audit.txt
       - name: pip-audit (informational — Dependabot files the fix PRs)

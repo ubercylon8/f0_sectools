@@ -14,7 +14,7 @@ jobs:
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Semgrep gate (p/python — curated, blocking)
         run: semgrep scan --config p/python --error --skip-unknown-extensions
       - name: Semgrep advisory (p/security-audit — high-noise, non-blocking)
