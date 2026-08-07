@@ -1,10 +1,24 @@
 version: 2
 updates:
+  # Python deps — the root uv.lock covers core/ and every servers/* workspace member.
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    # Majors arrive as individual PRs (ungrouped) so each gets its own review.
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
