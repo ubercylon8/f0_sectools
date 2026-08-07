@@ -39,7 +39,7 @@ def _gated_write_tools() -> set[str]:
     gated = {
         t.name
         for t in tools
-        if "confirmation_token" in (t.inputSchema or {}).get("properties", {})
+        if "confirmation_token" in (t.input_schema or {}).get("properties", {})
     }
     assert gated, "no gated-write tools found — the detection signal has changed"
     return gated

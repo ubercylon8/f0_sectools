@@ -74,7 +74,7 @@ def build_openai_tools(mcp_tools: list[Any]) -> list[dict]:
                 "function": {
                     "name": t.name,
                     "description": getattr(t, "description", "") or "",
-                    "parameters": getattr(t, "inputSchema", None)
+                    "parameters": getattr(t, "input_schema", None)
                     or {"type": "object", "properties": {}},
                 },
             }

@@ -27,7 +27,7 @@ from evals.run import (
 class _FakeTool:
     name: str
     description: str
-    inputSchema: dict
+    input_schema: dict
 
 
 def test_build_openai_tools_shape():

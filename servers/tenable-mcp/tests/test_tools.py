@@ -294,7 +294,7 @@ async def test_severity_min_enum_closed():
     from f0_tenable_mcp import server
     tools_by_name = {t.name: t for t in await server.mcp.list_tools()}
     for name in ("list_top_vulnerabilities", "get_asset_vulnerabilities"):
-        enum = tools_by_name[name].inputSchema["properties"]["severity_min"]["enum"]
+        enum = tools_by_name[name].input_schema["properties"]["severity_min"]["enum"]
         assert set(enum) == {"low", "medium", "high", "critical"}
 
 

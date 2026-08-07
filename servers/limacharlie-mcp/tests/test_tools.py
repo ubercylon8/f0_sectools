@@ -752,8 +752,8 @@ def test_list_detections_rate_limited_degrades():
 async def test_open_passthrough_params_stay_free_strings():
     from f0_limacharlie_mcp import server
     tools_by_name = {t.name: t for t in await server.mcp.list_tools()}
-    assert "enum" not in tools_by_name["list_detections"].inputSchema["properties"]["category"]
-    assert "enum" not in tools_by_name["list_dr_rules"].inputSchema["properties"]["namespace"]
+    assert "enum" not in tools_by_name["list_detections"].input_schema["properties"]["category"]
+    assert "enum" not in tools_by_name["list_dr_rules"].input_schema["properties"]["namespace"]
 
 
 # ---------- truncation disclosure ----------

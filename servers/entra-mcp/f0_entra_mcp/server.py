@@ -13,14 +13,14 @@ from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import Finding
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from . import tools
 
 # Load .env.entra from the working directory if present (no-op otherwise).
 load_dotenv(".env.entra")
 
-mcp = FastMCP("f0-entra")
+mcp = MCPServer("f0-entra")
 
 
 def _render(findings: list[Finding]) -> list[dict[str, Any]]:

@@ -17,7 +17,7 @@ async def test_exactly_seven_tools_registered():
 @pytest.mark.asyncio
 async def test_schedule_enum_is_closed_in_schema():
     tools = {t.name: t for t in await server.mcp.list_tools()}
-    props = tools["schedule_test"].inputSchema["properties"]
+    props = tools["schedule_test"].input_schema["properties"]
     assert set(props["schedule"]["enum"]) == {"once", "daily", "weekly", "monthly"}
     assert set(props["day"]["enum"]) == {
         "", "monday", "tuesday", "wednesday", "thursday", "friday",
@@ -28,23 +28,23 @@ async def test_schedule_enum_is_closed_in_schema():
 @pytest.mark.asyncio
 async def test_status_enums_closed():
     tools = {t.name: t for t in await server.mcp.list_tools()}
-    set_props = tools["set_schedule_status"].inputSchema["properties"]
+    set_props = tools["set_schedule_status"].input_schema["properties"]
     assert set(set_props["status"]["enum"]) == {"active", "paused"}
-    list_props = tools["list_schedules"].inputSchema["properties"]
+    list_props = tools["list_schedules"].input_schema["properties"]
     assert set(list_props["status"]["enum"]) == {"", "active", "paused", "completed"}
 
 
 @pytest.mark.asyncio
 async def test_run_and_schedule_expose_tag_param():
     tools = {t.name: t for t in await server.mcp.list_tools()}
-    assert "tag" in tools["run_test"].inputSchema["properties"]
-    assert "tag" in tools["schedule_test"].inputSchema["properties"]
+    assert "tag" in tools["run_test"].input_schema["properties"]
+    assert "tag" in tools["schedule_test"].input_schema["properties"]
 
 
 @pytest.mark.asyncio
 async def test_list_tasks_status_enum_closed():
     tools = {t.name: t for t in await server.mcp.list_tools()}
-    props = tools["list_tasks"].inputSchema["properties"]
+    props = tools["list_tasks"].input_schema["properties"]
     assert set(props["status"]["enum"]) == {
         "", "pending", "assigned", "running", "completed", "failed", "expired",
     }
@@ -53,5 +53,5 @@ async def test_list_tasks_status_enum_closed():
 @pytest.mark.asyncio
 async def test_cancel_tasks_exposes_task_id_and_filter():
     tools = {t.name: t for t in await server.mcp.list_tools()}
-    props = tools["cancel_tasks"].inputSchema["properties"]
+    props = tools["cancel_tasks"].input_schema["properties"]
     assert "task_id" in props and "status" in props and "search" in props
