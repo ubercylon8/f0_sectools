@@ -9,6 +9,7 @@ authors = [{ name = "F0RT1KA Contributors" }]
 dependencies = [
     "f0-sectools-core",
     "mcp>=1.0",
+    "python-dotenv>=1.0",
     "httpx>=0.27",
 ]
 

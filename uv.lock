@@ -438,6 +438,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -445,6 +446,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
@@ -455,6 +457,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -462,6 +465,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
@@ -472,6 +476,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -479,6 +484,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
@@ -489,6 +495,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "limacharlie" },
     { name = "mcp" },
+    { name = "python-dotenv" },
     { name = "toon-format" },
 ]
 
@@ -497,6 +504,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "limacharlie", specifier = ">=5.5" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "toon-format", specifier = ">=0.9.0b1" },
 ]
 
@@ -508,6 +516,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -515,6 +524,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
@@ -525,6 +535,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -532,6 +543,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
@@ -542,6 +554,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -549,6 +562,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
@@ -561,6 +575,7 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "respx" },
     { name = "ruff" },
@@ -573,6 +588,7 @@ dev = [
     { name = "mypy", specifier = ">=1.10" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "respx", specifier = ">=0.21" },
     { name = "ruff", specifier = ">=0.6" },
@@ -608,6 +624,7 @@ dependencies = [
     { name = "f0-sectools-core" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -615,6 +632,7 @@ requires-dist = [
     { name = "f0-sectools-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
