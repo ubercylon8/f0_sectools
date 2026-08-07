@@ -10,14 +10,14 @@ from dotenv import load_dotenv
 from f0_sectools_core.auth.config import ProjectAchillesConfig
 from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import Finding
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from . import tools
 from .client import ProjectAchillesClient
 
 load_dotenv(".env.projectachilles")
 
-mcp = FastMCP("f0-projectachilles")
+mcp = MCPServer("f0-projectachilles")
 
 
 def _render(findings: list[Finding]) -> list[dict[str, Any]]:

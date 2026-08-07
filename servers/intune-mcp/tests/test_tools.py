@@ -195,7 +195,7 @@ async def test_list_compliance_policies_403_names_config_permission():
 async def test_compliance_enum_closed():
     from f0_intune_mcp import server
     tools = {t.name: t for t in await server.mcp.list_tools()}
-    enum = tools["list_managed_devices"].inputSchema["properties"]["compliance"]["enum"]
+    enum = tools["list_managed_devices"].input_schema["properties"]["compliance"]["enum"]
     assert set(enum) == {"all", "compliant", "noncompliant", "ingraceperiod", "unknown"}
 
 

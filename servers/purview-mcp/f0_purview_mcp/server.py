@@ -13,13 +13,13 @@ from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import Finding
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from . import tools
 
 load_dotenv(".env.purview")
 
-mcp = FastMCP("f0-purview")
+mcp = MCPServer("f0-purview")
 
 
 def _render(findings: list[Finding]) -> list[dict[str, Any]]:

@@ -17,14 +17,14 @@ from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
 from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import Finding
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from . import tools
 
 # Load .env.defender from the working directory if present (no-op otherwise).
 load_dotenv(".env.defender")
 
-mcp = FastMCP("f0-defender")
+mcp = MCPServer("f0-defender")
 
 
 def _render(findings: list[Finding]) -> list[dict[str, Any]]:

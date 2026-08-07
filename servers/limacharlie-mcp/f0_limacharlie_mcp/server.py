@@ -12,14 +12,14 @@ from dotenv import load_dotenv
 from f0_sectools_core.auth.config import LimaCharlieConfig
 from f0_sectools_core.redaction.redact import redact_obj
 from f0_sectools_core.schema.findings import Finding
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from . import tools
 from .client import LimaCharlieClient
 
 load_dotenv(".env.limacharlie")
 
-mcp = FastMCP("f0-limacharlie")
+mcp = MCPServer("f0-limacharlie")
 
 
 def _render(findings: list[Finding]) -> list[dict[str, Any]]:

@@ -14,9 +14,9 @@ async def test_catalog_tools_registered():
 @pytest.mark.asyncio
 async def test_risk_acceptance_and_find_tests_enums_closed():
     tools = {t.name: t for t in await server.mcp.list_tools()}
-    status_enum = tools["list_risk_acceptances"].inputSchema["properties"]["status"]["enum"]
+    status_enum = tools["list_risk_acceptances"].input_schema["properties"]["status"]["enum"]
     assert set(status_enum) == {"active", "revoked"}
-    by_enum = tools["find_tests"].inputSchema["properties"]["by"]["enum"]
+    by_enum = tools["find_tests"].input_schema["properties"]["by"]["enum"]
     assert set(by_enum) == {
         "technique", "actor", "tactic", "category", "tag", "keyword"}
 
@@ -25,4 +25,4 @@ async def test_risk_acceptance_and_find_tests_enums_closed():
 async def test_open_passthrough_params_stay_free_strings():
     tools = {t.name: t for t in await server.mcp.list_tools()}
     # list_agents.status is an unvalidated passthrough filter — must NOT be a closed enum.
-    assert "enum" not in tools["list_agents"].inputSchema["properties"]["status"]
+    assert "enum" not in tools["list_agents"].input_schema["properties"]["status"]

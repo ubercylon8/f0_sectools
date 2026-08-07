@@ -134,7 +134,7 @@ def _skills_using(tool_name: str, skills: list[dict[str, Any]]) -> list[dict[str
 
 
 def _is_gated(tool: Any) -> bool:
-    return "confirmation_token" in (tool.inputSchema or {}).get("properties", {})
+    return "confirmation_token" in (tool.input_schema or {}).get("properties", {})
 
 
 def render_server_page(
@@ -168,7 +168,7 @@ def render_server_page(
         desc = _clean_desc(t.description or "")
         if desc:
             lines += [desc, ""]
-        schema = t.inputSchema or {}
+        schema = t.input_schema or {}
         props = schema.get("properties", {})
         required = set(schema.get("required", []))
         if props:

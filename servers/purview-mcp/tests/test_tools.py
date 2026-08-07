@@ -469,7 +469,7 @@ async def test_server_advertises_enums_and_six_tools():
     from f0_purview_mcp import server
     tools_by_name = {t.name: t for t in await server.mcp.list_tools()}
     assert len(tools_by_name) == 6
-    sev = tools_by_name["list_dlp_alerts"].inputSchema["properties"]["severity_min"]
+    sev = tools_by_name["list_dlp_alerts"].input_schema["properties"]["severity_min"]
     assert set(sev.get("enum", [])) == {"low", "medium", "high"}
 
 

@@ -557,9 +557,9 @@ async def test_severity_and_category_enums_closed():
     from f0_defender_mcp import server
     tools = {t.name: t for t in await server.mcp.list_tools()}
     for name in ("list_incidents", "list_alerts"):
-        enum = tools[name].inputSchema["properties"]["severity_min"]["enum"]
+        enum = tools[name].input_schema["properties"]["severity_min"]["enum"]
         assert set(enum) == {"info", "low", "medium", "high", "critical"}
-    assert set(tools["hunt"].inputSchema["properties"]["category"]["enum"]) == {
+    assert set(tools["hunt"].input_schema["properties"]["category"]["enum"]) == {
         "network", "process", "logon", "email"}
 
 
