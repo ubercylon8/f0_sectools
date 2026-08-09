@@ -29,6 +29,29 @@ dev = [
 # The root itself is not a distributable package — it only coordinates members.
 package = false
 
+# Overrides exist because the limacharlie SDK exact-pins ten of its dependencies
+# (`cryptography==48.0.1`, `pygments==2.19.1`, `requests==`, `pyyaml==`, `rich==`,
+# `click==`, and more), and two of those pins held a GHSA advisory open with no
+# released SDK version relaxing them (5.5.2 through 5.6.1, the latest, all pin
+# `cryptography==48.0.1`).
+#
+# This is safe to override, and the reason is specific rather than optimistic:
+# the installed SDK imports NEITHER package. `grep -rn "cryptography\|pygments"`
+# over site-packages/limacharlie returns nothing. The packages that genuinely
+# consume cryptography are permissive — PyJWT asks for >=3.4.0 under its `crypto`
+# extra, passlib does not pin at all — so nothing but a vendor declaration was
+# holding the old version in place.
+#
+# Each entry must name the advisory it exists for. Remove an entry once the SDK
+# relaxes its pin past it; an override outliving its reason is how a project ends
+# up silently resolving something nobody chose.
+override-dependencies = [
+    # GHSA: PKCS#7 EnvelopedData Bleichenbacher oracle (high). Alert #4.
+    "cryptography>=50.0.0",
+    # GHSA: ReDoS in GUID matching (low). Alert #3.
+    "pygments>=2.20.0",
+]
+
 [tool.uv.workspace]
 # Each platform server and the shared core are workspace members.
 members = ["core", "servers/*"]
