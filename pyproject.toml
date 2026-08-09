@@ -45,11 +45,18 @@ package = false
 # Each entry must name the advisory it exists for. Remove an entry once the SDK
 # relaxes its pin past it; an override outliving its reason is how a project ends
 # up silently resolving something nobody chose.
+#
+# Floor AND cap below the next major, matching the repo's dependency policy. An
+# unbounded `>=` would let a routine `uv lock --upgrade` float a crypto-relevant
+# package across a major boundary with no override-text change to review — the
+# same "resolved something nobody chose" failure this block exists to prevent,
+# pointed the other way. The cap still takes patch and minor releases, so a
+# 50.0.x security fix arrives without a manual edit.
 override-dependencies = [
     # GHSA: PKCS#7 EnvelopedData Bleichenbacher oracle (high). Alert #4.
-    "cryptography>=50.0.0",
+    "cryptography>=50.0.0,<51",
     # GHSA: ReDoS in GUID matching (low). Alert #3.
-    "pygments>=2.20.0",
+    "pygments>=2.20.0,<3",
 ]
 
 [tool.uv.workspace]
