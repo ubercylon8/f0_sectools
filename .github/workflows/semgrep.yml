@@ -12,9 +12,14 @@ jobs:
   semgrep:
     runs-on: ubuntu-latest
     container:
-      image: semgrep/semgrep
+      # Pinned by digest: `semgrep/semgrep:latest` is a mutable tag, and this job is a
+      # blocking gate — a silent image swap changes what the gate enforces.
+      image: semgrep/semgrep@sha256:bdf7013b2c3634a487671158da77c554f531742326b543a9464d2adf6c433ac8
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # zizmor[artipacked]: the checkout's credentials are not needed past this step.
+          persist-credentials: false
       - name: Semgrep gate (p/python — curated, blocking)
         run: semgrep scan --config p/python --error --skip-unknown-extensions
       - name: Semgrep advisory (p/security-audit — high-noise, non-blocking)

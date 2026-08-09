@@ -1,0 +1,39 @@
+name: Workflow audit
+
+# zizmor statically audits the workflows themselves — template injection, excessive
+# permissions, unpinned actions, credential persistence. The reasoning it checks was
+# previously written down only in prose comments across these files; this makes it fail
+# a build instead of relying on the next reader noticing.
+#
+# It found 25 issues on its first run against this repo (17 unpinned action refs, 1
+# unpinned container image, 8 credential-persisting checkouts) and reports 0 after the
+# change that introduced it, so it lands blocking with no suppression file. The single
+# `# zizmor: ignore[artipacked]` in claude.yml carries its reason at the site.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # zizmor[artipacked]: the checkout's credentials are not needed past this step.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7
+      # Version-pinned for the same reason the actions and the semgrep image are: this
+      # is a blocking gate, and an unpinned `uvx zizmor` would let a new release change
+      # what the gate enforces with no commit on this side. Dependabot cannot see inside
+      # a `run:` block, so bumping this is a deliberate manual step — which is the point.
+      #
+      # --format=github surfaces findings as inline annotations. Deliberately NOT
+      # --format=sarif: zizmor suppresses its non-zero exit in SARIF mode, which would
+      # turn this gate into a report.
+      - name: Audit workflows
+        run: uvx zizmor@1.29.0 --format=github .github/workflows/

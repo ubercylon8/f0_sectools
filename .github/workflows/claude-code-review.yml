@@ -25,13 +25,34 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 1
+          # This job only reads; findings are posted through the GitHub API rather
+          # than git, so the checkout's credential has no consumer. NOT true of
+          # claude.yml, where the @claude responder can commit.
+          persist-credentials: false
 
+      # A PR THAT EDITS THIS FILE GETS NO REVIEW, AND THE CHECK STILL SHOWS GREEN.
+      #
+      # claude-code-action validates that this workflow file is byte-identical to the
+      # copy on the default branch, and self-skips when it is not:
+      #
+      #   Skipping action due to workflow validation: Workflow validation failed. The
+      #   workflow file must exist and have identical content to the version on the
+      #   repository's default branch.
+      #
+      # The guard is correct — otherwise a PR could rewrite the reviewer's own
+      # instructions and have it approve anything. But the skip is a *success*: the job
+      # completes green in ~20s having reviewed nothing, which is indistinguishable from
+      # a clean review at a glance.
+      #
+      # So: when a PR touches this workflow, check the job duration (a real review takes
+      # 2-3 minutes) before trusting the green tick, and re-verify the change once it has
+      # landed on the default branch.
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@6b082c41935b4c8a3b8b0ef85ba4ba4d9eeb8975  # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Post + maintain a managed PR comment with the review (the switch that makes
