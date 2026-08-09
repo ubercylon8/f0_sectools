@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import httpx
 import pytest
 import respx
@@ -26,7 +28,21 @@ def _token(router):
     )
 
 
-def _device(name, compliance="compliant", encrypted=True, last_sync="2026-07-10T00:00:00Z"):
+def _ago(days: int) -> str:
+    """A Graph timestamp `days` before now.
+
+    Device fixtures must be relative, never absolute. `list_stale_devices`
+    derives its cutoff from `datetime.now(UTC)`, so a hardcoded date's
+    relationship to that cutoff changes as wall-clock advances: the previous
+    default, 2026-07-10T00:00:00Z, sat inside the default 30-day window when it
+    was written and fell outside it on 2026-08-09, failing the suite on `main`
+    with no code change.
+    """
+    return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _device(name, compliance="compliant", encrypted=True, last_sync=None):
+    last_sync = _ago(1) if last_sync is None else last_sync
     return {"id": name.lower(), "deviceName": name, "operatingSystem": "Windows",
             "osVersion": "10.0", "complianceState": compliance, "isEncrypted": encrypted,
             "managedDeviceOwnerType": "company", "lastSyncDateTime": last_sync,
@@ -112,8 +128,10 @@ async def test_get_managed_device_not_found():
 
 @pytest.mark.asyncio
 async def test_list_stale_devices_filters_by_cutoff():
-    fresh = _device("FRESH", last_sync="2026-07-10T00:00:00Z")
-    stale = _device("OLD", last_sync="2026-01-01T00:00:00Z")
+    # Either side of the 30-day cutoff by a wide margin, so neither the test nor a
+    # slow CI run can straddle the boundary.
+    fresh = _device("FRESH", last_sync=_ago(1))
+    stale = _device("OLD", last_sync=_ago(365))
     with respx.mock as router:
         _token(router)
         route = router.get(DEV).mock(
