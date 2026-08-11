@@ -378,3 +378,61 @@ async def test_list_sentinel_incidents_missing_table_returns_posture(fake):
     client = fake(rows={USAGE: [{"DataType": "Syslog", "GB": 1.0}]})
     out = await tools.list_sentinel_incidents(client)
     assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+_RULES = [
+    {"kind": "Scheduled", "properties": {"displayName": "Disabling Security Services",
+     "enabled": True, "severity": "Medium", "tactics": ["DefenseEvasion"]}},
+    {"kind": "Fusion", "properties": {"displayName": "Advanced Multistage Attack Detection",
+     "enabled": True, "severity": "High", "tactics": ["InitialAccess", "Exfiltration"]}},
+    {"kind": "Scheduled", "properties": {"displayName": "Retired rule",
+     "enabled": False, "severity": "Low", "tactics": []}},
+]
+
+
+async def test_get_detection_coverage_summarizes_rules(fake):
+    client = fake(arm={"alertRules": _RULES})
+    out = await tools.get_detection_coverage(client)
+    summary = out[0]
+    ev = {e.key: e.value for e in summary.evidence}
+    assert ev["rules_total"] == "3"
+    assert ev["rules_enabled"] == "2"
+
+
+async def test_get_detection_coverage_names_uncovered_tactics(fake):
+    # Naming the GAP is the whole value: the incident queue cannot show it.
+    client = fake(arm={"alertRules": _RULES})
+    out = await tools.get_detection_coverage(client)
+    summary = out[0]
+    ev = {e.key: e.value for e in summary.evidence}
+    # The fixture rules only ever tag DefenseEvasion, InitialAccess and
+    # Exfiltration -- Persistence must show up in the *value*, not merely
+    # because the evidence key happens to be named "tactics_uncovered".
+    assert "Persistence" in ev["tactics_uncovered"]
+    assert summary.recommended_action is not None
+    assert "Persistence" in summary.recommended_action.summary
+
+
+async def test_get_detection_coverage_without_arm_config_returns_posture(fake):
+    client = fake(has_arm=False)
+    out = await tools.get_detection_coverage(client)
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert "SENTINEL_SUBSCRIPTION_ID" in (
+        out[0].recommended_action.summary if out[0].recommended_action else ""
+    )
+
+
+async def test_get_detection_coverage_403_names_sentinel_reader(fake):
+    client = fake(raise_on={"alertRules": GraphError(403, "forbidden")})
+    out = await tools.get_detection_coverage(client)
+    assert len(out) == 1
+    assert "Microsoft Sentinel Reader" in (
+        out[0].recommended_action.summary if out[0].recommended_action else ""
+    )
+
+
+async def test_get_detection_coverage_no_rules_is_a_finding_not_silence(fake):
+    client = fake(arm={"alertRules": []})
+    out = await tools.get_detection_coverage(client)
+    assert len(out) >= 1
+    assert "0" in out[0].title or "no" in out[0].title.lower()

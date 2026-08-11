@@ -441,3 +441,93 @@ async def list_sentinel_incidents(
             )
         )
     return out
+
+
+# The MITRE tactics Sentinel analytics rules can carry. Used to name the GAP —
+# a rule inventory without the uncovered set is just a count.
+_ALL_TACTICS = (
+    "Reconnaissance", "ResourceDevelopment", "InitialAccess", "Execution",
+    "Persistence", "PrivilegeEscalation", "DefenseEvasion", "CredentialAccess",
+    "Discovery", "LateralMovement", "Collection", "CommandAndControl",
+    "Exfiltration", "Impact",
+)
+
+
+async def get_detection_coverage(client: Any) -> list[Finding]:
+    """Analytics-rule inventory and MITRE tactic gaps (Sentinel management API)."""
+    cap = "Sentinel detection coverage"
+    if not client.has_arm:
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title="Sentinel detection coverage unavailable — ARM coordinates not configured",
+                recommended_action=RecommendedAction(
+                    summary="Set SENTINEL_SUBSCRIPTION_ID, SENTINEL_RESOURCE_GROUP and "
+                    "SENTINEL_WORKSPACE_NAME in .env.sentinel, and grant the app the "
+                    "'Microsoft Sentinel Reader' role.",
+                    confidence="high",
+                ),
+            )
+        ]
+
+    try:
+        rules = await client.arm_list("alertRules")
+    except GraphError as e:
+        mapped = map_sentinel_error(e, cap, half="arm")
+        if mapped:
+            return [mapped]
+        raise
+
+    enabled = [r for r in rules if (r.get("properties") or {}).get("enabled")]
+    kinds: dict[str, int] = {}
+    covered: set[str] = set()
+    for r in rules:
+        kinds[str(r.get("kind", "unknown"))] = kinds.get(str(r.get("kind", "unknown")), 0) + 1
+        for t in (r.get("properties") or {}).get("tactics") or []:
+            covered.add(str(t))
+    uncovered = [t for t in _ALL_TACTICS if t not in covered]
+
+    summary = Finding(
+        source="sentinel",
+        finding_type=FindingType.posture,
+        severity=Severity.medium if len(enabled) < 10 else Severity.info,
+        title=f"{len(rules)} Sentinel analytics rules ({len(enabled)} enabled), "
+        f"{len(covered)} of {len(_ALL_TACTICS)} MITRE tactics covered",
+        entity=Entity(kind=EntityKind.tenant, id="sentinel"),
+        evidence=[
+            Evidence(key="rules_total", value=str(len(rules))),
+            Evidence(key="rules_enabled", value=str(len(enabled))),
+            Evidence(key="kinds", value=", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))),
+            Evidence(key="tactics_covered", value=", ".join(sorted(covered)) or "none"),
+            Evidence(key="tactics_uncovered", value=", ".join(uncovered) or "none"),
+        ],
+        recommended_action=RecommendedAction(
+            summary="Uncovered tactics: " + (", ".join(uncovered) or "none") +
+            ". Add analytics rules or enable Content Hub solutions for these.",
+            confidence="medium",
+        ),
+    )
+
+    out = [summary]
+    for r in enabled[:25]:
+        p = r.get("properties") or {}
+        out.append(
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"Rule: {p.get('displayName') or 'unnamed'}",
+                entity=Entity(kind=EntityKind.rule, id=str(r.get("name") or "")),
+                evidence=[
+                    Evidence(key="kind", value=str(r.get("kind") or "")),
+                    Evidence(key="severity", value=str(p.get("severity") or "")),
+                    Evidence(
+                        key="tactics",
+                        value=", ".join(str(t) for t in (p.get("tactics") or [])),
+                    ),
+                ],
+            )
+        )
+    return out
