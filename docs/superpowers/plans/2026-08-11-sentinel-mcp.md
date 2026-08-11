@@ -49,7 +49,6 @@
 | `servers/sentinel-mcp/f0_sentinel_mcp/probe.py` | `Usage`-based capability probe + cache |
 | `servers/sentinel-mcp/f0_sentinel_mcp/tools.py` | the 7 tools → `list[Finding]` |
 | `servers/sentinel-mcp/f0_sentinel_mcp/server.py` | MCPServer registration + redaction boundary |
-| `servers/sentinel-mcp/tests/__init__.py` | test package marker |
 | `servers/sentinel-mcp/tests/conftest.py` | `FakeClient`, probe-cache reset fixture |
 | `servers/sentinel-mcp/tests/test_tools.py` | contract tests |
 | `evals/sentinel/tasks.yaml` | ≥1 task per tool + routing tasks |
@@ -219,7 +218,7 @@ git commit -m "feat(sentinel): add SentinelConfig with optional ARM coordinates"
 ### Task 2: Scaffold the package and build `SentinelClient`
 
 **Files:**
-- Create: `servers/sentinel-mcp/pyproject.toml`, `servers/sentinel-mcp/.env.sentinel.example`, `servers/sentinel-mcp/f0_sentinel_mcp/__init__.py`, `servers/sentinel-mcp/f0_sentinel_mcp/client.py`, `servers/sentinel-mcp/tests/__init__.py`, `servers/sentinel-mcp/tests/test_client.py`
+- Create: `servers/sentinel-mcp/pyproject.toml`, `servers/sentinel-mcp/.env.sentinel.example`, `servers/sentinel-mcp/f0_sentinel_mcp/__init__.py`, `servers/sentinel-mcp/f0_sentinel_mcp/client.py`, `servers/sentinel-mcp/tests/test_client.py`
 - Test: `servers/sentinel-mcp/tests/test_client.py`
 
 **Interfaces:**
@@ -295,7 +294,13 @@ SENTINEL_WORKSPACE_NAME=
 SENTINEL_RETENTION_DAYS=30
 ```
 
-`servers/sentinel-mcp/f0_sentinel_mcp/__init__.py` and `servers/sentinel-mcp/tests/__init__.py`: empty files.
+`servers/sentinel-mcp/f0_sentinel_mcp/__init__.py`: empty file.
+
+**Do NOT create `servers/sentinel-mcp/tests/__init__.py`.** 7 of the 9 existing
+servers ship no such file; only `purview-mcp` does, and it is the outlier.
+Adding one makes the directory a package named `tests`, which collides with
+purview's identically-named package and makes pytest refuse to register the
+second `conftest.py` — breaking `uv run pytest` (the CI command) at collection.
 
 - [ ] **Step 2: Sync the workspace**
 
