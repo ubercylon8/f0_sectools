@@ -194,3 +194,51 @@ async def test_hunt_firewall_429_maps_to_rate_limited(fake):
     client = fake(rows={USAGE: _TABLES}, raise_on={CEF: GraphError(429, "slow down")})
     out = await tools.hunt_firewall(client)
     assert len(out) == 1 and "Rate limited" in out[0].title
+
+
+DNS = "Cisco_Umbrella_dns_CL"
+WEB = "Cisco_Umbrella_proxy_CL"
+
+
+async def test_hunt_dns_web_selects_table_by_surface(fake):
+    client = fake(rows={USAGE: _TABLES + [{"DataType": WEB, "GB": 0.9}], DNS: [], WEB: []})
+    await tools.hunt_dns_web(client, surface="dns")
+    await tools.hunt_dns_web(client, surface="web")
+    assert any(DNS in q for q in client.queries)
+    assert any(WEB in q for q in client.queries)
+
+
+async def test_hunt_dns_web_filters_ingested_header_rows(fake):
+    # Action_s == "Action" is a CSV header the connector ingested as data.
+    client = fake(rows={USAGE: _TABLES, DNS: []})
+    await tools.hunt_dns_web(client, surface="dns")
+    kql = [q for q in client.queries if DNS in q][0]
+    assert '!in~ ("Action")' in kql
+
+
+async def test_hunt_dns_web_accepts_domain_indicator(fake):
+    client = fake(rows={USAGE: _TABLES, DNS: [{"Domain_s": "evil.com", "Action_s": "Blocked"}]})
+    out = await tools.hunt_dns_web(client, surface="dns", indicator="evil.com", action="blocked")
+    kql = [q for q in client.queries if DNS in q][0]
+    assert '"evil.com"' in kql and "Blocked" in kql
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_hunt_dns_web_rejects_kql_injection_in_indicator(fake):
+    client = fake(rows={USAGE: _TABLES, DNS: []})
+    out = await tools.hunt_dns_web(client, surface="dns", indicator='x" | project *; //')
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert not [q for q in client.queries if DNS in q]
+
+
+async def test_hunt_dns_web_bad_surface_reports(fake):
+    client = fake(rows={USAGE: _TABLES})
+    out = await tools.hunt_dns_web(client, surface="carrier-pigeon")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert "dns" in (out[0].recommended_action.summary if out[0].recommended_action else "")
+
+
+async def test_hunt_dns_web_missing_umbrella_table_returns_posture(fake):
+    client = fake(rows={USAGE: [{"DataType": "CommonSecurityLog", "GB": 1.0}]})
+    out = await tools.hunt_dns_web(client, surface="dns")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"

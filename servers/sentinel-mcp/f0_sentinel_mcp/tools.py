@@ -234,3 +234,28 @@ async def hunt_firewall(
         cap="Sentinel firewall telemetry", human="firewall (CEF)",
         action=action, indicator=indicator, hours=hours, limit=limit,
     )
+
+
+_SURFACE_HUMAN = {
+    "dns": "DNS (Cisco Umbrella)",
+    "web": "web proxy (Cisco Umbrella)",
+    "vpn": "remote-access VPN (Cisco Umbrella)",
+}
+
+
+async def hunt_dns_web(
+    client: Any,
+    surface: str = "dns",
+    action: str = "any",
+    indicator: str = "",
+    hours: float = 24,
+    limit: int = 25,
+) -> list[Finding]:
+    """DNS / web-proxy / RA-VPN activity from the Cisco Umbrella tables."""
+    if surface not in n.SURFACES:
+        return [_bad_arg("surface", surface, ", ".join(n.SURFACES))]
+    return await _run_surface(
+        client, n.SURFACE_SPECS[surface],
+        cap=f"Sentinel {surface} telemetry", human=_SURFACE_HUMAN[surface],
+        action=action, indicator=indicator, hours=hours, limit=limit,
+    )
