@@ -94,12 +94,13 @@ Report Sentinel's analytics-rule inventory and which MITRE tactics are UNCOVERED
 
 Answers "what do we actually detect?", "where are our detection gaps?",
 "how many analytics rules are enabled?". Reports TWO coverage numbers, never
-conflated: tactics covered by ALL enabled rules (including Microsoft's
-built-in Fusion correlation rule) versus tactics covered by CUSTOM
-(operator-authored, non-Fusion) rules alone -- a workspace can show broad
-coverage overall while its own rules cover almost nothing, and that gap is
-the point of this tool. Requires the ARM coordinates in .env.sentinel;
-without them it says so.
+conflated: tactics covered by ALL enabled rules (including Microsoft-managed
+ones -- Fusion, MicrosoftSecurityIncidentCreation, MLBehaviorAnalytics,
+ThreatIntelligence) versus tactics covered by CUSTOM (operator-authored
+Scheduled/NRT) rules alone -- a workspace can show broad coverage overall
+while its own rules cover almost nothing, and that gap is the point of this
+tool. Disabled rules never count toward either figure. Requires the ARM
+coordinates in .env.sentinel; without them it says so.
 
 *No parameters.*
 

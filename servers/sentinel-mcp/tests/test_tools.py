@@ -500,7 +500,12 @@ async def test_list_sentinel_incidents_missing_table_returns_posture(fake):
 # correlation rule) carrying a dozen tactics on its own, plus a handful of
 # genuinely custom Scheduled rules that only ever tag two tactics between
 # them. If a change ever counts Fusion as "custom", `rules_custom` and
-# `tactics_covered_custom` below both catch it.
+# `tactics_covered_custom` below both catch it. Also carries a
+# MicrosoftSecurityIncidentCreation rule (Microsoft-managed, imports
+# Defender/MCAS alerts -- not Fusion, but equally not operator-authored) and
+# a DISABLED rule tagging a tactic ("Reconnaissance") no enabled rule
+# carries, so the built-in-classification and enabled-only-aggregation fixes
+# are both actually exercised rather than merely plausible.
 _FUSION_TACTICS = [
     "InitialAccess", "Persistence", "PrivilegeEscalation", "DefenseEvasion",
     "CredentialAccess", "Discovery", "LateralMovement", "Collection",
@@ -510,6 +515,13 @@ _RULES = [
     {"kind": "Fusion", "name": "BuiltInFusion",
      "properties": {"displayName": "Advanced Multistage Attack Detection",
      "enabled": True, "severity": "High", "tactics": _FUSION_TACTICS}},
+    # Microsoft-managed (imports Defender/MCAS alerts), NOT Fusion-kind --
+    # exercises the broadened `_BUILTIN_RULE_KINDS` classification. Tags
+    # Execution, which only Fusion also tags -- no genuinely custom rule
+    # does -- so a misclassification leaks straight into tactics_covered_custom.
+    {"kind": "MicrosoftSecurityIncidentCreation", "name": "defender-incident-import",
+     "properties": {"displayName": "Create incidents based on Microsoft security alerts",
+     "enabled": True, "severity": "Informational", "tactics": ["InitialAccess", "Execution"]}},
     {"kind": "Scheduled", "name": "custom-defense-evasion-1",
      "properties": {"displayName": "Disabling Security Services",
      "enabled": True, "severity": "Medium", "tactics": ["DefenseEvasion"]}},
@@ -522,9 +534,13 @@ _RULES = [
     {"kind": "Scheduled", "name": "custom-initial-access-2",
      "properties": {"displayName": "New Country Sign-in",
      "enabled": True, "severity": "Medium", "tactics": ["InitialAccess"]}},
+    # DISABLED. Reconnaissance is not tagged by any enabled rule (Fusion's 12
+    # tactics stop at Execution/Persistence/etc -- Reconnaissance is one of
+    # the two ATT&CK tactics nothing here enables) -- this rule detects
+    # nothing today, so its tactic must never count as covered.
     {"kind": "Scheduled", "name": "retired-rule",
      "properties": {"displayName": "Retired rule",
-     "enabled": False, "severity": "Low", "tactics": []}},
+     "enabled": False, "severity": "Low", "tactics": ["Reconnaissance"]}},
 ]
 
 
@@ -533,9 +549,38 @@ async def test_get_detection_coverage_summarizes_rules(fake):
     out = await tools.get_detection_coverage(client)
     summary = out[0]
     ev = {e.key: e.value for e in summary.evidence}
-    assert ev["rules_total"] == "6"
-    assert ev["rules_enabled"] == "5"
+    assert ev["rules_total"] == "7"
+    assert ev["rules_enabled"] == "6"
     assert ev["rules_custom"] == "5"
+
+
+async def test_get_detection_coverage_treats_microsoft_incident_creation_as_builtin(fake):
+    # MicrosoftSecurityIncidentCreation imports Defender/MCAS alerts as
+    # incidents through Microsoft's own logic, not the operator's -- counting
+    # it as custom overstates coverage the same way un-fixed Fusion did.
+    # Reverting `_is_builtin_rule` to Fusion-only must make this fail: the
+    # rule would then count as custom, `rules_custom` would rise from 5 to 6,
+    # and "Execution" (which no genuinely custom rule tags) would leak into
+    # tactics_covered_custom.
+    client = fake(arm={"alertRules": _RULES})
+    out = await tools.get_detection_coverage(client)
+    ev = {e.key: e.value for e in out[0].evidence}
+    assert ev["rules_custom"] == "5"
+    assert "Execution" not in ev["tactics_covered_custom"].split(", ")
+
+
+async def test_get_detection_coverage_ignores_disabled_rules_tactics(fake):
+    # retired-rule is DISABLED and tags Reconnaissance -- a disabled rule
+    # detects nothing, so Reconnaissance must stay uncovered (both overall
+    # and for custom rules) despite a rule technically carrying that tag.
+    # Reverting the aggregation loop to iterate `rules` instead of `enabled`
+    # must make this fail: Reconnaissance would then show up as covered.
+    client = fake(arm={"alertRules": _RULES})
+    out = await tools.get_detection_coverage(client)
+    ev = {e.key: e.value for e in out[0].evidence}
+    assert "Reconnaissance" not in ev["tactics_covered_all"].split(", ")
+    assert "Reconnaissance" in ev["tactics_uncovered_all"].split(", ")
+    assert "Reconnaissance" in ev["tactics_uncovered_custom"].split(", ")
 
 
 async def test_get_detection_coverage_distinguishes_builtin_from_custom(fake):

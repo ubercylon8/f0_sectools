@@ -508,30 +508,57 @@ _ALL_TACTICS = (
 )
 
 
-def _is_builtin_rule(r: dict[str, Any]) -> bool:
-    """True for Microsoft's built-in correlation rule, not an operator's own.
+# Analytics-rule `kind` values that are Microsoft-managed, not operator-
+# authored. `Scheduled` and `NRT` are the genuinely custom kinds -- the
+# operator wrote the KQL and picked the tactics. Everything below generates
+# or imports alerts through Microsoft's own logic instead:
+_BUILTIN_RULE_KINDS = frozenset({
+    "Fusion",                             # built-in multistage-attack correlation
+    "MicrosoftSecurityIncidentCreation",  # imports Defender/MCAS alerts as incidents
+    "MLBehaviorAnalytics",                # built-in ML/UEBA anomaly rules
+    "ThreatIntelligence",                 # built-in TI-indicator matching rules
+})
+# ARM `name` conventionally used for the built-in Fusion rule -- a
+# live-observed belt-and-suspenders alongside `kind` in case a workspace ever
+# renames or re-kinds it.
+_BUILTIN_RULE_NAMES = frozenset({"BuiltInFusion"})
 
-    A `Fusion`-kind rule (ARM `name` conventionally "BuiltInFusion") is a
-    single Microsoft-authored correlation rule that legitimately carries a
-    dozen tactics on its own -- counting it as "coverage" the same way as a
-    hand-authored `Scheduled` rule overstates what the operator has actually
-    built. Both signals are checked: `kind` is the documented one, `name` is
-    a live-observed belt-and-suspenders in case a workspace ever renames or
-    re-kinds it.
+
+def _is_builtin_rule(r: dict[str, Any]) -> bool:
+    """True for a Microsoft-managed rule kind, not an operator-authored one.
+
+    Counting a Microsoft-managed rule's tactics as "custom" coverage
+    overstates what the operator actually built -- the same defect this
+    function exists to prevent for Fusion specifically. When Microsoft ships
+    another built-in kind, add it to `_BUILTIN_RULE_KINDS` (a one-line data
+    change) rather than re-deriving this classification.
     """
-    return str(r.get("kind", "")) == "Fusion" or str(r.get("name", "")) == "BuiltInFusion"
+    return (
+        str(r.get("kind", "")) in _BUILTIN_RULE_KINDS
+        or str(r.get("name", "")) in _BUILTIN_RULE_NAMES
+    )
+
+
+# Below this many custom-covered tactics an operator has less than a third of
+# the ATT&CK matrix (14 tactics) covered by rules they actually authored --
+# worth flagging at medium severity rather than the default info, regardless
+# of how many built-in rules are also enabled.
+_LOW_CUSTOM_COVERAGE_THRESHOLD = 4
 
 
 async def get_detection_coverage(client: Any) -> list[Finding]:
     """Analytics-rule inventory and MITRE tactic gaps, built-in vs custom.
 
     Reports two coverage numbers, never conflated: the tactic set covered by
-    ALL enabled rules (including Microsoft's built-in Fusion correlation
-    rule) and the tactic set covered by CUSTOM (operator-authored,
-    non-Fusion) rules alone. A workspace can show "12 of 14 tactics covered"
-    overall while its own analytics rules cover only 2 -- the rest comes from
-    one built-in rule, not from anything the operator built. Collapsing those
-    into one number hides the actual detection gap this tool exists to name.
+    ALL enabled rules (including Microsoft-managed ones -- see
+    `_BUILTIN_RULE_KINDS`: Fusion, MicrosoftSecurityIncidentCreation,
+    MLBehaviorAnalytics, ThreatIntelligence) and the tactic set covered by
+    CUSTOM (operator-authored `Scheduled`/`NRT`) rules alone. Only enabled
+    rules count toward either figure -- a disabled rule detects nothing. A
+    workspace can show "12 of 14 tactics covered" overall while its own
+    analytics rules cover only 2 -- the rest comes from Microsoft's own rules,
+    not from anything the operator built. Collapsing those into one number
+    hides the actual detection gap this tool exists to name.
     """
     cap = "Sentinel detection coverage"
     if not client.has_arm:
@@ -560,12 +587,19 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
 
     enabled = [r for r in rules if (r.get("properties") or {}).get("enabled")]
     custom_rules = [r for r in rules if not _is_builtin_rule(r)]
+    # `kinds` is a pure inventory breakdown (informational), so it counts
+    # every rule regardless of enabled state.
     kinds: dict[str, int] = {}
-    covered_all: set[str] = set()
-    covered_custom: set[str] = set()
     for r in rules:
         kind = str(r.get("kind", "unknown"))
         kinds[kind] = kinds.get(kind, 0) + 1
+
+    # Coverage, by contrast, is a claim about what actually detects
+    # something today -- a disabled rule detects nothing, so its tactics
+    # must never count as covered. Aggregate from `enabled` only.
+    covered_all: set[str] = set()
+    covered_custom: set[str] = set()
+    for r in enabled:
         tactics = (r.get("properties") or {}).get("tactics") or []
         is_builtin = _is_builtin_rule(r)
         for t in tactics:
@@ -581,11 +615,12 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
     summary = Finding(
         source="sentinel",
         finding_type=FindingType.posture,
-        severity=Severity.medium if len(covered_custom) < 4 else Severity.info,
+        severity=Severity.medium if len(covered_custom) < _LOW_CUSTOM_COVERAGE_THRESHOLD
+        else Severity.info,
         title=f"{len(rules)} Sentinel analytics rules ({len(enabled)} enabled, "
         f"{len(custom_rules)} custom) — {len(covered_custom)} of {len(_ALL_TACTICS)} "
         f"MITRE tactics covered by custom rules ({len(covered_all)} covered overall, "
-        "incl. built-in Fusion)",
+        "incl. Microsoft-managed rules)",
         entity=Entity(kind=EntityKind.tenant, id="sentinel"),
         evidence=[
             Evidence(key="rules_total", value=str(len(rules))),
@@ -598,12 +633,12 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
             Evidence(key="tactics_uncovered_custom", value=uncovered_custom_str),
         ],
         recommended_action=RecommendedAction(
-            summary=f"Custom (operator-authored, non-Fusion) rules cover only "
+            summary=f"Custom (operator-authored) rules cover only "
             f"{len(covered_custom)} of {len(_ALL_TACTICS)} tactics ({custom_tactics_str}); "
-            "the rest of the overall figure comes from Microsoft's built-in Fusion "
-            f"correlation rule, not anything built here. Tactics uncovered by custom "
-            f"rules: {uncovered_custom_str}. Add analytics rules or enable Content Hub "
-            "solutions for these.",
+            "the rest of the overall figure comes from Microsoft-managed rules (Fusion "
+            f"and/or its other built-in kinds), not anything built here. Tactics "
+            f"uncovered by custom rules: {uncovered_custom_str}. Add analytics rules or "
+            "enable Content Hub solutions for these.",
             confidence="medium",
         ),
     )
