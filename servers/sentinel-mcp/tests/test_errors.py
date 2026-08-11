@@ -54,6 +54,8 @@ def test_504_timeout_suggests_narrowing():
     f = map_sentinel_error(GraphError(504, "gateway timeout"), "Sentinel firewall telemetry")
     assert f is not None
     assert f.finding_type.value == "posture"
+    assert f.recommended_action is not None
+    assert "narrow" in f.recommended_action.summary.lower()
 
 
 def test_non_graph_error_returns_none_so_caller_reraises():
