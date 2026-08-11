@@ -10,7 +10,9 @@ verdict_s=ALLOW/BLOCK). Exposing any of that to a small model is the
 "40-value enum the model picks wrong from" failure CLAUDE.md names explicitly.
 
 Everything here is table-driven so a new vendor is a SURFACE_SPECS entry, not a
-tool rewrite. All values verified against live data 2026-08-11.
+tool rewrite. Field names, action values, and junk values verified against live
+data 2026-08-11, except the `vpn` surface's `action_map` -- see its inline
+comment below.
 """
 from __future__ import annotations
 
@@ -42,6 +44,10 @@ class Surface:
     indicator_fields: tuple[str, ...]
     project: tuple[str, ...]
     indicator_kind: str = "domain"
+    # Numeric-typed field (if any) matched with `==` instead of `has`. Kusto's
+    # `has` requires a string operand; an int-typed column like DestinationPort
+    # must never appear in indicator_fields' `has` fallback.
+    port_field: str | None = None
     junk: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -58,12 +64,16 @@ SURFACE_SPECS: dict[str, Surface] = {
             "blocked": ("Drop", "blocked", "Reject"),
             "detected": ("Detect", "detected"),
         },
-        indicator_fields=("SourceIP", "DestinationIP", "DestinationPort"),
+        # DestinationPort is int-typed in CommonSecurityLog -- excluded from
+        # indicator_fields (Kusto `has` requires a string operand) and matched
+        # separately via port_field's `==` equality.
+        indicator_fields=("SourceIP", "DestinationIP"),
         project=(
             "TimeGenerated", "DeviceVendor", "DeviceProduct", "DeviceAction",
             "SourceIP", "DestinationIP", "DestinationPort", "Activity",
         ),
         indicator_kind="net",
+        port_field="DestinationPort",
     ),
     "dns": Surface(
         table="Cisco_Umbrella_dns_CL",
@@ -90,6 +100,9 @@ SURFACE_SPECS: dict[str, Surface] = {
     "vpn": Surface(
         table="Cisco_Umbrella_ravpnlogs_CL",
         action_field="Event_Type_s",
+        # PROVISIONAL: connected/failed are an unverified guess -- the RA-VPN
+        # table had only ~10K rows and was not sampled live 2026-08-11. Task 15
+        # confirms this live and fixes forward; do not treat as verified.
         action_map={"allowed": ("connected",), "blocked": ("failed",)},
         indicator_fields=("User_ID_s", "Public_IP_s", "Assigned_IP_s"),
         project=(
@@ -150,7 +163,13 @@ def hygiene_clause(spec: Surface) -> str:
 
 
 def validate_indicator(indicator: str, kind: str) -> bool:
-    """True if the indicator is safe to splice into KQL AND meaningful for `kind`."""
+    """True if the indicator is safe to splice into KQL AND meaningful for `kind`.
+
+    An empty indicator always returns True regardless of `kind`: empty means
+    "no indicator filter requested," which is valid for every `kind` -- it is
+    not a claim that an empty string is itself a meaningful match. Callers that
+    build a query must treat empty as a no-op themselves (indicator_clause does).
+    """
     if not indicator:
         return True
     if kind == "net":
@@ -161,12 +180,14 @@ def validate_indicator(indicator: str, kind: str) -> bool:
 def indicator_clause(spec: Surface, indicator: str) -> str:
     """`| where <f1> has "x" or <f2> has "x" ...` across the surface's fields.
 
-    Callers MUST have run validate_indicator first; this function assumes a
-    charset with no quotes or backslashes.
+    A numeric port match (spec.port_field) always uses `==` equality instead,
+    since Kusto's `has` requires a string operand and never belongs in
+    indicator_fields. Callers MUST have run validate_indicator first; this
+    function assumes a charset with no quotes or backslashes.
     """
     if not indicator:
         return ""
-    if spec.indicator_kind == "net" and PORT_RE.match(indicator):
-        return f'| where DestinationPort == {int(indicator)}'
+    if spec.port_field and PORT_RE.match(indicator):
+        return f'| where {spec.port_field} == {int(indicator)}'
     terms = " or ".join(f'{f} has "{indicator}"' for f in spec.indicator_fields)
     return f"| where {terms}"

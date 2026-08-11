@@ -86,3 +86,27 @@ def test_indicator_clause_quotes_and_targets_surface_fields():
 
 def test_indicator_clause_empty_indicator_yields_no_filter():
     assert n.indicator_clause(n.SURFACE_SPECS["dns"], "") == ""
+
+
+def test_indicator_clause_firewall_ip_excludes_int_typed_port_field():
+    # DestinationPort is int-typed in CommonSecurityLog; Kusto's `has` requires
+    # a string operand, so an IP indicator must never reference it via `has`.
+    fw = n.SURFACE_SPECS["firewall"]
+    clause = n.indicator_clause(fw, "10.1.2.3")
+    assert "DestinationPort" not in clause
+    assert "SourceIP" in clause and "DestinationIP" in clause
+
+
+def test_indicator_clause_firewall_port_still_uses_equality():
+    fw = n.SURFACE_SPECS["firewall"]
+    clause = n.indicator_clause(fw, "443")
+    assert clause == "| where DestinationPort == 443"
+
+
+def test_validate_indicator_empty_string_passes_for_every_kind():
+    # Empty means "no indicator filter requested," not "matches nothing" — it
+    # is valid for every kind. indicator_clause independently treats empty as
+    # a no-op; this pins the flag's own contract so that coupling isn't left
+    # implicit.
+    assert n.validate_indicator("", "net") is True
+    assert n.validate_indicator("", "domain") is True
