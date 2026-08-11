@@ -55,21 +55,23 @@ def _bad_arg(name: str, value: str, accepted: str) -> Finding:
 
 
 async def list_data_sources(client: Any) -> list[Finding]:
-    """What telemetry this workspace actually ingests (last 30 days), sorted by name.
+    """What telemetry this workspace actually ingests (last 30 days), by volume.
 
-    Table names come from the probe as a set (no per-table volume is retained),
-    so this list is alphabetical, not ranked by ingestion volume.
+    Each table's finding carries its rounded GB and a one-word family label as
+    evidence, and the list is sorted by GB descending -- a 250 GB/30d feed and a
+    0.02 GB/30d trickle are very different claims about what this workspace can
+    answer, so the volume figure the probe already computed is not discarded.
     """
     cap = "Sentinel data sources"
     try:
-        tables = sorted(await probed_tables(client))
+        table_gb = await probed_tables(client)
     except GraphError as e:
         mapped = map_sentinel_error(e, cap, half="logs")
         if mapped:
             return [mapped]
         raise
 
-    if not tables:
+    if not table_gb:
         return [
             Finding(
                 source="sentinel",
@@ -83,6 +85,7 @@ async def list_data_sources(client: Any) -> list[Finding]:
             )
         ]
 
+    tables = sorted(table_gb, key=lambda t: table_gb[t], reverse=True)
     findings = [
         Finding(
             source="sentinel",
@@ -101,7 +104,10 @@ async def list_data_sources(client: Any) -> list[Finding]:
                 severity=Severity.info,
                 title=f"{t} — ingesting",
                 entity=Entity(kind=EntityKind.tenant, id=t, name=t),
-                evidence=[Evidence(key="family", value=_family(t))],
+                evidence=[
+                    Evidence(key="family", value=_family(t)),
+                    Evidence(key="gb_30d", value=f"{table_gb[t]:.2f}"),
+                ],
             )
         )
     return findings

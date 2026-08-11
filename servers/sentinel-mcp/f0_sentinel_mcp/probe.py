@@ -20,7 +20,7 @@ from f0_sectools_core.schema.findings import (
     Severity,
 )
 
-_CACHE: dict[str, set[str]] = {}
+_CACHE: dict[str, dict[str, float]] = {}
 
 # No IsBillable filter: free-tier tables (SecurityIncident, SecurityAlert,
 # OfficeActivity on some SKUs) are absent from a billable-only Usage roll-up,
@@ -31,14 +31,28 @@ _USAGE_KQL = (
 )
 
 
-async def probed_tables(client: Any) -> set[str]:
-    """The set of table names with data in the last 30d. Cached per workspace."""
+async def probed_tables(client: Any) -> dict[str, float]:
+    """Table name -> GB ingested in the last 30d. Cached per workspace.
+
+    A row missing `DataType` is skipped. A row with a missing or non-numeric
+    `GB` still counts as evidence the table is ingesting -- its volume just
+    defaults to 0.0 rather than dropping the table (or raising).
+    """
     key = str(getattr(client, "workspace_id", "default"))
     cached = _CACHE.get(key)
     if cached is not None:
         return cached
     rows = await client.query(_USAGE_KQL, "P30D")
-    tables = {str(r.get("DataType", "")) for r in rows if r.get("DataType")}
+    tables: dict[str, float] = {}
+    for r in rows:
+        name = str(r.get("DataType", ""))
+        if not name:
+            continue
+        try:
+            gb = float(r.get("GB", 0.0))
+        except (TypeError, ValueError):
+            gb = 0.0
+        tables[name] = gb
     _CACHE[key] = tables
     return tables
 
