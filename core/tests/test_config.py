@@ -3,6 +3,7 @@ from f0_sectools_core.auth.config import (
     LimaCharlieConfig,
     PlatformConfig,
     ProjectAchillesConfig,
+    SentinelConfig,
     TenableConfig,
 )
 
@@ -142,3 +143,67 @@ def test_projectachilles_confirm_mode_invalid_raises():
     }
     with pytest.raises(ValueError):
         ProjectAchillesConfig.from_env(env=env)
+
+
+def test_sentinel_config_from_env_minimal():
+    cfg = SentinelConfig.from_env(
+        env={
+            "SENTINEL_TENANT_ID": "t",
+            "SENTINEL_CLIENT_ID": "c",
+            "SENTINEL_CLIENT_SECRET": "s",
+            "SENTINEL_WORKSPACE_ID": "ws-guid",
+        }
+    )
+    assert cfg.workspace_id == "ws-guid"
+    assert cfg.retention_days == 30
+    assert cfg.has_arm is False
+
+
+def test_sentinel_config_has_arm_requires_all_three():
+    base = {
+        "SENTINEL_TENANT_ID": "t",
+        "SENTINEL_CLIENT_ID": "c",
+        "SENTINEL_CLIENT_SECRET": "s",
+        "SENTINEL_WORKSPACE_ID": "w",
+    }
+    partial = SentinelConfig.from_env(env={**base, "SENTINEL_SUBSCRIPTION_ID": "sub"})
+    assert partial.has_arm is False
+    full = SentinelConfig.from_env(
+        env={
+            **base,
+            "SENTINEL_SUBSCRIPTION_ID": "sub",
+            "SENTINEL_RESOURCE_GROUP": "rg",
+            "SENTINEL_WORKSPACE_NAME": "name",
+        }
+    )
+    assert full.has_arm is True
+
+
+def test_sentinel_config_retention_days_override_and_bad_value():
+    base = {
+        "SENTINEL_TENANT_ID": "t",
+        "SENTINEL_CLIENT_ID": "c",
+        "SENTINEL_CLIENT_SECRET": "s",
+        "SENTINEL_WORKSPACE_ID": "w",
+    }
+    cfg_90 = SentinelConfig.from_env(
+        env={**base, "SENTINEL_RETENTION_DAYS": "90"}
+    )
+    assert cfg_90.retention_days == 90
+    # A non-numeric value falls back to the default rather than raising: a bad
+    # env value must not take the whole server down.
+    cfg_ninety = SentinelConfig.from_env(
+        env={**base, "SENTINEL_RETENTION_DAYS": "ninety"}
+    )
+    assert cfg_ninety.retention_days == 30
+
+
+def test_sentinel_config_missing_workspace_id_raises():
+    with pytest.raises(ValueError, match="SENTINEL_WORKSPACE_ID"):
+        SentinelConfig.from_env(
+            env={
+                "SENTINEL_TENANT_ID": "t",
+                "SENTINEL_CLIENT_ID": "c",
+                "SENTINEL_CLIENT_SECRET": "s",
+            }
+        )
