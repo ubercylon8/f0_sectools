@@ -113,3 +113,84 @@ async def test_list_data_sources_maps_403_to_posture(fake):
     client = fake(raise_on={USAGE: GraphError(403, "forbidden")})
     out = await tools.list_data_sources(client)
     assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+CEF = "CommonSecurityLog"
+
+
+async def test_hunt_firewall_without_indicator_is_aggregate_only(fake):
+    # 112M rows/7d: an unfiltered row dump is a cost and context-window incident.
+    client = fake(rows={
+        USAGE: _TABLES,
+        CEF: [{"DeviceAction": "Drop", "DestinationPort": 445, "Events": 900}],
+    })
+    out = await tools.hunt_firewall(client, action="blocked")
+    kql = [q for q in client.queries if CEF in q][0]
+    assert "summarize" in kql
+    assert "| take" not in kql.split("summarize")[0]
+    assert out and all(f.finding_type.value in {"hunt_result", "posture"} for f in out)
+
+
+async def test_hunt_firewall_with_indicator_samples_rows(fake):
+    client = fake(rows={
+        USAGE: _TABLES,
+        CEF: [{"TimeGenerated": "2026-08-11T00:00:00Z", "SourceIP": "10.1.2.3",
+               "DestinationIP": "8.8.8.8", "DestinationPort": 53, "DeviceAction": "Accept"}],
+    })
+    out = await tools.hunt_firewall(client, indicator="10.1.2.3")
+    kql = [q for q in client.queries if CEF in q][0]
+    assert '"10.1.2.3"' in kql
+    assert "summarize" not in kql
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_hunt_firewall_time_predicate_comes_first(fake):
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    await tools.hunt_firewall(client, hours=6)
+    kql = [q for q in client.queries if CEF in q][0]
+    body = kql.split("|", 1)[1]
+    assert body.strip().startswith("where TimeGenerated > ago(")
+
+
+async def test_hunt_firewall_clamps_hours_to_retention(fake):
+    client = fake(rows={USAGE: _TABLES, CEF: []}, retention_days=30)
+    await tools.hunt_firewall(client, hours=99999)
+    kql = [q for q in client.queries if CEF in q][0]
+    assert "ago(720h)" in kql
+
+
+async def test_hunt_firewall_rejects_domain_indicator(fake):
+    # RequestURL fill rate is 0.08% on this table — a domain filter returns
+    # nothing, so say so instead of answering "no activity found".
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    out = await tools.hunt_firewall(client, indicator="evil.com")
+    assert len(out) == 1
+    assert out[0].finding_type.value == "posture"
+    ra = out[0].recommended_action
+    assert "hunt_dns_web" in (ra.summary if ra else "")
+
+
+async def test_hunt_firewall_missing_table_returns_posture(fake):
+    client = fake(rows={USAGE: [{"DataType": "Syslog", "GB": 1.0}]})
+    out = await tools.hunt_firewall(client)
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert "firewall" in out[0].title.lower()
+
+
+async def test_hunt_firewall_action_blocked_maps_to_vendor_values(fake):
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    await tools.hunt_firewall(client, action="blocked")
+    kql = [q for q in client.queries if CEF in q][0]
+    assert "Drop" in kql and "Accept" not in kql
+
+
+async def test_hunt_firewall_bad_action_reports_rather_than_ignoring(fake):
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    out = await tools.hunt_firewall(client, action="allowedd")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+async def test_hunt_firewall_429_maps_to_rate_limited(fake):
+    client = fake(rows={USAGE: _TABLES}, raise_on={CEF: GraphError(429, "slow down")})
+    out = await tools.hunt_firewall(client)
+    assert len(out) == 1 and "Rate limited" in out[0].title

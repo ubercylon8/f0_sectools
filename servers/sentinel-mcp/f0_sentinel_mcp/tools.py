@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
+from f0_sectools_core.paging import clamp_limit, more_available_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -19,8 +20,9 @@ from f0_sectools_core.schema.findings import (
     Severity,
 )
 
+from . import normalize as n
 from .errors import map_sentinel_error
-from .probe import probed_tables
+from .probe import probed_tables, require_table
 
 _FAMILY_PREFIX = (
     ("CommonSecurityLog", "firewall"),
@@ -111,3 +113,124 @@ async def list_data_sources(client: Any) -> list[Finding]:
             )
         )
     return findings
+
+
+_INDICATOR_HELP = {
+    "net": "an IP address or a port number (this table carries no URLs or "
+    "usernames — for domains and URLs use hunt_dns_web)",
+    "domain": "a domain, URL fragment, or IP",
+}
+
+
+def _rows_to_findings(rows: list[dict[str, Any]], title_key: str, limit: int) -> list[Finding]:
+    out: list[Finding] = []
+    for r in rows[:limit]:
+        out.append(
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.hunt_result,
+                severity=Severity.info,
+                title=str(r.get(title_key) or "event"),
+                evidence=[
+                    Evidence(key=str(k), value=str(v))
+                    for k, v in r.items()
+                    if v is not None and str(v) != ""
+                ][:12],
+                observed_at=str(r.get("TimeGenerated") or "") or None,
+            )
+        )
+    return out
+
+
+async def _run_surface(
+    client: Any,
+    spec: n.Surface,
+    cap: str,
+    human: str,
+    action: str,
+    indicator: str,
+    hours: float,
+    limit: int,
+) -> list[Finding]:
+    """Shared execution path for every KQL telemetry surface.
+
+    Bounding rules live here so no individual tool can forget one: time
+    predicate first, retention clamp, limit clamp, and aggregate-only whenever
+    no indicator narrows the scan.
+    """
+    if action not in n.ACTIONS:
+        return [_bad_arg("action", action, ", ".join(n.ACTIONS))]
+    if not n.validate_indicator(indicator, spec.indicator_kind):
+        return [_bad_arg("indicator", indicator, _INDICATOR_HELP[spec.indicator_kind])]
+
+    missing = await require_table(client, spec.table, human)
+    if missing:
+        return [missing]
+
+    hours = n.clamp_hours(hours, client.retention_days)
+    limit = clamp_limit(limit)
+
+    parts = [
+        spec.table,
+        f"| where TimeGenerated > ago({hours:g}h)",
+        n.hygiene_clause(spec),
+        n.action_clause(spec, action),
+        n.indicator_clause(spec, indicator),
+    ]
+    if indicator:
+        parts.append(f"| project {', '.join(spec.project)}")
+        parts.append(f"| order by TimeGenerated desc | take {limit}")
+    else:
+        # No indicator -> aggregate. Never dump rows from a table this large.
+        parts.append(
+            f"| summarize Events=count() by {spec.action_field}, {spec.indicator_fields[0]}"
+        )
+        parts.append(f"| top {limit} by Events desc")
+    kql = " ".join(p for p in parts if p)
+
+    try:
+        rows = await client.query(kql, n.timespan(hours))
+    except GraphError as e:
+        mapped = map_sentinel_error(e, cap, half="logs")
+        if mapped:
+            return [mapped]
+        raise
+
+    if not rows:
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.hunt_result,
+                severity=Severity.info,
+                title=f"No {human} activity matched in the last {hours:g}h",
+                recommended_action=RecommendedAction(
+                    summary="Widen hours, relax action, or drop the indicator.",
+                ),
+            )
+        ]
+
+    title_key = spec.indicator_fields[0] if indicator else spec.action_field
+    findings = _rows_to_findings(rows, title_key, limit)
+    if len(rows) >= limit:
+        findings.append(
+            more_available_finding(
+                "sentinel", shown=len(findings),
+                hint="Narrow with an indicator or a shorter hours window.",
+            )
+        )
+    return findings
+
+
+async def hunt_firewall(
+    client: Any,
+    action: str = "any",
+    indicator: str = "",
+    hours: float = 24,
+    limit: int = 25,
+) -> list[Finding]:
+    """Firewall traffic from the CEF table (Check Point / Fortinet)."""
+    return await _run_surface(
+        client, n.SURFACE_SPECS["firewall"],
+        cap="Sentinel firewall telemetry", human="firewall (CEF)",
+        action=action, indicator=indicator, hours=hours, limit=limit,
+    )
