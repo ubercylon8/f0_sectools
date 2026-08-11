@@ -31,22 +31,24 @@ def _client() -> SentinelClient:
 
 
 @mcp.tool()
-async def list_data_sources() -> list[dict[str, Any]]:
+async def list_data_sources(limit: int = 25) -> list[dict[str, Any]]:
     """List which security telemetry this Sentinel workspace actually ingests.
 
     Start here when you do not know what data exists — every workspace is
     different. Returns each table with data in the last 30 days and a family
-    label (firewall, dns_web, office, identity, incident, custom). Use it to
-    pick which hunt tool can answer a question before you call one."""
+    label (firewall, dns_web, office, identity, incident, custom), sorted by
+    ingest volume (GB, descending) and capped at `limit` (default 25) so a
+    large enterprise workspace doesn't flood the context. Use it to pick which
+    hunt tool can answer a question before you call one."""
     async with _client() as c:
-        return _render(await tools.list_data_sources(c))
+        return _render(await tools.list_data_sources(c, limit))
 
 
 @mcp.tool()
 async def hunt_firewall(
     action: Literal["allowed", "blocked", "detected", "any"] = "any",
     indicator: str = "",
-    hours: float = 24,
+    hours_back: float = 24,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
     """SEARCH firewall traffic (Check Point / Fortinet) for an IP or port.
@@ -58,7 +60,7 @@ async def hunt_firewall(
     hunt_dns_web instead. Without an indicator this returns an aggregate
     (top talkers by action), not individual events."""
     async with _client() as c:
-        return _render(await tools.hunt_firewall(c, action, indicator, hours, limit))
+        return _render(await tools.hunt_firewall(c, action, indicator, hours_back, limit))
 
 
 @mcp.tool()
@@ -66,7 +68,7 @@ async def hunt_dns_web(
     surface: Literal["dns", "web", "vpn"] = "dns",
     action: Literal["allowed", "blocked", "detected", "any"] = "any",
     indicator: str = "",
-    hours: float = 24,
+    hours_back: float = 24,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
     """SEARCH DNS, web-proxy, or remote-access VPN activity (Cisco Umbrella).
@@ -78,7 +80,9 @@ async def hunt_dns_web(
     Without an indicator this returns an aggregate, not individual events. For
     perimeter firewall connections by IP/port use hunt_firewall."""
     async with _client() as c:
-        return _render(await tools.hunt_dns_web(c, surface, action, indicator, hours, limit))
+        return _render(
+            await tools.hunt_dns_web(c, surface, action, indicator, hours_back, limit)
+        )
 
 
 @mcp.tool()
@@ -86,7 +90,7 @@ async def search_office_activity(
     workload: Literal["sharepoint", "onedrive", "exchange", "teams", "any"] = "any",
     operation: str = "",
     user: str = "",
-    hours: float = 24,
+    hours_back: float = 24,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
     """Search Microsoft 365 audit activity: who accessed, downloaded, or shared what.
@@ -99,7 +103,7 @@ async def search_office_activity(
     submits an asynchronous query that takes 5-15 minutes to return."""
     async with _client() as c:
         return _render(
-            await tools.search_office_activity(c, workload, operation, user, hours, limit)
+            await tools.search_office_activity(c, workload, operation, user, hours_back, limit)
         )
 
 
@@ -107,7 +111,7 @@ async def search_office_activity(
 async def list_sentinel_incidents(
     severity_min: Literal["informational", "low", "medium", "high"] = "low",
     status: Literal["new", "active", "closed", "any"] = "any",
-    hours: float = 168,
+    hours_back: float = 168,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
     """List the Sentinel SOC incident queue with MITRE tactics, status and owner.
@@ -118,7 +122,9 @@ async def list_sentinel_incidents(
     context) use f0-defender's list_incidents. Not an alert list — for
     individual alerts use f0-defender's list_alerts."""
     async with _client() as c:
-        return _render(await tools.list_sentinel_incidents(c, severity_min, status, hours, limit))
+        return _render(
+            await tools.list_sentinel_incidents(c, severity_min, status, hours_back, limit)
+        )
 
 
 @mcp.tool()
@@ -139,7 +145,7 @@ async def get_detection_coverage() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def run_kql(kql: str, hours: float = 24, limit: int = 25) -> list[dict[str, Any]]:
+async def run_kql(kql: str, hours_back: float = 24, limit: int = 25) -> list[dict[str, Any]]:
     """Run a CUSTOM read-only KQL query against the Sentinel Log Analytics workspace.
 
     Use only when no guided tool fits — prefer hunt_firewall, hunt_dns_web,
@@ -149,7 +155,7 @@ async def run_kql(kql: str, hours: float = 24, limit: int = 25) -> list[dict[str
     device/email advanced-hunting tables use f0-defender's run_hunting_query
     instead. The query is force-bounded if it carries no `take`."""
     async with _client() as c:
-        return _render(await tools.run_kql(c, kql, hours, limit))
+        return _render(await tools.run_kql(c, kql, hours_back, limit))
 
 
 def main() -> None:

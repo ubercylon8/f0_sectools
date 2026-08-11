@@ -31,7 +31,7 @@ deployment (no ARM coordinates at all) is a fully supported configuration.
 
 | Tool | Surface | Permission | What it answers |
 |------|---------|------------|------------------|
-| `list_data_sources` | Logs | Log Analytics Reader | What telemetry does this workspace actually ingest (30d, by volume)? Start here — every workspace is different. |
+| `list_data_sources` | Logs | Log Analytics Reader | What telemetry does this workspace actually ingest (30d, by volume)? Start here — every workspace is different. Bounded by `limit` (default 25, sorted GB descending). |
 | `hunt_firewall` | Logs | Log Analytics Reader | Firewall traffic (Check Point / Fortinet CEF) — connections, blocks, an IP/port indicator. |
 | `hunt_dns_web` | Logs | Log Analytics Reader | DNS / web-proxy / remote-access VPN activity (Cisco Umbrella) — a domain, URL fragment, or IP. |
 | `search_office_activity` | Logs | Log Analytics Reader | Microsoft 365 audit activity (who accessed/downloaded/shared what) — the fast path vs. Purview. |
@@ -48,9 +48,9 @@ degrade to a `posture` finding naming the fix — never an unhandled exception.
 
 ## Behaviours worth knowing before you rely on this server
 
-- **`hours` is capped at `SENTINEL_RETENTION_DAYS × 24`** (default 30 days ->
+- **`hours_back` is capped at `SENTINEL_RETENTION_DAYS × 24`** (default 30 days ->
   720 hours) on every telemetry tool. This exists to prevent a specific
-  failure: without the cap, a query with `hours` set past the workspace's
+  failure: without the cap, a query with `hours_back` set past the workspace's
   actual retention would silently scan an empty range and report "no
   activity found" — which reads as *nothing happened* when what actually
   happened is *the data was never retained that far back*. The cap converts
@@ -112,7 +112,7 @@ Entra app registration and the workspace GUID:
 | `SENTINEL_SUBSCRIPTION_ID` | optional | ARM subscription GUID — needed only for `get_detection_coverage`. |
 | `SENTINEL_RESOURCE_GROUP` | optional | Resource group holding the workspace — needed only for `get_detection_coverage`. |
 | `SENTINEL_WORKSPACE_NAME` | optional | ARM workspace resource name — needed only for `get_detection_coverage`. |
-| `SENTINEL_RETENTION_DAYS` | optional | Workspace log retention in days, default `30`. Caps `hours` on every telemetry tool — see above. |
+| `SENTINEL_RETENTION_DAYS` | optional | Workspace log retention in days, default `30`. Caps `hours_back` on every telemetry tool — see above. |
 | `SENTINEL_VERIFY_TLS` | optional | TLS certificate verification, default on. |
 
 Grant the app registration **Log Analytics Reader** on the Log Analytics

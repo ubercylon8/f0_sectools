@@ -3,9 +3,14 @@
 # enforces that every Sentinel tool has at least one task.
 #
 # The final block is ROUTING tasks: this server deliberately sits next to
-# f0-defender and f0-purview, and the risk it adds is misrouting, not a missing
-# capability. Those tasks must be run against TWO models — one model is not a
-# control (see the eval-findings notes on the hunt/logon misroute).
+# f0-defender, f0-purview and f0-projectachilles, and the risk it adds is
+# misrouting, not a missing capability. Those tasks must be run against TWO
+# models — one model is not a control (see the eval-findings notes on the
+# hunt/logon misroute). Five deliberate adjacencies today: hunt_dns_web vs
+# hunt_firewall (domain misrouted to the CEF table), list_sentinel_incidents
+# vs f0-defender.list_incidents, run_kql vs f0-defender.run_hunting_query,
+# search_office_activity vs f0-purview.search_audit_log, and
+# get_detection_coverage vs f0-projectachilles.get_weak_techniques.
 
 - prompt: "What security data do we actually collect in Sentinel?"
   expect_tool: list_data_sources
@@ -56,7 +61,7 @@
 - prompt: "Run this Sentinel query for me: Heartbeat | summarize count() by Computer"
   expect_tool: run_kql
 
-# --- routing tasks: the three deliberate adjacencies ---
+# --- routing tasks: the five deliberate adjacencies ---
 
 - prompt: "Search the firewall logs for connections to the domain badsite.io"
   expect_tool: hunt_dns_web    # NOT hunt_firewall: the CEF table has no URLs
@@ -69,3 +74,6 @@
 
 - prompt: "When did user alice@contoso.com last access her Exchange mailbox?"
   expect_tool: search_office_activity  # NOT f0-purview.search_audit_log: fast indexed lookup vs. slow async query
+
+- prompt: "Based on the analytics rules we've actually written, where are our detection gaps?"
+  expect_tool: get_detection_coverage  # NOT f0-projectachilles.get_weak_techniques: rule inventory, not validated-attack results

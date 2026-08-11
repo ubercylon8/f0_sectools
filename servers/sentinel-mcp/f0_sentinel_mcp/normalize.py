@@ -26,6 +26,9 @@ DEFAULT_HOURS = 24.0
 
 # Strict charsets for anything spliced into KQL. httpx does not escape a query
 # body, so these are the injection boundary as well as small-model guidance.
+# Matched with .fullmatch() everywhere, not .match(): a bare `$` anchor matches
+# just before a trailing "\n" even without re.MULTILINE, so a `.match()` call
+# would let a trailing newline ride along into a spliced KQL literal.
 IP_RE = re.compile(r"^[0-9a-fA-F:.]{1,45}$")
 PORT_RE = re.compile(r"^\d{1,5}$")
 DOMAIN_RE = re.compile(r"^[A-Za-z0-9._*-]{1,253}$")
@@ -176,8 +179,8 @@ def validate_indicator(indicator: str, kind: str) -> bool:
     if not indicator:
         return True
     if kind == "net":
-        return bool(IP_RE.match(indicator) or PORT_RE.match(indicator))
-    return bool(DOMAIN_RE.match(indicator))
+        return bool(IP_RE.fullmatch(indicator) or PORT_RE.fullmatch(indicator))
+    return bool(DOMAIN_RE.fullmatch(indicator))
 
 
 def indicator_clause(spec: Surface, indicator: str) -> str:
@@ -190,7 +193,7 @@ def indicator_clause(spec: Surface, indicator: str) -> str:
     """
     if not indicator:
         return ""
-    if spec.port_field and PORT_RE.match(indicator):
+    if spec.port_field and PORT_RE.fullmatch(indicator):
         return f'| where {spec.port_field} == {int(indicator)}'
     terms = " or ".join(f'{f} has "{indicator}"' for f in spec.indicator_fields)
     return f"| where {terms}"

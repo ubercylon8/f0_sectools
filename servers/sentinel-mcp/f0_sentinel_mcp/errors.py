@@ -1,6 +1,8 @@
 """Map Sentinel API errors to graceful findings (Critical Rule: never raise)."""
 from __future__ import annotations
 
+from typing import Literal
+
 from f0_sectools_core.auth.graph import GraphError
 from f0_sectools_core.schema.findings import (
     Finding,
@@ -15,7 +17,9 @@ _ROLE = {
 }
 
 
-def map_sentinel_error(e: Exception, capability: str, half: str = "logs") -> Finding | None:
+def map_sentinel_error(
+    e: Exception, capability: str, half: Literal["logs", "arm"] = "logs"
+) -> Finding | None:
     """Return a graceful finding for known Sentinel errors, else None (caller re-raises).
 
     ``half`` selects which Azure role the operator is told to grant. The logs

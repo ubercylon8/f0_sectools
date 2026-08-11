@@ -10,10 +10,14 @@ List which security telemetry this Sentinel workspace actually ingests.
 
 Start here when you do not know what data exists — every workspace is
 different. Returns each table with data in the last 30 days and a family
-label (firewall, dns_web, office, identity, incident, custom). Use it to
-pick which hunt tool can answer a question before you call one.
+label (firewall, dns_web, office, identity, incident, custom), sorted by
+ingest volume (GB, descending) and capped at `limit` (default 25) so a
+large enterprise workspace doesn't flood the context. Use it to pick which
+hunt tool can answer a question before you call one.
 
-*No parameters.*
+| Parameter | Type | Default |
+|---|---|---|
+| `limit` | `integer` | `25` |
 
 Used by skills: [`data-source-coverage`](../../../skills/sentinel/data-source-coverage/SKILL.md), [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md), [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
 
@@ -32,7 +36,7 @@ hunt_dns_web instead. Without an indicator this returns an aggregate
 |---|---|---|
 | `action` | `"allowed"` \| `"blocked"` \| `"detected"` \| `"any"` | `"any"` |
 | `indicator` | `string` | `""` |
-| `hours` | `number` | `24` |
+| `hours_back` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
 Used by skills: [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
@@ -53,7 +57,7 @@ perimeter firewall connections by IP/port use hunt_firewall.
 | `surface` | `"dns"` \| `"web"` \| `"vpn"` | `"dns"` |
 | `action` | `"allowed"` \| `"blocked"` \| `"detected"` \| `"any"` | `"any"` |
 | `indicator` | `string` | `""` |
-| `hours` | `number` | `24` |
+| `hours_back` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
 Used by skills: [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
@@ -74,7 +78,7 @@ submits an asynchronous query that takes 5-15 minutes to return.
 | `workload` | `"sharepoint"` \| `"onedrive"` \| `"exchange"` \| `"teams"` \| `"any"` | `"any"` |
 | `operation` | `string` | `""` |
 | `user` | `string` | `""` |
-| `hours` | `number` | `24` |
+| `hours_back` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
 Used by skills: [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
@@ -93,7 +97,7 @@ individual alerts use f0-defender's list_alerts.
 |---|---|---|
 | `severity_min` | `"informational"` \| `"low"` \| `"medium"` \| `"high"` | `"low"` |
 | `status` | `"new"` \| `"active"` \| `"closed"` \| `"any"` | `"any"` |
-| `hours` | `number` | `168` |
+| `hours_back` | `number` | `168` |
 | `limit` | `integer` | `25` |
 
 Used by skills: [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md)
@@ -130,5 +134,5 @@ instead. The query is force-bounded if it carries no `take`.
 | Parameter | Type | Default |
 |---|---|---|
 | `kql` | `string` | *(required)* |
-| `hours` | `number` | `24` |
+| `hours_back` | `number` | `24` |
 | `limit` | `integer` | `25` |

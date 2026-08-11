@@ -101,7 +101,7 @@ async def main(hours: float, persona: str | None) -> None:
         #    this is a `summarize` over the window, never a row-level dump.
         await _run(
             "hunt_firewall (aggregate)",
-            tools.hunt_firewall(c, action="blocked", hours=hours),
+            tools.hunt_firewall(c, action="blocked", hours_back=hours),
             persona,
         )
 
@@ -112,17 +112,17 @@ async def main(hours: float, persona: str | None) -> None:
         #    connected/failed guess in normalize.SURFACE_SPECS["vpn"].
         await _run(
             "hunt_dns_web dns (aggregate)",
-            tools.hunt_dns_web(c, surface="dns", action="blocked", hours=hours),
+            tools.hunt_dns_web(c, surface="dns", action="blocked", hours_back=hours),
             persona,
         )
         await _run(
             "hunt_dns_web web (aggregate)",
-            tools.hunt_dns_web(c, surface="web", action="blocked", hours=hours),
+            tools.hunt_dns_web(c, surface="web", action="blocked", hours_back=hours),
             persona,
         )
         await _run(
             "hunt_dns_web vpn (aggregate, action values)",
-            tools.hunt_dns_web(c, surface="vpn", hours=hours),
+            tools.hunt_dns_web(c, surface="vpn", hours_back=hours),
             persona,
         )
 
@@ -134,16 +134,16 @@ async def main(hours: float, persona: str | None) -> None:
         #    mapped posture finding or an "ERROR (unmapped)" line above.
         await _run(
             "search_office_activity (discovery)",
-            tools.search_office_activity(c, hours=hours),
+            tools.search_office_activity(c, hours_back=hours),
             persona,
         )
         await _run(
             "search_office_activity FileDownloaded",
-            tools.search_office_activity(c, operation="FileDownloaded", hours=hours),
+            tools.search_office_activity(c, operation="FileDownloaded", hours_back=hours),
             persona,
         )
 
-        # 8. Incident queue. hours=168 (7d) is the tool's own default and is a
+        # 8. Incident queue. hours_back=168 (7d) is the tool's own default and is a
         #    small management table, not raw telemetry, so it stays cheap.
         #    Shown at a higher cap than the 6-item default so IncidentNumber
         #    values can be eyeballed for duplicates -- the arg_max dedup
@@ -152,7 +152,7 @@ async def main(hours: float, persona: str | None) -> None:
         #    one-incident-per-row rather than one-row-per-update.
         await _run(
             "list_sentinel_incidents",
-            tools.list_sentinel_incidents(c, hours=168),
+            tools.list_sentinel_incidents(c, hours_back=168),
             persona,
             show=25,
         )
@@ -165,7 +165,7 @@ async def main(hours: float, persona: str | None) -> None:
         # 10. run_kql with a trivially safe, aggregate-only example query.
         await _run(
             "run_kql",
-            tools.run_kql(c, "Heartbeat | summarize n=count() by Computer", hours=hours),
+            tools.run_kql(c, "Heartbeat | summarize n=count() by Computer", hours_back=hours),
             persona,
         )
 

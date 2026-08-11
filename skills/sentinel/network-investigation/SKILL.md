@@ -51,7 +51,7 @@ Base tool names: `list_data_sources`, `hunt_firewall`, `hunt_dns_web`,
 - **Without an indicator these tools return aggregates, not events.** That is
   deliberate — the firewall table is very large. Supply an indicator to see
   individual rows.
-- **`hours` is capped at the workspace retention.** Asking for 90 days on a
+- **`hours_back` is capped at the workspace retention.** Asking for 90 days on a
   30-day workspace silently means 30; do not present it as 90.
 - **Umbrella categories are a JSON list in one field.** Treat category matches
   as substring matches, not exact ones.

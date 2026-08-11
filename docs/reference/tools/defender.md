@@ -26,8 +26,9 @@ Defaults to state="open" — excludes resolved incidents and ones redirected
 into another incident, which Defender retains indefinitely and which are
 already handled. Use state="all" for incident history.
 
-For the Sentinel SOC queue view of the same incidents — with MITRE tactics,
-SOC status and owner — use f0-sentinel's list_sentinel_incidents.
+If a Sentinel workspace is configured, for the Sentinel SOC queue view of
+the same incidents — with MITRE tactics, SOC status and owner — use
+f0-sentinel's list_sentinel_incidents.
 
 | Parameter | Type | Default |
 |---|---|---|
@@ -70,8 +71,9 @@ DeviceName, FileName, ProcessCommandLine, AccountName), DeviceLogonEvents
 SenderFromAddress, Subject, ThreatTypes). Always bound results with `| take 50`.
 
 This is Defender advanced hunting (device, email and identity tables), not
-Sentinel workspace KQL. For firewall, DNS, syslog or other Log Analytics
-tables use f0-sentinel's run_kql.
+Sentinel workspace KQL. If a Sentinel workspace is configured, for
+firewall, DNS, syslog or other Log Analytics tables use f0-sentinel's
+run_kql.
 
 | Parameter | Type | Default |
 |---|---|---|

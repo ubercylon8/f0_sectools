@@ -1,6 +1,7 @@
 """Contract tests for the Sentinel tools (fake client, no network)."""
 from __future__ import annotations
 
+import pytest
 from f0_sectools_core.auth.graph import GraphError
 from f0_sentinel_mcp import probe, tools
 
@@ -87,6 +88,14 @@ async def test_list_data_sources_labels_families(fake):
     assert fam["MyVendorCustomTable_CL"] == "custom"
 
 
+def test_family_labels_cisco_umbrella_firewall_as_firewall_not_dns_web():
+    # Cisco_Umbrella_firewall_CL starts with "Cisco_Umbrella", so the generic
+    # dns_web entry matches it before any firewall-specific entry -- unless
+    # the more specific prefix is checked first. No hunt_* tool queries this
+    # table either way; this only fixes the label list_data_sources shows.
+    assert tools._family("Cisco_Umbrella_firewall_CL") == "firewall"
+
+
 async def test_list_data_sources_sorts_by_gb_descending(fake):
     client = fake(rows={USAGE: _TABLES})
     out = await tools.list_data_sources(client)
@@ -113,6 +122,45 @@ async def test_list_data_sources_maps_403_to_posture(fake):
     client = fake(raise_on={USAGE: GraphError(403, "forbidden")})
     out = await tools.list_data_sources(client)
     assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+def _many_tables(count: int) -> list[dict[str, object]]:
+    # Descending GB so the sort order is unambiguous.
+    return [{"DataType": f"Table{i:03d}_CL", "GB": float(count - i)} for i in range(count)]
+
+
+async def test_list_data_sources_default_limit_bounds_output(fake):
+    # This is the tool every other tool's description names as the first
+    # call; on a large enterprise workspace (200-400 tables) an unbounded dump
+    # is a context flood.
+    client = fake(rows={USAGE: _many_tables(40)})
+    out = await tools.list_data_sources(client)
+    per_table = [f for f in out if f.entity is not None and f.entity.id != "sentinel"]
+    assert len(per_table) == 25
+
+
+async def test_list_data_sources_respects_custom_limit(fake):
+    client = fake(rows={USAGE: _many_tables(40)})
+    out = await tools.list_data_sources(client, limit=5)
+    per_table = [f for f in out if f.entity is not None and f.entity.id != "sentinel"]
+    assert len(per_table) == 5
+
+
+async def test_list_data_sources_flags_more_available_when_truncated(fake):
+    client = fake(rows={USAGE: _many_tables(40)})
+    out = await tools.list_data_sources(client)
+    assert any(
+        f.title.lower().startswith("showing") or "more" in f.title.lower() for f in out
+    )
+
+
+async def test_list_data_sources_no_truncation_marker_when_everything_shown(fake):
+    client = fake(rows={USAGE: _TABLES})
+    out = await tools.list_data_sources(client)
+    assert not any(
+        f.title.lower().startswith("showing") or "more results available" in f.title.lower()
+        for f in out
+    )
 
 
 CEF = "CommonSecurityLog"
@@ -144,9 +192,26 @@ async def test_hunt_firewall_with_indicator_samples_rows(fake):
     assert any(f.finding_type.value == "hunt_result" for f in out)
 
 
+async def test_hunt_firewall_indicator_mode_kql_ends_with_bounded_take(fake):
+    # The row-mode (indicator supplied) output bound is otherwise completely
+    # untested -- deleting clamp_limit or the `| take {limit}` clause here
+    # leaves every other test green on a table carrying ~112M rows/7d.
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    await tools.hunt_firewall(client, indicator="10.1.2.3", limit=7)
+    kql = [q for q in client.queries if CEF in q][0]
+    assert kql.rstrip().endswith("| take 7")
+
+
+async def test_hunt_firewall_indicator_mode_clamps_huge_limit(fake):
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    await tools.hunt_firewall(client, indicator="10.1.2.3", limit=100000)
+    kql = [q for q in client.queries if CEF in q][0]
+    assert kql.rstrip().endswith("| take 100")
+
+
 async def test_hunt_firewall_time_predicate_comes_first(fake):
     client = fake(rows={USAGE: _TABLES, CEF: []})
-    await tools.hunt_firewall(client, hours=6)
+    await tools.hunt_firewall(client, hours_back=6)
     kql = [q for q in client.queries if CEF in q][0]
     body = kql.split("|", 1)[1]
     assert body.strip().startswith("where TimeGenerated > ago(")
@@ -154,7 +219,7 @@ async def test_hunt_firewall_time_predicate_comes_first(fake):
 
 async def test_hunt_firewall_clamps_hours_to_retention(fake):
     client = fake(rows={USAGE: _TABLES, CEF: []}, retention_days=30)
-    await tools.hunt_firewall(client, hours=99999)
+    await tools.hunt_firewall(client, hours_back=99999)
     kql = [q for q in client.queries if CEF in q][0]
     assert "ago(720h)" in kql
 
@@ -236,6 +301,18 @@ async def test_hunt_dns_web_bad_surface_reports(fake):
     out = await tools.hunt_dns_web(client, surface="carrier-pigeon")
     assert len(out) == 1 and out[0].finding_type.value == "posture"
     assert "dns" in (out[0].recommended_action.summary if out[0].recommended_action else "")
+
+
+async def test_hunt_dns_web_action_unsupported_on_surface_is_rejected(fake):
+    # "detected" is a member of the GLOBAL action vocabulary (n.ACTIONS,
+    # because hunt_firewall's CEF table supports it) but the dns surface's
+    # action_map only has allowed/blocked. action_clause() would silently
+    # no-op for an unrecognized action and return ALL traffic while the
+    # caller believes it filtered -- this must be rejected, not dropped.
+    client = fake(rows={USAGE: _TABLES, DNS: []})
+    out = await tools.hunt_dns_web(client, surface="dns", action="detected")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert not [q for q in client.queries if DNS in q]
 
 
 async def test_hunt_dns_web_missing_umbrella_table_returns_posture(fake):
@@ -328,6 +405,11 @@ async def test_search_office_activity_user_filter_validated(fake):
     client = fake(rows={USAGE: _TABLES, OA: []})
     ok = await tools.search_office_activity(client, user="a@b.com", operation="FileAccessed")
     assert not (len(ok) == 1 and ok[0].title.startswith("Unsupported"))
+    # The `user` filter must actually reach the KQL, not just pass validation
+    # and then get silently dropped -- a dropped filter would return everyone's
+    # activity, formatted identically, with nothing signalling the loss.
+    kql = [q for q in client.queries if OA in q][0]
+    assert 'UserId =~ "a@b.com"' in kql
     bad = await tools.search_office_activity(client, user='a" or 1==1')
     assert len(bad) == 1 and bad[0].finding_type.value == "posture"
 
@@ -455,10 +537,15 @@ def test_incident_owner_absent_or_malformed_falls_back_to_unassigned():
 
 
 async def test_list_sentinel_incidents_severity_min_filters(fake):
+    # severity_min is a FLOOR, not an exact match: "medium" must include
+    # medium and everything above it (high) while excluding everything below
+    # (low, informational). Using "high" here (the top of the range) cannot
+    # distinguish a floor from an exact-match bug -- both pass identically.
     client = fake(rows={USAGE: _TABLES, SI: []})
-    await tools.list_sentinel_incidents(client, severity_min="high")
+    await tools.list_sentinel_incidents(client, severity_min="medium")
     kql = [q for q in client.queries if SI in q][0]
-    assert "High" in kql and "Informational" not in kql
+    assert "Medium" in kql and "High" in kql and "Low" not in kql
+    assert "Informational" not in kql
 
 
 async def test_list_sentinel_incidents_status_filter(fake):
@@ -641,6 +728,27 @@ async def test_get_detection_coverage_no_rules_is_a_finding_not_silence(fake):
     assert "0" in out[0].title or "no" in out[0].title.lower()
 
 
+def _many_rules(count: int) -> list[dict[str, object]]:
+    return [
+        {"kind": "Scheduled", "name": f"rule-{i}",
+         "properties": {"displayName": f"Rule {i}", "enabled": True,
+                         "severity": "Low", "tactics": ["InitialAccess"]}}
+        for i in range(count)
+    ]
+
+
+async def test_get_detection_coverage_caps_per_rule_findings(fake):
+    # The per-rule findings are supplementary detail, capped separately from
+    # the summary finding, which already carries the aggregate counts.
+    client = fake(arm={"alertRules": _many_rules(40)})
+    out = await tools.get_detection_coverage(client)
+    rule_findings = [f for f in out if f.title.startswith("Rule:")]
+    assert len(rule_findings) == 25
+    assert any(
+        f.title.lower().startswith("showing") or "more" in f.title.lower() for f in out
+    )
+
+
 async def test_run_kql_passes_query_through(fake):
     client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
     out = await tools.run_kql(client, "Heartbeat | project Computer")
@@ -657,6 +765,22 @@ async def test_run_kql_respects_an_existing_bound(fake):
     client = fake(rows={"Heartbeat": []})
     await tools.run_kql(client, "Heartbeat | take 5")
     assert client.queries[0].count("take") == 1
+
+
+async def test_run_kql_force_bound_survives_a_trailing_line_comment(fake):
+    # "Heartbeat // note" + " | take 25" used to become "Heartbeat // note |
+    # take 25" -- the bound silently commented out, so the query dispatched
+    # unbounded. Model-written KQL carries trailing `//` comments routinely.
+    client = fake(rows={"Heartbeat": []})
+    await tools.run_kql(client, "Heartbeat // note", limit=25)
+    dispatched = client.queries[0]
+    # The bound must be live KQL, not part of the comment: on its own line,
+    # after the comment, not appended to the same commented-out line.
+    assert dispatched.count("take") == 1
+    lines = dispatched.split("\n")
+    take_line = next(line for line in lines if "take" in line)
+    assert "//" not in take_line
+    assert "| take 25" in take_line
 
 
 async def test_run_kql_rejects_control_commands(fake):
@@ -723,3 +847,38 @@ async def test_run_kql_ordinary_queries_still_dispatch(fake):
     out2 = await tools.run_kql(client2, "   \n\t Heartbeat | take 5")
     assert client2.queries == ["Heartbeat | take 5"]
     assert any(f.finding_type.value == "hunt_result" for f in out2)
+
+
+# --- Critical Rule: every tool returns a finding, never an exception, on a
+# platform error. `require_table` (-> `probed_tables` -> `client.query`) is a
+# real transport call and can raise `GraphError` exactly like any other query
+# -- a tool that awaits it OUTSIDE its own try/except lets that exception
+# escape past tools.py, past server.py's `_render`, and past redaction. This
+# is fault injection at the transport boundary, not a single call site: it
+# forces the error on EVERY query the fake client can receive (raise_on={"":
+# err} matches every substring) and on the ARM `alertRules` resource, so a
+# regression in ANY of the four `require_table`-based tools is caught, not
+# just the one call site a narrower test happened to hit.
+
+_ALL_SEVEN_TOOLS = {
+    "list_data_sources": lambda c: tools.list_data_sources(c),
+    "hunt_firewall": lambda c: tools.hunt_firewall(c),
+    "hunt_dns_web": lambda c: tools.hunt_dns_web(c),
+    "search_office_activity": lambda c: tools.search_office_activity(c),
+    "list_sentinel_incidents": lambda c: tools.list_sentinel_incidents(c),
+    "get_detection_coverage": lambda c: tools.get_detection_coverage(c),
+    "run_kql": lambda c: tools.run_kql(c, "Heartbeat | take 5"),
+}
+
+
+@pytest.mark.parametrize("status", [401, 403, 429])
+@pytest.mark.parametrize("tool_name", sorted(_ALL_SEVEN_TOOLS))
+async def test_every_tool_returns_finding_not_exception_on_graph_error(fake, tool_name, status):
+    err = GraphError(status, "boom")
+    # "" is a substring of every KQL string the fake client's query() sees, so
+    # this fails EVERY query call regardless of which table is asked for;
+    # "alertRules" additionally covers get_detection_coverage's ARM call.
+    client = fake(raise_on={"": err, "alertRules": err}, has_arm=True)
+    out = await _ALL_SEVEN_TOOLS[tool_name](client)
+    assert isinstance(out, list) and len(out) >= 1
+    assert all(f.finding_type.value == "posture" for f in out), (tool_name, status)

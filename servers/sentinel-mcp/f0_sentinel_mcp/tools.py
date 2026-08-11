@@ -7,7 +7,7 @@ dict access is defensive throughout because the next workspace differs.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from f0_sectools_core.auth.graph import GraphError
 from f0_sectools_core.paging import clamp_limit, more_available_finding
@@ -27,6 +27,14 @@ from .probe import probed_tables, require_table
 
 _FAMILY_PREFIX = (
     ("CommonSecurityLog", "firewall"),
+    # Must come before the generic "Cisco_Umbrella" entry below: without this,
+    # Cisco_Umbrella_firewall_CL matches the generic prefix and gets labelled
+    # dns_web -- the family whose tool (hunt_dns_web) cannot query it, while
+    # the tool that could plausibly cover it (hunt_firewall) is never
+    # suggested. No hunt_* tool queries this table either way; this entry only
+    # fixes the label so list_data_sources doesn't point the model at the
+    # wrong hunt tool for it.
+    ("Cisco_Umbrella_firewall", "firewall"),
     ("Cisco_Umbrella", "dns_web"),
     ("OfficeActivity", "office"),
     ("SecurityIncident", "incident"),
@@ -57,13 +65,45 @@ def _bad_arg(name: str, value: str, accepted: str) -> Finding:
     )
 
 
-async def list_data_sources(client: Any) -> list[Finding]:
+async def _probe_or_finding(
+    client: Any, table: str, human: str, cap: str, half: Literal["logs", "arm"] = "logs"
+) -> Finding | None:
+    """`require_table`, but inside the same GraphError handling every tool uses.
+
+    `require_table` itself calls `probed_tables`, which issues a `client.query`
+    -- a real transport call that can raise `GraphError` (403 missing role, 401
+    bad creds, 429 throttled, ...) exactly like any other query. A caller that
+    awaits `require_table` outside its own try/except lets that exception
+    escape past `tools.py`, past `server.py`'s `_render`, and past redaction --
+    the one failure mode Critical Rule 3/4 exist to prevent. Every tool that
+    needs `require_table` must call it through here instead of directly.
+
+    Returns None when the table is present (caller proceeds), or the single
+    finding to return: either the "table absent" posture finding, or the
+    mapped API-error finding. Re-raises only if `map_sentinel_error` does not
+    recognize the error, matching every other call site in this module.
+    """
+    try:
+        return await require_table(client, table, human)
+    except GraphError as e:
+        mapped = map_sentinel_error(e, cap, half=half)
+        if mapped:
+            return mapped
+        raise
+
+
+async def list_data_sources(client: Any, limit: int = 25) -> list[Finding]:
     """What telemetry this workspace actually ingests (last 30 days), by volume.
 
     Each table's finding carries its rounded GB and a one-word family label as
     evidence, and the list is sorted by GB descending -- a 250 GB/30d feed and a
     0.02 GB/30d trickle are very different claims about what this workspace can
     answer, so the volume figure the probe already computed is not discarded.
+
+    Bounded to `limit` tables (default 25, clamped like every other tool):
+    this is the tool every other tool's description names as the first call,
+    so an unbounded dump here is a context flood on a large enterprise
+    workspace. The sort is GB-descending, so the top `limit` is the useful N.
     """
     cap = "Sentinel data sources"
     try:
@@ -88,18 +128,20 @@ async def list_data_sources(client: Any) -> list[Finding]:
             )
         ]
 
-    tables = sorted(table_gb, key=lambda t: table_gb[t], reverse=True)
+    all_tables = sorted(table_gb, key=lambda t: table_gb[t], reverse=True)
+    limit = clamp_limit(limit)
+    shown = all_tables[:limit]
     findings = [
         Finding(
             source="sentinel",
             finding_type=FindingType.posture,
             severity=Severity.info,
-            title=f"{len(tables)} tables ingesting in this Sentinel workspace (30d)",
+            title=f"{len(all_tables)} tables ingesting in this Sentinel workspace (30d)",
             entity=Entity(kind=EntityKind.tenant, id="sentinel"),
-            evidence=[Evidence(key="table_count", value=str(len(tables)))],
+            evidence=[Evidence(key="table_count", value=str(len(all_tables)))],
         )
     ]
-    for t in tables:
+    for t in shown:
         findings.append(
             Finding(
                 source="sentinel",
@@ -111,6 +153,13 @@ async def list_data_sources(client: Any) -> list[Finding]:
                     Evidence(key="family", value=_family(t)),
                     Evidence(key="gb_30d", value=f"{table_gb[t]:.2f}"),
                 ],
+            )
+        )
+    if len(all_tables) > limit:
+        findings.append(
+            more_available_finding(
+                "sentinel", shown=len(shown), total=len(all_tables),
+                hint="Raise limit to see more tables (sorted by ingest volume, GB descending).",
             )
         )
     return findings
@@ -150,7 +199,7 @@ async def _run_surface(
     human: str,
     action: str,
     indicator: str,
-    hours: float,
+    hours_back: float,
     limit: int,
 ) -> list[Finding]:
     """Shared execution path for every KQL telemetry surface.
@@ -161,14 +210,27 @@ async def _run_surface(
     """
     if action not in n.ACTIONS:
         return [_bad_arg("action", action, ", ".join(n.ACTIONS))]
+    if action != "any" and action not in spec.action_map:
+        # `action` is a member of the GLOBAL vocabulary (n.ACTIONS) but this
+        # surface's action_map doesn't define it -- e.g. "detected" exists for
+        # hunt_firewall but not for the Umbrella surfaces. action_clause()
+        # would silently no-op and return every row instead of filtering, so
+        # reject it here rather than let the filter vanish unnoticed.
+        accepted = "any, " + ", ".join(spec.action_map)
+        return [_bad_arg("action", action, accepted)]
     if not n.validate_indicator(indicator, spec.indicator_kind):
-        return [_bad_arg("indicator", indicator, _INDICATOR_HELP[spec.indicator_kind])]
+        return [
+            _bad_arg(
+                "indicator", indicator,
+                _INDICATOR_HELP.get(spec.indicator_kind, "a valid indicator for this surface"),
+            )
+        ]
 
-    missing = await require_table(client, spec.table, human)
+    missing = await _probe_or_finding(client, spec.table, human, cap)
     if missing:
         return [missing]
 
-    hours = n.clamp_hours(hours, client.retention_days)
+    hours = n.clamp_hours(hours_back, client.retention_days)
     limit = clamp_limit(limit)
 
     parts = [
@@ -226,14 +288,14 @@ async def hunt_firewall(
     client: Any,
     action: str = "any",
     indicator: str = "",
-    hours: float = 24,
+    hours_back: float = 24,
     limit: int = 25,
 ) -> list[Finding]:
     """Firewall traffic from the CEF table (Check Point / Fortinet)."""
     return await _run_surface(
         client, n.SURFACE_SPECS["firewall"],
         cap="Sentinel firewall telemetry", human="firewall (CEF)",
-        action=action, indicator=indicator, hours=hours, limit=limit,
+        action=action, indicator=indicator, hours_back=hours_back, limit=limit,
     )
 
 
@@ -249,7 +311,7 @@ async def hunt_dns_web(
     surface: str = "dns",
     action: str = "any",
     indicator: str = "",
-    hours: float = 24,
+    hours_back: float = 24,
     limit: int = 25,
 ) -> list[Finding]:
     """DNS / web-proxy / RA-VPN activity from the Cisco Umbrella tables."""
@@ -258,7 +320,7 @@ async def hunt_dns_web(
     return await _run_surface(
         client, n.SURFACE_SPECS[surface],
         cap=f"Sentinel {surface} telemetry", human=_SURFACE_HUMAN[surface],
-        action=action, indicator=indicator, hours=hours, limit=limit,
+        action=action, indicator=indicator, hours_back=hours_back, limit=limit,
     )
 
 
@@ -280,23 +342,25 @@ async def search_office_activity(
     workload: str = "any",
     operation: str = "",
     user: str = "",
-    hours: float = 24,
+    hours_back: float = 24,
     limit: int = 25,
 ) -> list[Finding]:
     """Microsoft 365 audit activity from OfficeActivity (fast path vs. Purview)."""
     cap = "Sentinel Microsoft 365 activity"
     if workload not in n.WORKLOADS:
         return [_bad_arg("workload", workload, ", ".join(n.WORKLOADS))]
-    if operation and not n.WORD_RE.match(operation):
+    if operation and not n.WORD_RE.fullmatch(operation):
         return [_bad_arg("operation", operation, "an exact operation name, e.g. FileDownloaded")]
-    if user and not n.UPN_RE.match(user):
+    if user and not n.UPN_RE.fullmatch(user):
         return [_bad_arg("user", user, "a UPN, e.g. someone@contoso.com")]
 
-    missing = await require_table(client, "OfficeActivity", "Microsoft 365 audit (OfficeActivity)")
+    missing = await _probe_or_finding(
+        client, "OfficeActivity", "Microsoft 365 audit (OfficeActivity)", cap
+    )
     if missing:
         return [missing]
 
-    hours = n.clamp_hours(hours, client.retention_days)
+    hours = n.clamp_hours(hours_back, client.retention_days)
     limit = clamp_limit(limit)
 
     parts = ["OfficeActivity", f"| where TimeGenerated > ago({hours:g}h)"]
@@ -423,7 +487,7 @@ async def list_sentinel_incidents(
     client: Any,
     severity_min: str = "low",
     status: str = "any",
-    hours: float = 168,
+    hours_back: float = 168,
     limit: int = 25,
 ) -> list[Finding]:
     """The Sentinel SOC incident queue, with MITRE tactics."""
@@ -433,11 +497,11 @@ async def list_sentinel_incidents(
     if status != "any" and status not in _STATUS_VALUE:
         return [_bad_arg("status", status, "new, active, closed, any")]
 
-    missing = await require_table(client, "SecurityIncident", "Sentinel incidents")
+    missing = await _probe_or_finding(client, "SecurityIncident", "Sentinel incidents", cap)
     if missing:
         return [missing]
 
-    hours = n.clamp_hours(hours, client.retention_days)
+    hours = n.clamp_hours(hours_back, client.retention_days)
     limit = clamp_limit(limit)
     wanted = _SEV_ORDER[_SEV_ORDER.index(severity_min):]
     sev_list = ", ".join(f'"{_SEV_VALUE[s]}"' for s in wanted)
@@ -545,6 +609,12 @@ def _is_builtin_rule(r: dict[str, Any]) -> bool:
 # of how many built-in rules are also enabled.
 _LOW_CUSTOM_COVERAGE_THRESHOLD = 4
 
+# Per-rule findings are capped so an enterprise tenant with hundreds of
+# enabled rules doesn't dump them all -- the summary finding above already
+# carries the aggregate counts and tactic sets; these per-rule findings are
+# supplementary detail, not the coverage answer itself.
+_MAX_RULE_FINDINGS = 25
+
 
 async def get_detection_coverage(client: Any) -> list[Finding]:
     """Analytics-rule inventory and MITRE tactic gaps, built-in vs custom.
@@ -644,7 +714,8 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
     )
 
     out = [summary]
-    for r in enabled[:25]:
+    shown_rules = enabled[:_MAX_RULE_FINDINGS]
+    for r in shown_rules:
         p = r.get("properties") or {}
         out.append(
             Finding(
@@ -663,6 +734,14 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
                 ],
             )
         )
+    if len(enabled) > _MAX_RULE_FINDINGS:
+        out.append(
+            more_available_finding(
+                "sentinel", shown=len(shown_rules), total=len(enabled),
+                hint="The summary finding above already carries the full aggregate "
+                "counts and tactic sets; these are per-rule detail only.",
+            )
+        )
     return out
 
 
@@ -672,7 +751,9 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
 _CONTROL_PREFIX = "."
 
 
-async def run_kql(client: Any, kql: str, hours: float = 24, limit: int = 25) -> list[Finding]:
+async def run_kql(
+    client: Any, kql: str, hours_back: float = 24, limit: int = 25
+) -> list[Finding]:
     """Run a caller-supplied read-only KQL query, force-bounded."""
     cap = "Sentinel KQL query"
     query = (kql or "").strip()
@@ -715,11 +796,17 @@ async def run_kql(client: Any, kql: str, hours: float = 24, limit: int = 25) -> 
             )
         ]
 
-    hours = n.clamp_hours(hours, client.retention_days)
+    hours = n.clamp_hours(hours_back, client.retention_days)
     limit = clamp_limit(limit)
     lowered = query.lower()
     if " take " not in lowered and " limit " not in lowered and not lowered.endswith("take"):
-        query = f"{query} | take {limit}"
+        # A new line, not a trailing " | take N" appended to the same line:
+        # model-written KQL carries trailing `//` line comments routinely, and
+        # `"Heartbeat // note" + " | take 25"` becomes `"Heartbeat // note |
+        # take 25"` -- the whole bound silently swallowed by the comment, so
+        # the query dispatches unbounded. A KQL line comment only extends to
+        # the end of its own line, so a bound on the NEXT line always applies.
+        query = f"{query}\n| take {limit}"
 
     try:
         rows = await client.query(query, n.timespan(hours))
