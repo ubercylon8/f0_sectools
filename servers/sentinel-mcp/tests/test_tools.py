@@ -313,3 +313,68 @@ async def test_search_office_activity_missing_table_returns_posture(fake):
     client = fake(rows={USAGE: [{"DataType": "Syslog", "GB": 1.0}]})
     out = await tools.search_office_activity(client)
     assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+SI = "SecurityIncident"
+_INC = [{
+    "IncidentNumber": 4211, "Title": "Exfiltration incident", "Severity": "High",
+    "Status": "New", "Owner": "", "Tactics": '["Exfiltration"]',
+    "TimeGenerated": "2026-08-10T12:00:00Z", "IncidentUrl": "https://portal.azure.com/x",
+}]
+
+
+async def test_list_sentinel_incidents_returns_incident_findings(fake):
+    client = fake(rows={USAGE: _TABLES, SI: _INC})
+    out = await tools.list_sentinel_incidents(client)
+    assert any(f.finding_type.value == "incident" for f in out)
+    assert any("Exfiltration incident" in f.title for f in out)
+
+
+async def test_list_sentinel_incidents_surfaces_mitre_tactics(fake):
+    # Tactics are what this view adds over f0-defender.list_incidents.
+    client = fake(rows={USAGE: _TABLES, SI: _INC})
+    out = await tools.list_sentinel_incidents(client)
+    ev = {e.key: e.value for f in out for e in f.evidence}
+    assert "tactics" in ev and "Exfiltration" in ev["tactics"]
+
+
+async def test_list_sentinel_incidents_severity_min_filters(fake):
+    client = fake(rows={USAGE: _TABLES, SI: []})
+    await tools.list_sentinel_incidents(client, severity_min="high")
+    kql = [q for q in client.queries if SI in q][0]
+    assert "High" in kql and "Informational" not in kql
+
+
+async def test_list_sentinel_incidents_status_filter(fake):
+    client = fake(rows={USAGE: _TABLES, SI: []})
+    await tools.list_sentinel_incidents(client, status="new")
+    kql = [q for q in client.queries if SI in q][0]
+    assert 'Status =~ "New"' in kql
+
+
+async def test_list_sentinel_incidents_status_any_emits_no_status_filter(fake):
+    client = fake(rows={USAGE: _TABLES, SI: []})
+    await tools.list_sentinel_incidents(client, status="any")
+    kql = [q for q in client.queries if SI in q][0]
+    assert "Status =~" not in kql
+
+
+async def test_list_sentinel_incidents_deduplicates_by_incident_number(fake):
+    # SecurityIncident appends a NEW ROW on every incident update, so a naive
+    # list shows the same incident many times.
+    client = fake(rows={USAGE: _TABLES, SI: []})
+    await tools.list_sentinel_incidents(client)
+    kql = [q for q in client.queries if SI in q][0]
+    assert "arg_max(TimeGenerated, *) by IncidentNumber" in kql
+
+
+async def test_list_sentinel_incidents_bad_severity_reports(fake):
+    client = fake(rows={USAGE: _TABLES})
+    out = await tools.list_sentinel_incidents(client, severity_min="catastrophic")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+async def test_list_sentinel_incidents_missing_table_returns_posture(fake):
+    client = fake(rows={USAGE: [{"DataType": "Syslog", "GB": 1.0}]})
+    out = await tools.list_sentinel_incidents(client)
+    assert len(out) == 1 and out[0].finding_type.value == "posture"

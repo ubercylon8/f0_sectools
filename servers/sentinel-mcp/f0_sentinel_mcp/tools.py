@@ -353,3 +353,91 @@ async def search_office_activity(
             for r in rows[:limit]
         ]
     return _rows_to_findings(rows, "Operation", limit)
+
+
+_SEV_ORDER = ("informational", "low", "medium", "high")
+_SEV_VALUE = {
+    "informational": "Informational", "low": "Low", "medium": "Medium", "high": "High",
+}
+_SEV_FINDING = {
+    "informational": Severity.info, "low": Severity.low,
+    "medium": Severity.medium, "high": Severity.high,
+}
+_STATUS_VALUE = {"new": "New", "active": "Active", "closed": "Closed"}
+
+
+async def list_sentinel_incidents(
+    client: Any,
+    severity_min: str = "low",
+    status: str = "any",
+    hours: float = 168,
+    limit: int = 25,
+) -> list[Finding]:
+    """The Sentinel SOC incident queue, with MITRE tactics."""
+    cap = "Sentinel incidents"
+    if severity_min not in _SEV_ORDER:
+        return [_bad_arg("severity_min", severity_min, ", ".join(_SEV_ORDER))]
+    if status != "any" and status not in _STATUS_VALUE:
+        return [_bad_arg("status", status, "new, active, closed, any")]
+
+    missing = await require_table(client, "SecurityIncident", "Sentinel incidents")
+    if missing:
+        return [missing]
+
+    hours = n.clamp_hours(hours, client.retention_days)
+    limit = clamp_limit(limit)
+    wanted = _SEV_ORDER[_SEV_ORDER.index(severity_min):]
+    sev_list = ", ".join(f'"{_SEV_VALUE[s]}"' for s in wanted)
+
+    parts = [
+        "SecurityIncident",
+        f"| where TimeGenerated > ago({hours:g}h)",
+        # SecurityIncident appends a row per update; collapse to the latest
+        # state per incident or the queue reads as duplicates.
+        "| summarize arg_max(TimeGenerated, *) by IncidentNumber",
+        f"| where Severity in~ ({sev_list})",
+    ]
+    if status != "any":
+        parts.append(f'| where Status =~ "{_STATUS_VALUE[status]}"')
+    parts.append("| order by TimeGenerated desc")
+    parts.append(f"| take {limit}")
+    kql = " ".join(parts)
+
+    try:
+        rows = await client.query(kql, n.timespan(hours))
+    except GraphError as e:
+        mapped = map_sentinel_error(e, cap, half="logs")
+        if mapped:
+            return [mapped]
+        raise
+
+    if not rows:
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"No Sentinel incidents at severity {severity_min}+ in the last {hours:g}h",
+            )
+        ]
+
+    out: list[Finding] = []
+    for r in rows[:limit]:
+        num = str(r.get("IncidentNumber", "?"))
+        out.append(
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.incident,
+                severity=_SEV_FINDING.get(str(r.get("Severity", "")).lower(), Severity.medium),
+                title=f"#{num}: {r.get('Title') or 'Sentinel incident'}",
+                entity=Entity(kind=EntityKind.tenant, id=num, name=str(r.get("Title") or "")),
+                evidence=[
+                    Evidence(key="status", value=str(r.get("Status") or "")),
+                    Evidence(key="severity", value=str(r.get("Severity") or "")),
+                    Evidence(key="tactics", value=str(r.get("Tactics") or "")),
+                    Evidence(key="owner", value=str(r.get("Owner") or "unassigned")),
+                ],
+                observed_at=str(r.get("TimeGenerated") or "") or None,
+            )
+        )
+    return out
