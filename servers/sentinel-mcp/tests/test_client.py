@@ -39,6 +39,23 @@ def test_rows_to_dicts_handles_empty_and_malformed():
     assert rows_to_dicts({"tables": [{"columns": [], "rows": []}]}) == []
 
 
+def test_rows_to_dicts_skips_non_list_rows_instead_of_raising():
+    # A truncated or mangled response body can put a non-list entry (None, a
+    # bare string, a dict) in "rows". zip() would raise TypeError on a
+    # non-iterable and dict(zip(...)) on a string would silently produce
+    # garbage — either way violates "malformed payload yields [], never
+    # raises". Bad entries are skipped; good ones still come back.
+    body = {
+        "tables": [
+            {
+                "columns": [{"name": "a"}],
+                "rows": [None, [1], "oops", {"a": 1}, [2]],
+            }
+        ]
+    }
+    assert rows_to_dicts(body) == [{"a": 1}, {"a": 2}]
+
+
 async def test_query_posts_body_and_returns_dicts(monkeypatch):
     captured = {}
 

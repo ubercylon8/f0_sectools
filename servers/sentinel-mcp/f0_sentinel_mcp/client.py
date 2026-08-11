@@ -41,7 +41,11 @@ def rows_to_dicts(body: dict[str, Any]) -> list[dict[str, Any]]:
     cols = [str(c.get("name", "")) for c in (first.get("columns") or [])]
     if not cols:
         return []
-    return [dict(zip(cols, row, strict=False)) for row in (first.get("rows") or [])]
+    return [
+        dict(zip(cols, row, strict=False))
+        for row in (first.get("rows") or [])
+        if isinstance(row, list)
+    ]
 
 
 class SentinelClient:
