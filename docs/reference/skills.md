@@ -2,7 +2,7 @@
 
 # Skills catalog
 
-**27 portable [agentskills.io](https://agentskills.io) skills** — one set, loaded unmodified by every skills-aware runtime (Hermes, Claude Code, pi, opencode). Each links to its `SKILL.md` playbook. See [using skills & personas](../user-guide/using-skills-and-personas.md) for how to invoke them.
+**30 portable [agentskills.io](https://agentskills.io) skills** — one set, loaded unmodified by every skills-aware runtime (Hermes, Claude Code, pi, opencode). Each links to its `SKILL.md` playbook. See [using skills & personas](../user-guide/using-skills-and-personas.md) for how to invoke them.
 
 ## cross-platform
 
@@ -67,6 +67,14 @@
 | Skill | Description | Version | Tags |
 |---|---|---|---|
 | [`generate-report`](../../skills/reports/generate-report/SKILL.md) | Persona posture report (MD+HTML+PDF, EN/ES) from findings | 1.0.0 | security, report, posture, ciso, deliverable |
+
+## sentinel
+
+| Skill | Description | Version | Tags |
+|---|---|---|---|
+| [`data-source-coverage`](../../skills/sentinel/data-source-coverage/SKILL.md) | Audit what telemetry Sentinel ingests and what is missing | 1.0.0 | security, sentinel, siem, coverage, posture |
+| [`detection-coverage`](../../skills/sentinel/detection-coverage/SKILL.md) | Review Sentinel analytics rules and MITRE tactic gaps | 1.0.0 | security, sentinel, detection-engineering, coverage, mitre |
+| [`network-investigation`](../../skills/sentinel/network-investigation/SKILL.md) | Hunt an indicator across firewall, DNS and web telemetry | 1.0.0 | security, sentinel, network, hunt, investigation |
 
 ## tenable
 

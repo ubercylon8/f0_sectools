@@ -35,7 +35,7 @@ SOC status and owner — use f0-sentinel's list_sentinel_incidents.
 | `limit` | `integer` | `25` |
 | `state` | `"open"` \| `"all"` | `"open"` |
 
-Used by skills: [`triage-incident-cross-platform`](../../../skills/cross-platform/triage-incident-cross-platform/SKILL.md), [`defender-posture-summary`](../../../skills/defender/posture-summary/SKILL.md), [`triage-defender-incident`](../../../skills/defender/triage-incident/SKILL.md), [`intune-device-triage`](../../../skills/intune/device-triage/SKILL.md)
+Used by skills: [`triage-incident-cross-platform`](../../../skills/cross-platform/triage-incident-cross-platform/SKILL.md), [`defender-posture-summary`](../../../skills/defender/posture-summary/SKILL.md), [`triage-defender-incident`](../../../skills/defender/triage-incident/SKILL.md), [`intune-device-triage`](../../../skills/intune/device-triage/SKILL.md), [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md)
 
 ## `list_alerts`
 
@@ -102,7 +102,7 @@ custom KQL.
 | `indicator` | `string` | `""` |
 | `time_window_hours` | `integer` | `24` |
 
-Used by skills: [`defender-threat-hunt`](../../../skills/defender/threat-hunt/SKILL.md), [`investigate-lc-endpoint`](../../../skills/limacharlie/endpoint-investigation/SKILL.md), [`limacharlie-threat-hunt`](../../../skills/limacharlie/threat-hunt/SKILL.md)
+Used by skills: [`defender-threat-hunt`](../../../skills/defender/threat-hunt/SKILL.md), [`investigate-lc-endpoint`](../../../skills/limacharlie/endpoint-investigation/SKILL.md), [`limacharlie-threat-hunt`](../../../skills/limacharlie/threat-hunt/SKILL.md), [`data-source-coverage`](../../../skills/sentinel/data-source-coverage/SKILL.md)
 
 ## `isolate_host` 🔒 *(gated write)*
 

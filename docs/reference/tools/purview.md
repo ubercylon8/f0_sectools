@@ -86,7 +86,7 @@ get_audit_results. NEVER resubmit the same search while one is running
 | `hours_back` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
-Used by skills: [`investigate-audit-activity`](../../../skills/purview/audit-investigation/SKILL.md)
+Used by skills: [`investigate-audit-activity`](../../../skills/purview/audit-investigation/SKILL.md), [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
 
 ## `get_audit_results`
 

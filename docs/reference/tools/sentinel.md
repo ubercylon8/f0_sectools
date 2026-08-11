@@ -15,6 +15,8 @@ pick which hunt tool can answer a question before you call one.
 
 *No parameters.*
 
+Used by skills: [`data-source-coverage`](../../../skills/sentinel/data-source-coverage/SKILL.md), [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md), [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
+
 ## `hunt_firewall`
 
 SEARCH firewall traffic (Check Point / Fortinet) for an IP or port.
@@ -32,6 +34,8 @@ hunt_dns_web instead. Without an indicator this returns an aggregate
 | `indicator` | `string` | `""` |
 | `hours` | `number` | `24` |
 | `limit` | `integer` | `25` |
+
+Used by skills: [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
 
 ## `hunt_dns_web`
 
@@ -52,6 +56,8 @@ perimeter firewall connections by IP/port use hunt_firewall.
 | `hours` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
+Used by skills: [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
+
 ## `search_office_activity`
 
 Search Microsoft 365 audit activity: who accessed, downloaded, or shared what.
@@ -71,6 +77,8 @@ submits an asynchronous query that takes 5-15 minutes to return.
 | `hours` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
+Used by skills: [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
+
 ## `list_sentinel_incidents`
 
 List the Sentinel SOC incident queue with MITRE tactics, status and owner.
@@ -88,6 +96,8 @@ individual alerts use f0-defender's list_alerts.
 | `hours` | `number` | `168` |
 | `limit` | `integer` | `25` |
 
+Used by skills: [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md)
+
 ## `get_detection_coverage`
 
 Report Sentinel's analytics-rule inventory and which MITRE tactics are UNCOVERED.
@@ -103,6 +113,8 @@ tool. Disabled rules never count toward either figure. Requires the ARM
 coordinates in .env.sentinel; without them it says so.
 
 *No parameters.*
+
+Used by skills: [`data-source-coverage`](../../../skills/sentinel/data-source-coverage/SKILL.md), [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md)
 
 ## `run_kql`
 
