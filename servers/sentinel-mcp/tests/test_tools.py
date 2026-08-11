@@ -477,12 +477,46 @@ async def test_run_kql_semantic_error_returns_reason(fake):
     assert "Nope" in out[0].title
 
 
-async def test_run_kql_rejects_control_command_hidden_by_invisible_chars(fake):
-    # str.strip() alone does not remove Unicode format characters (BOM,
-    # zero-width space, ...), so a naive "strip then check dot prefix" guard
-    # can be bypassed by hiding one in front of the dot. Prove it stays closed.
+_LEADING_NONPRINTABLE = (
+    "\x00",  # NUL (C0 control)
+    "\x01",  # SOH (C0 control)
+    "\x08",  # BS  (C0 control)
+    "\x0e",  # SO  (C0 control)
+    "\x1b",  # ESC (C0 control)
+    "\x7f",  # DEL
+    "\x9f",  # APC (C1 control)
+    "﻿",  # BOM / zero-width no-break space
+    "​",  # zero-width space
+    "⁠",  # word joiner
+)
+
+
+async def test_run_kql_rejects_control_command_hidden_by_nonprintable_prefix(fake):
+    # str.strip() only removes ordinary whitespace. Both Unicode format chars
+    # (BOM, zero-width space, word joiner -- category Cf) and C0/C1 control
+    # characters (NUL, ESC, DEL, ... -- category Cc) survive it and can hide a
+    # dot-prefixed control command from a naive "strip then check dot prefix"
+    # guard. The fix is a whitelist (query[0].isprintable()), not a blacklist
+    # of categories discovered one PoC at a time -- exercise the whole class,
+    # not just the two characters that were first found to bypass it.
     client = fake(rows={})
-    for bad in ("﻿.drop table X", "​.set-or-append Y", " \n\t﻿.ingest inline"):
-        out = await tools.run_kql(client, bad)
-        assert len(out) == 1 and out[0].finding_type.value == "posture", bad
-    assert client.queries == []
+    for ch in _LEADING_NONPRINTABLE:
+        for bad in (f"{ch}.drop table X", f"{ch}.set-or-append Y", f" \n\t{ch}.ingest inline"):
+            out = await tools.run_kql(client, bad)
+            assert len(out) == 1 and out[0].finding_type.value == "posture", repr(bad)
+        assert client.queries == [], repr(ch)
+
+
+async def test_run_kql_ordinary_queries_still_dispatch(fake):
+    # The nonprintable-prefix guard must not regress into rejecting valid
+    # input: a plain query, and one with only ordinary leading whitespace,
+    # must both still reach client.query.
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    out = await tools.run_kql(client, "Heartbeat | take 5")
+    assert client.queries == ["Heartbeat | take 5"]
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+    client2 = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    out2 = await tools.run_kql(client2, "   \n\t Heartbeat | take 5")
+    assert client2.queries == ["Heartbeat | take 5"]
+    assert any(f.finding_type.value == "hunt_result" for f in out2)

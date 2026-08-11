@@ -6,7 +6,6 @@ dict access is defensive throughout because the next workspace differs.
 """
 from __future__ import annotations
 
-import unicodedata
 from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
@@ -540,29 +539,35 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
 _CONTROL_PREFIX = "."
 
 
-def _strip_leading_invisible(s: str) -> str:
-    """Strip leading whitespace AND Unicode format characters.
-
-    ``str.strip()`` removes whitespace (category Zs and friends) but leaves
-    format characters like U+FEFF (BOM) or U+200B (zero-width space) in
-    place. A query prefixed with one of those would still read as
-    non-dot-prefixed to a plain ``.strip().startswith(".")`` check even
-    though it hides a control command underneath -- Kusto's own tokenizer
-    treats such characters as insignificant. Strip them here so the
-    control-command check cannot be bypassed this way.
-    """
-    i = 0
-    while i < len(s) and (s[i].isspace() or unicodedata.category(s[i]) == "Cf"):
-        i += 1
-    return s[i:]
-
-
 async def run_kql(client: Any, kql: str, hours: float = 24, limit: int = 25) -> list[Finding]:
     """Run a caller-supplied read-only KQL query, force-bounded."""
     cap = "Sentinel KQL query"
-    query = _strip_leading_invisible((kql or "").strip()).rstrip()
+    query = (kql or "").strip()
     if not query:
         return [_bad_arg("kql", kql or "", "a KQL query, e.g. 'Heartbeat | take 10'")]
+    if not query[0].isprintable():
+        # Whitelist, not blacklist: str.strip() only removes ordinary
+        # whitespace, so a leading invisible/control character (BOM,
+        # zero-width space, C0/C1 controls, ...) can survive it and hide a
+        # dot-prefixed control command from the startswith(".") check below.
+        # Rather than enumerate every Unicode category that can do this,
+        # reject any query that doesn't begin with an ordinary printable
+        # character -- no legitimate KQL query starts with one, so this
+        # closes the class by construction instead of one exploit at a time.
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title="Query must begin with ordinary text — leading invisible or "
+                "control characters are not permitted",
+                recommended_action=RecommendedAction(
+                    summary="Remove any leading invisible/control characters and "
+                    "retry with a plain KQL query (TableName | where ... | take N).",
+                    confidence="high",
+                ),
+            )
+        ]
     if query.startswith(_CONTROL_PREFIX):
         return [
             Finding(
