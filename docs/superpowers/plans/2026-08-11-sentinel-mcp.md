@@ -27,6 +27,7 @@
 - **Header-row hygiene.** The tenant's Umbrella connectors ingest CSV headers as data (`Action_s == "Action"`, `Verdict_s == "Action"`, `AMP_Disposition_s == "AMP Disposition"`). Every Umbrella query and aggregate filters them out.
 - **`source="sentinel"`** on every `Finding`.
 - **Package name** `f0_sentinel_mcp`; **distribution** `f0-sentinel-mcp`; **MCP server name** `f0-sentinel`; **entry point** `f0-sentinel-mcp = "f0_sentinel_mcp.server:main"`.
+- **Typecheck with `uv run mypy .` from the repo root, never scoped to one server.** Scoping mypy to a single server package makes `core` un-analyzable (it ships no `py.typed` marker), producing spurious `import-untyped` errors and the `no-any-return` errors that cascade from them. Verified 2026-08-11: the shipped `tenable-mcp` reproduces the same errors when scoped. Root `mypy .` is the CI gate.
 - **Commit conventionally, never push.** Use `git commit -F <file>` when the message contains backticks.
 - **`uv run python scripts/gen_docs.py` after any tool/docstring/skill change**, and commit the regenerated `docs/reference/` — CI's drift guard fails on stale docs.
 
@@ -547,7 +548,7 @@ class SentinelClient:
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/test_client.py -v && uv run mypy servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/test_client.py -v && uv run mypy .`
 Expected: PASS, mypy clean
 
 > If `GraphClient.__aexit__` requires positional args, call `await self._logs.__aexit__(None, None, None)`. Confirm against `core/f0_sectools_core/auth/graph.py:47`.
@@ -735,7 +736,7 @@ def map_sentinel_error(e: Exception, capability: str, half: str = "logs") -> Fin
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/test_errors.py -v && uv run mypy servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/test_errors.py -v && uv run mypy .`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1049,7 +1050,7 @@ def indicator_clause(spec: Surface, indicator: str) -> str:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/test_normalize.py -v && uv run mypy servers/sentinel-mcp && uv run ruff check servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/test_normalize.py -v && uv run mypy . && uv run ruff check servers/sentinel-mcp`
 Expected: PASS
 
 > `vpn`'s `Event_Type_s` values (`connected`/`failed`) are the one unverified guess in this table — the RA-VPN table had only ~10K rows and was not sampled for that field. Task 15 confirms it live and fixes forward.
@@ -1394,7 +1395,7 @@ async def list_data_sources(client: Any) -> list[Finding]:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp && uv run ruff check servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy . && uv run ruff check servers/sentinel-mcp`
 Expected: PASS. Ruff must be clean here: import only what this task uses — later
 tasks extend the block as they need names.
 
@@ -1646,7 +1647,7 @@ async def hunt_firewall(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy .`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1757,7 +1758,7 @@ async def hunt_dns_web(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy .`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1947,7 +1948,7 @@ async def search_office_activity(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy .`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -2137,7 +2138,7 @@ async def list_sentinel_incidents(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy .`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -2313,7 +2314,7 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy .`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -2442,7 +2443,7 @@ async def run_kql(client: Any, kql: str, hours: float = 24, limit: int = 25) -> 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp && uv run ruff check servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy . && uv run ruff check servers/sentinel-mcp`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -2680,7 +2681,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/ -v && uv run mypy servers/sentinel-mcp && uv run ruff check servers/sentinel-mcp`
+Run: `uv run pytest servers/sentinel-mcp/ -v && uv run mypy . && uv run ruff check servers/sentinel-mcp`
 Expected: PASS
 
 > If `mcp.server.MCPServer` or `t.input_schema` do not resolve, match whatever `servers/purview-mcp/f0_purview_mcp/server.py` and `integrations/test_integrations_valid.py` currently use — the repo migrated to MCP 2.0 in PR #94 and those two files are the reference.
