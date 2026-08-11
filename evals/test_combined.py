@@ -65,7 +65,7 @@ def test_combined_tasks_tagged_with_origin_and_include_probes():
     import yaml
     tasks = combined_tasks()
     # 15 defender + 8 entra + 14 limacharlie + 14 projectachilles + 8 intune
-    # + 10 tenable + 16 projectachilles-actions + 8 purview + 17 sentinel = 110, plus probes.
+    # + 10 tenable + 16 projectachilles-actions + 8 purview + 18 sentinel = 111, plus probes.
     # Distinguish by checking against native task prompts.
     native_prompts = set()
     for server in [
@@ -76,7 +76,7 @@ def test_combined_tasks_tagged_with_origin_and_include_probes():
             native = yaml.safe_load(fh)
         native_prompts.update(t["prompt"] for t in (native or []))
     per_server = [t for t in tasks if t["prompt"] in native_prompts]
-    assert len(per_server) == 110
+    assert len(per_server) == 111
     probes = [t for t in tasks if t["prompt"] not in native_prompts]
     assert len(probes) >= 6, "expected the cross-platform probe set"
     assert all("origin" in t and "prompt" in t and "expect_tool" in t for t in tasks)

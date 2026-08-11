@@ -13,7 +13,7 @@
 - prompt: "Which log sources are feeding our SIEM?"
   expect_tool: list_data_sources
 
-- prompt: "Show me traffic the firewall blocked in the last 12 hours."
+- prompt: "Show me connections our perimeter blocked in the last 12 hours."
   expect_tool: hunt_firewall
   expect_args_contains: { action: blocked }
 
@@ -40,7 +40,7 @@
 - prompt: "Did anyone access mailboxes they shouldn't have in Exchange?"
   expect_tool: search_office_activity
 
-- prompt: "What's in the Sentinel incident queue right now?"
+- prompt: "What incidents are currently unassigned and waiting for triage?"
   expect_tool: list_sentinel_incidents
 
 - prompt: "Show me high severity Sentinel incidents that are still open."
@@ -50,7 +50,7 @@
 - prompt: "What attacks do our Sentinel analytics rules actually detect?"
   expect_tool: get_detection_coverage
 
-- prompt: "Where are the gaps in our detection coverage?"
+- prompt: "Which ATT&CK tactics are we only logging but not actively detecting?"
   expect_tool: get_detection_coverage
 
 - prompt: "Run this Sentinel query for me: Heartbeat | summarize count() by Computer"
@@ -66,3 +66,6 @@
 
 - prompt: "Query the Sentinel workspace for the Syslog table."
   expect_tool: run_kql
+
+- prompt: "When did user alice@contoso.com last access her Exchange mailbox?"
+  expect_tool: search_office_activity  # NOT f0-purview.search_audit_log: fast indexed lookup vs. slow async query
