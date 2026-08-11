@@ -10,9 +10,8 @@ verdict_s=ALLOW/BLOCK). Exposing any of that to a small model is the
 "40-value enum the model picks wrong from" failure CLAUDE.md names explicitly.
 
 Everything here is table-driven so a new vendor is a SURFACE_SPECS entry, not a
-tool rewrite. Field names, action values, and junk values verified against live
-data 2026-08-11, except the `vpn` surface's `action_map` -- see its inline
-comment below.
+tool rewrite. Field names, action values, and junk values -- including the
+`vpn` surface's -- were verified against live data 2026-08-11.
 """
 from __future__ import annotations
 
@@ -100,15 +99,18 @@ SURFACE_SPECS: dict[str, Surface] = {
     "vpn": Surface(
         table="Cisco_Umbrella_ravpnlogs_CL",
         action_field="Event_Type_s",
-        # PROVISIONAL: connected/failed are an unverified guess -- the RA-VPN
-        # table had only ~10K rows and was not sampled live 2026-08-11. Task 15
-        # confirms this live and fixes forward; do not treat as verified.
-        action_map={"allowed": ("connected",), "blocked": ("failed",)},
+        # Live-verified 2026-08-11 (7d sample): Connected=10742, Failed=1,
+        # plus Disconnected=240 (a session end, not an accept/deny outcome --
+        # deliberately left out of both buckets rather than guessed into one).
+        action_map={"allowed": ("Connected",), "blocked": ("Failed",)},
         indicator_fields=("User_ID_s", "Public_IP_s", "Assigned_IP_s"),
         project=(
             "TimeGenerated", "Event_Type_s", "User_ID_s", "Public_IP_s",
             "Assigned_IP_s", "VPN_Profile_s", "OS_Version_s", "Failed_Reasons_s",
         ),
+        # Live-verified 2026-08-11: Event_Type_s == "Event Type" (~762/7d) is
+        # the CSV header row ingested as data, same defect as dns/web.
+        junk=("Event Type",),
     ),
 }
 
@@ -154,8 +156,9 @@ def hygiene_clause(spec: Surface) -> str:
     """Drop CSV header rows that the connector ingested as data.
 
     Verified 2026-08-11: Action_s == "Action" (~2.3K rows/day),
-    Verdict_s == "Action" (~1.2K/day). Without this every "top values" answer
-    carries a phantom bucket.
+    Verdict_s == "Action" (~1.2K/day), Event_Type_s == "Event Type"
+    (~762 rows/7d). Without this every "top values" answer carries a
+    phantom bucket.
     """
     if not spec.junk:
         return ""

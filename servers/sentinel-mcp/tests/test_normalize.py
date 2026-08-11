@@ -61,6 +61,26 @@ def test_hygiene_clause_empty_when_surface_has_no_junk():
     assert n.hygiene_clause(n.SURFACE_SPECS["firewall"]) == ""
 
 
+def test_vpn_surface_has_a_junk_filter_for_the_csv_header_row():
+    # Live-verified 2026-08-11: Event_Type_s == "Event Type" (~762 rows/7d)
+    # is the CSV header ingested as data, the same defect dns/web already
+    # filter. The vpn surface previously had no `junk` tuple at all.
+    clause = n.hygiene_clause(n.SURFACE_SPECS["vpn"])
+    assert '"Event Type"' in clause and "!in~" in clause
+
+
+def test_vpn_action_map_uses_live_verified_capitalised_values():
+    # Real Event_Type_s values are "Connected"/"Failed" (capitalised), plus
+    # "Disconnected" which maps to neither -- it's a session end, not an
+    # accept/deny outcome. The old lowercase guess only matched via `in~`'s
+    # case-insensitivity, not because it was correct.
+    vpn = n.SURFACE_SPECS["vpn"]
+    assert vpn.action_map["allowed"] == ("Connected",)
+    assert vpn.action_map["blocked"] == ("Failed",)
+    mapped_values = {v for values in vpn.action_map.values() for v in values}
+    assert "Disconnected" not in mapped_values
+
+
 def test_validate_indicator_net_accepts_ip_and_port_rejects_domain():
     assert n.validate_indicator("10.1.2.3", "net") is True
     assert n.validate_indicator("443", "net") is True

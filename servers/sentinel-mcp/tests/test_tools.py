@@ -244,6 +244,35 @@ async def test_hunt_dns_web_missing_umbrella_table_returns_posture(fake):
     assert len(out) == 1 and out[0].finding_type.value == "posture"
 
 
+VPN = "Cisco_Umbrella_ravpnlogs_CL"
+
+
+async def test_hunt_dns_web_vpn_filters_ingested_csv_header_rows(fake):
+    # Live-verified 2026-08-11: Event_Type_s == "Event Type" is the CSV
+    # header ingested as data, ~762 rows/7d alongside 10742 "Connected".
+    client = fake(rows={USAGE: [*_TABLES, {"DataType": VPN, "GB": 0.5}], VPN: []})
+    await tools.hunt_dns_web(client, surface="vpn")
+    kql = [q for q in client.queries if VPN in q][0]
+    assert '!in~ ("Event Type")' in kql
+
+
+async def test_hunt_dns_web_vpn_action_allowed_maps_to_capitalised_connected(fake):
+    # Real Event_Type_s values are capitalised ("Connected"/"Failed"), not
+    # lowercase -- the lowercase guess only ever matched by luck via `in~`'s
+    # case-insensitivity.
+    client = fake(rows={USAGE: [*_TABLES, {"DataType": VPN, "GB": 0.5}], VPN: []})
+    await tools.hunt_dns_web(client, surface="vpn", action="allowed")
+    kql = [q for q in client.queries if VPN in q][0]
+    assert "Connected" in kql and "connected" not in kql
+
+
+async def test_hunt_dns_web_vpn_action_blocked_maps_to_capitalised_failed(fake):
+    client = fake(rows={USAGE: [*_TABLES, {"DataType": VPN, "GB": 0.5}], VPN: []})
+    await tools.hunt_dns_web(client, surface="vpn", action="blocked")
+    kql = [q for q in client.queries if VPN in q][0]
+    assert "Failed" in kql and "failed" not in kql
+
+
 OA = "OfficeActivity"
 
 
@@ -316,10 +345,24 @@ async def test_search_office_activity_missing_table_returns_posture(fake):
 
 
 SI = "SecurityIncident"
+# Real SecurityIncident shape (live-verified 2026-08-11): there is NO
+# `Tactics` column. Tactics/techniques live inside `AdditionalData`, a JSON
+# STRING (not a nested object -- the fixture must encode that or a test can
+# pass against a shape the platform never sends). `Owner` is likewise a JSON
+# string, commonly all-null on an unassigned incident. Values below are
+# fabricated placeholders, not real tenant data.
 _INC = [{
     "IncidentNumber": 4211, "Title": "Exfiltration incident", "Severity": "High",
-    "Status": "New", "Owner": "", "Tactics": '["Exfiltration"]',
-    "TimeGenerated": "2026-08-10T12:00:00Z", "IncidentUrl": "https://portal.azure.com/x",
+    "Status": "New",
+    "Owner": '{"objectId":null,"email":null,"assignedTo":null,"userPrincipalName":null}',
+    "AdditionalData": (
+        '{"alertsCount":1,"bookmarksCount":0,"commentsCount":0,'
+        '"alertProductNames":["Microsoft Defender Advanced Threat Protection"],'
+        '"tactics":["Exfiltration"],"techniques":["T1041"],'
+        '"providerIncidentUrl":"https://contoso.example/incident/4211"}'
+    ),
+    "TimeGenerated": "2026-08-10T12:00:00Z",
+    "IncidentUrl": "https://contoso.example/incident/4211",
 }]
 
 
@@ -331,11 +374,84 @@ async def test_list_sentinel_incidents_returns_incident_findings(fake):
 
 
 async def test_list_sentinel_incidents_surfaces_mitre_tactics(fake):
-    # Tactics are what this view adds over f0-defender.list_incidents.
+    # Tactics are what this view adds over f0-defender.list_incidents. There
+    # is no `Tactics` column on SecurityIncident -- this must come from
+    # parsing the `AdditionalData` JSON string. Reverting the extraction to
+    # `r.get("Tactics")` must make this test fail (see task-15 mutation
+    # evidence): the fixture carries no such key, by construction.
     client = fake(rows={USAGE: _TABLES, SI: _INC})
     out = await tools.list_sentinel_incidents(client)
     ev = {e.key: e.value for f in out for e in f.evidence}
     assert "tactics" in ev and "Exfiltration" in ev["tactics"]
+
+
+async def test_list_sentinel_incidents_surfaces_mitre_techniques(fake):
+    client = fake(rows={USAGE: _TABLES, SI: _INC})
+    out = await tools.list_sentinel_incidents(client)
+    ev = {e.key: e.value for f in out for e in f.evidence}
+    assert "techniques" in ev and "T1041" in ev["techniques"]
+
+
+async def test_list_sentinel_incidents_owner_all_null_reports_unassigned(fake):
+    # Live shape: {"objectId":null,"email":null,"assignedTo":null,
+    # "userPrincipalName":null}. The raw blob must never be emitted.
+    client = fake(rows={USAGE: _TABLES, SI: _INC})
+    out = await tools.list_sentinel_incidents(client)
+    ev = {e.key: e.value for f in out for e in f.evidence}
+    assert ev["owner"] == "unassigned"
+    assert "objectId" not in ev["owner"]
+    assert "null" not in ev["owner"]
+
+
+async def test_list_sentinel_incidents_owner_parses_assigned_display_name(fake):
+    assigned = [{
+        **_INC[0],
+        "Owner": '{"objectId":"11111111-1111-1111-1111-111111111111","email":null,'
+        '"assignedTo":"Jane Analyst","userPrincipalName":null}',
+    }]
+    client = fake(rows={USAGE: _TABLES, SI: assigned})
+    out = await tools.list_sentinel_incidents(client)
+    ev = {e.key: e.value for f in out for e in f.evidence}
+    assert ev["owner"] == "Jane Analyst"
+
+
+# --- Defensive JSON parsing: AdditionalData/Owner may be absent, empty,
+# malformed, or already-a-dict. None of those may raise; every non-object
+# outcome must degrade to an empty/safe value.
+
+def test_parse_json_object_passes_through_an_already_deserialized_dict():
+    assert tools._parse_json_object({"tactics": ["Impact"]}) == {"tactics": ["Impact"]}
+
+
+def test_parse_json_object_none_and_empty_string_yield_empty_dict():
+    assert tools._parse_json_object(None) == {}
+    assert tools._parse_json_object("") == {}
+
+
+def test_parse_json_object_malformed_json_does_not_raise():
+    assert tools._parse_json_object("{not valid json") == {}
+
+
+def test_parse_json_object_non_object_json_yields_empty_dict():
+    # Valid JSON that isn't an object (a bare list/number/string) must not be
+    # handed back as-is -- callers assume a dict and would crash on .get().
+    assert tools._parse_json_object("[1, 2, 3]") == {}
+    assert tools._parse_json_object("42") == {}
+
+
+def test_incident_tactics_techniques_absent_additionaldata_is_empty():
+    assert tools._incident_tactics_techniques(None) == ("", "")
+    assert tools._incident_tactics_techniques("") == ("", "")
+
+
+def test_incident_tactics_techniques_malformed_json_is_empty_not_raising():
+    assert tools._incident_tactics_techniques("{broken") == ("", "")
+
+
+def test_incident_owner_absent_or_malformed_falls_back_to_unassigned():
+    assert tools._incident_owner(None) == "unassigned"
+    assert tools._incident_owner("") == "unassigned"
+    assert tools._incident_owner("{broken") == "unassigned"
 
 
 async def test_list_sentinel_incidents_severity_min_filters(fake):
@@ -380,12 +496,34 @@ async def test_list_sentinel_incidents_missing_table_returns_posture(fake):
     assert len(out) == 1 and out[0].finding_type.value == "posture"
 
 
+# Shaped after the live finding: one Fusion rule (Microsoft's built-in
+# correlation rule) carrying a dozen tactics on its own, plus a handful of
+# genuinely custom Scheduled rules that only ever tag two tactics between
+# them. If a change ever counts Fusion as "custom", `rules_custom` and
+# `tactics_covered_custom` below both catch it.
+_FUSION_TACTICS = [
+    "InitialAccess", "Persistence", "PrivilegeEscalation", "DefenseEvasion",
+    "CredentialAccess", "Discovery", "LateralMovement", "Collection",
+    "CommandAndControl", "Exfiltration", "Impact", "Execution",
+]
 _RULES = [
-    {"kind": "Scheduled", "properties": {"displayName": "Disabling Security Services",
+    {"kind": "Fusion", "name": "BuiltInFusion",
+     "properties": {"displayName": "Advanced Multistage Attack Detection",
+     "enabled": True, "severity": "High", "tactics": _FUSION_TACTICS}},
+    {"kind": "Scheduled", "name": "custom-defense-evasion-1",
+     "properties": {"displayName": "Disabling Security Services",
      "enabled": True, "severity": "Medium", "tactics": ["DefenseEvasion"]}},
-    {"kind": "Fusion", "properties": {"displayName": "Advanced Multistage Attack Detection",
-     "enabled": True, "severity": "High", "tactics": ["InitialAccess", "Exfiltration"]}},
-    {"kind": "Scheduled", "properties": {"displayName": "Retired rule",
+    {"kind": "Scheduled", "name": "custom-defense-evasion-2",
+     "properties": {"displayName": "Suspicious Registry Modification",
+     "enabled": True, "severity": "Medium", "tactics": ["DefenseEvasion"]}},
+    {"kind": "Scheduled", "name": "custom-initial-access-1",
+     "properties": {"displayName": "Impossible Travel Sign-in",
+     "enabled": True, "severity": "High", "tactics": ["InitialAccess"]}},
+    {"kind": "Scheduled", "name": "custom-initial-access-2",
+     "properties": {"displayName": "New Country Sign-in",
+     "enabled": True, "severity": "Medium", "tactics": ["InitialAccess"]}},
+    {"kind": "Scheduled", "name": "retired-rule",
+     "properties": {"displayName": "Retired rule",
      "enabled": False, "severity": "Low", "tactics": []}},
 ]
 
@@ -395,20 +533,40 @@ async def test_get_detection_coverage_summarizes_rules(fake):
     out = await tools.get_detection_coverage(client)
     summary = out[0]
     ev = {e.key: e.value for e in summary.evidence}
-    assert ev["rules_total"] == "3"
-    assert ev["rules_enabled"] == "2"
+    assert ev["rules_total"] == "6"
+    assert ev["rules_enabled"] == "5"
+    assert ev["rules_custom"] == "5"
 
 
-async def test_get_detection_coverage_names_uncovered_tactics(fake):
-    # Naming the GAP is the whole value: the incident queue cannot show it.
+async def test_get_detection_coverage_distinguishes_builtin_from_custom(fake):
+    # This distinction is the whole fix: the live workspace showed "12 of 14
+    # tactics covered" overall while its own (non-Fusion) rules covered only
+    # DefenseEvasion and InitialAccess. Counting the Fusion rule as custom
+    # coverage must make this test fail (see task-15 mutation evidence).
     client = fake(arm={"alertRules": _RULES})
     out = await tools.get_detection_coverage(client)
     summary = out[0]
     ev = {e.key: e.value for e in summary.evidence}
-    # The fixture rules only ever tag DefenseEvasion, InitialAccess and
-    # Exfiltration -- Persistence must show up in the *value*, not merely
-    # because the evidence key happens to be named "tactics_uncovered".
-    assert "Persistence" in ev["tactics_uncovered"]
+    assert ev["tactics_covered_custom"] == "DefenseEvasion, InitialAccess"
+    assert len(ev["tactics_covered_all"].split(", ")) == 12
+    assert "Persistence" in ev["tactics_uncovered_custom"]
+    # Persistence IS covered overall (by Fusion) -- it must not appear in the
+    # "uncovered_all" list even though it's absent from every custom rule.
+    assert "Persistence" not in ev["tactics_uncovered_all"].split(", ")
+    assert "2 of 14 MITRE tactics covered by custom rules" in summary.title
+
+
+async def test_get_detection_coverage_names_uncovered_tactics(fake):
+    # Naming the GAP for custom rules is the whole value: the incident queue
+    # cannot show it, and a coverage figure padded by Fusion hides it.
+    client = fake(arm={"alertRules": _RULES})
+    out = await tools.get_detection_coverage(client)
+    summary = out[0]
+    ev = {e.key: e.value for e in summary.evidence}
+    # Persistence is tagged only by the Fusion rule -- absent from every
+    # custom rule -- so it must show up in tactics_uncovered_custom's VALUE,
+    # not merely because the evidence key happens to be named that.
+    assert "Persistence" in ev["tactics_uncovered_custom"]
     assert summary.recommended_action is not None
     assert "Persistence" in summary.recommended_action.summary
 

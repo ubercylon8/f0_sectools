@@ -90,10 +90,11 @@ async def main(hours: float, persona: str | None) -> None:
     async with SentinelClient(cfg) as c:
         # 1. Capability inventory -- shown in full (not the 6-item default) so
         #    a human can scan for OfficeActivity / SecurityIncident /
-        #    SecurityAlert specifically. If the Usage-based probe still omits
-        #    them despite querying without an IsBillable filter, this is where
-        #    it shows up, and probe._USAGE_KQL needs to move to the workspace
-        #    metadata endpoint instead (see probe.py's docstring).
+        #    SecurityAlert specifically. Live-confirmed 2026-08-11: the
+        #    Usage-based, no-IsBillable-filter probe returns all 27 ingesting
+        #    tables including these three (OfficeActivity at 34.79 GB/30d) --
+        #    the workspace-metadata-endpoint fallback discussed in probe.py's
+        #    docstring is NOT needed.
         await _run("list_data_sources", tools.list_data_sources(c), persona, show=60)
 
         # 2. Firewall (CommonSecurityLog) -- aggregate only (no indicator), so

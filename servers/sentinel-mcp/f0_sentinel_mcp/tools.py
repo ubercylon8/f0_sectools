@@ -6,6 +6,7 @@ dict access is defensive throughout because the next workspace differs.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
@@ -366,6 +367,58 @@ _SEV_FINDING = {
 _STATUS_VALUE = {"new": "New", "active": "Active", "closed": "Closed"}
 
 
+def _parse_json_object(raw: Any) -> dict[str, Any]:
+    """Defensively parse a Sentinel JSON-string column into a dict.
+
+    `SecurityIncident.AdditionalData` and `.Owner` are JSON strings, but the
+    field may be absent, an empty string, malformed JSON, or -- depending on
+    the client -- already deserialized into a dict. None of those may raise;
+    every non-dict outcome degrades to {}.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _incident_owner(raw: Any) -> str:
+    """The assigned display name/UPN/email from the Owner JSON blob.
+
+    Live shape: {"objectId":null,"email":null,"assignedTo":null,
+    "userPrincipalName":null} -- all four are commonly null on an unassigned
+    incident. Never emit the raw blob; fall back to the literal "unassigned".
+    """
+    owner = _parse_json_object(raw)
+    for key in ("assignedTo", "userPrincipalName", "email"):
+        val = owner.get(key)
+        if val:
+            return str(val)
+    return "unassigned"
+
+
+def _incident_tactics_techniques(raw: Any) -> tuple[str, str]:
+    """(tactics, techniques) as comma-joined strings from AdditionalData.
+
+    SecurityIncident has NO `Tactics` column -- MITRE tactics/techniques live
+    inside `AdditionalData`, a JSON string shaped like
+    {"tactics":["InitialAccess"],"techniques":["T1566"],...}.
+    """
+    data = _parse_json_object(raw)
+    tactics = data.get("tactics")
+    techniques = data.get("techniques")
+    tactics_list = tactics if isinstance(tactics, list) else []
+    techniques_list = techniques if isinstance(techniques, list) else []
+    return (
+        ", ".join(str(t) for t in tactics_list),
+        ", ".join(str(t) for t in techniques_list),
+    )
+
+
 async def list_sentinel_incidents(
     client: Any,
     severity_min: str = "low",
@@ -424,6 +477,7 @@ async def list_sentinel_incidents(
     out: list[Finding] = []
     for r in rows[:limit]:
         num = str(r.get("IncidentNumber", "?"))
+        tactics, techniques = _incident_tactics_techniques(r.get("AdditionalData"))
         out.append(
             Finding(
                 source="sentinel",
@@ -434,8 +488,9 @@ async def list_sentinel_incidents(
                 evidence=[
                     Evidence(key="status", value=str(r.get("Status") or "")),
                     Evidence(key="severity", value=str(r.get("Severity") or "")),
-                    Evidence(key="tactics", value=str(r.get("Tactics") or "")),
-                    Evidence(key="owner", value=str(r.get("Owner") or "unassigned")),
+                    Evidence(key="tactics", value=tactics),
+                    Evidence(key="techniques", value=techniques),
+                    Evidence(key="owner", value=_incident_owner(r.get("Owner"))),
                 ],
                 observed_at=str(r.get("TimeGenerated") or "") or None,
             )
@@ -453,8 +508,31 @@ _ALL_TACTICS = (
 )
 
 
+def _is_builtin_rule(r: dict[str, Any]) -> bool:
+    """True for Microsoft's built-in correlation rule, not an operator's own.
+
+    A `Fusion`-kind rule (ARM `name` conventionally "BuiltInFusion") is a
+    single Microsoft-authored correlation rule that legitimately carries a
+    dozen tactics on its own -- counting it as "coverage" the same way as a
+    hand-authored `Scheduled` rule overstates what the operator has actually
+    built. Both signals are checked: `kind` is the documented one, `name` is
+    a live-observed belt-and-suspenders in case a workspace ever renames or
+    re-kinds it.
+    """
+    return str(r.get("kind", "")) == "Fusion" or str(r.get("name", "")) == "BuiltInFusion"
+
+
 async def get_detection_coverage(client: Any) -> list[Finding]:
-    """Analytics-rule inventory and MITRE tactic gaps (Sentinel management API)."""
+    """Analytics-rule inventory and MITRE tactic gaps, built-in vs custom.
+
+    Reports two coverage numbers, never conflated: the tactic set covered by
+    ALL enabled rules (including Microsoft's built-in Fusion correlation
+    rule) and the tactic set covered by CUSTOM (operator-authored,
+    non-Fusion) rules alone. A workspace can show "12 of 14 tactics covered"
+    overall while its own analytics rules cover only 2 -- the rest comes from
+    one built-in rule, not from anything the operator built. Collapsing those
+    into one number hides the actual detection gap this tool exists to name.
+    """
     cap = "Sentinel detection coverage"
     if not client.has_arm:
         return [
@@ -481,31 +559,51 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
         raise
 
     enabled = [r for r in rules if (r.get("properties") or {}).get("enabled")]
+    custom_rules = [r for r in rules if not _is_builtin_rule(r)]
     kinds: dict[str, int] = {}
-    covered: set[str] = set()
+    covered_all: set[str] = set()
+    covered_custom: set[str] = set()
     for r in rules:
-        kinds[str(r.get("kind", "unknown"))] = kinds.get(str(r.get("kind", "unknown")), 0) + 1
-        for t in (r.get("properties") or {}).get("tactics") or []:
-            covered.add(str(t))
-    uncovered = [t for t in _ALL_TACTICS if t not in covered]
+        kind = str(r.get("kind", "unknown"))
+        kinds[kind] = kinds.get(kind, 0) + 1
+        tactics = (r.get("properties") or {}).get("tactics") or []
+        is_builtin = _is_builtin_rule(r)
+        for t in tactics:
+            covered_all.add(str(t))
+            if not is_builtin:
+                covered_custom.add(str(t))
+    uncovered_all = [t for t in _ALL_TACTICS if t not in covered_all]
+    uncovered_custom = [t for t in _ALL_TACTICS if t not in covered_custom]
+
+    custom_tactics_str = ", ".join(sorted(covered_custom)) or "none"
+    uncovered_custom_str = ", ".join(uncovered_custom) or "none"
 
     summary = Finding(
         source="sentinel",
         finding_type=FindingType.posture,
-        severity=Severity.medium if len(enabled) < 10 else Severity.info,
-        title=f"{len(rules)} Sentinel analytics rules ({len(enabled)} enabled), "
-        f"{len(covered)} of {len(_ALL_TACTICS)} MITRE tactics covered",
+        severity=Severity.medium if len(covered_custom) < 4 else Severity.info,
+        title=f"{len(rules)} Sentinel analytics rules ({len(enabled)} enabled, "
+        f"{len(custom_rules)} custom) — {len(covered_custom)} of {len(_ALL_TACTICS)} "
+        f"MITRE tactics covered by custom rules ({len(covered_all)} covered overall, "
+        "incl. built-in Fusion)",
         entity=Entity(kind=EntityKind.tenant, id="sentinel"),
         evidence=[
             Evidence(key="rules_total", value=str(len(rules))),
             Evidence(key="rules_enabled", value=str(len(enabled))),
+            Evidence(key="rules_custom", value=str(len(custom_rules))),
             Evidence(key="kinds", value=", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))),
-            Evidence(key="tactics_covered", value=", ".join(sorted(covered)) or "none"),
-            Evidence(key="tactics_uncovered", value=", ".join(uncovered) or "none"),
+            Evidence(key="tactics_covered_all", value=", ".join(sorted(covered_all)) or "none"),
+            Evidence(key="tactics_covered_custom", value=custom_tactics_str),
+            Evidence(key="tactics_uncovered_all", value=", ".join(uncovered_all) or "none"),
+            Evidence(key="tactics_uncovered_custom", value=uncovered_custom_str),
         ],
         recommended_action=RecommendedAction(
-            summary="Uncovered tactics: " + (", ".join(uncovered) or "none") +
-            ". Add analytics rules or enable Content Hub solutions for these.",
+            summary=f"Custom (operator-authored, non-Fusion) rules cover only "
+            f"{len(covered_custom)} of {len(_ALL_TACTICS)} tactics ({custom_tactics_str}); "
+            "the rest of the overall figure comes from Microsoft's built-in Fusion "
+            f"correlation rule, not anything built here. Tactics uncovered by custom "
+            f"rules: {uncovered_custom_str}. Add analytics rules or enable Content Hub "
+            "solutions for these.",
             confidence="medium",
         ),
     )
