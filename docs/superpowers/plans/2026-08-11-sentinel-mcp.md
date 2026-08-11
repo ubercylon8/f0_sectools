@@ -1298,7 +1298,6 @@ from __future__ import annotations
 from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
-from f0_sectools_core.paging import clamp_limit, more_available_finding
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -1310,11 +1309,7 @@ from f0_sectools_core.schema.findings import (
 )
 
 from .errors import map_sentinel_error
-from .probe import probed_tables, require_table
-
-# NOTE: `from . import normalize as n` is added in Task 6, which is where the
-# first use of it lands. Adding it now would fail `ruff check` (F401 unused
-# import) at this task's commit.
+from .probe import probed_tables
 
 _FAMILY_PREFIX = (
     ("CommonSecurityLog", "firewall"),
@@ -1399,8 +1394,9 @@ async def list_data_sources(client: Any) -> list[Finding]:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp`
-Expected: PASS
+Run: `uv run pytest servers/sentinel-mcp/tests/ -v && uv run mypy servers/sentinel-mcp && uv run ruff check servers/sentinel-mcp`
+Expected: PASS. Ruff must be clean here: import only what this task uses — later
+tasks extend the block as they need names.
 
 - [ ] **Step 6: Commit**
 
@@ -1512,11 +1508,16 @@ Expected: FAIL with `AttributeError: module 'f0_sentinel_mcp.tools' has no attri
 
 - [ ] **Step 3: Implement**
 
-Add the normalize import to the import block at the top of
-`servers/sentinel-mcp/f0_sentinel_mcp/tools.py` (replacing the Task 5 note):
+Extend the import block at the top of
+`servers/sentinel-mcp/f0_sentinel_mcp/tools.py` — Task 5 imported only what it
+used, so this task adds the three names it is the first to need (keep the
+block isort-ordered; `ruff check` enforces it):
 
 ```python
+from f0_sectools_core.paging import clamp_limit, more_available_finding
+# ...
 from . import normalize as n
+from .probe import probed_tables, require_table
 ```
 
 Then append to `servers/sentinel-mcp/f0_sentinel_mcp/tools.py`:
@@ -1616,7 +1617,8 @@ async def _run_surface(
             )
         ]
 
-    findings = _rows_to_findings(rows, spec.indicator_fields[0] if indicator else spec.action_field, limit)
+    title_key = spec.indicator_fields[0] if indicator else spec.action_field
+    findings = _rows_to_findings(rows, title_key, limit)
     if len(rows) >= limit:
         findings.append(
             more_available_finding(
