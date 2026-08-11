@@ -12,7 +12,7 @@ role personas.
 
 Read-only AI tooling over your own security platforms, running on **your**
 infrastructure with a **local open-weights model** (GPT-OSS, Gemma 4, Qwen3).
-Nothing leaves the host. All seven platforms (including the ProjectAchilles
+Nothing leaves the host. All eight platforms (including the ProjectAchilles
 gated actions) are live-validated today — see the support matrix below.
 
 ## Start here
@@ -61,6 +61,7 @@ gated actions) are live-validated today — see the support matrix below.
 | Tenable Vulnerability Management | `f0-tenable-mcp` | ✅ live-validated | vulnerability summary, top vulnerabilities, assets, asset vulnerabilities, vulnerability info, scans, plugin affected-hosts |
 | ProjectAchilles (actions) | `f0-projectachilles-actions-mcp` | ✅ live-validated | gated `run_test` / `schedule_test` on a single host **or a whole tag/fleet**, `set_schedule_status`, `cancel_tasks` (single task or bulk status/search filter); reads `list_schedules`, `get_task_status`, `list_tasks` (needs a read-write `pa_` key + `PROJECTACHILLES_ALLOW_WRITE=true`; driven by the `run-validation-test` skill, alongside the other ProjectAchilles skills) |
 | Microsoft Purview | `f0-purview-mcp` | ✅ live-validated | DLP alert summary + list, insider-risk alerts, sensitivity labels, unified-audit search (async two-phase) — needs `AuditLogsQuery.Read.All`; DLP/IRM content needs Purview licensing |
+| Microsoft Sentinel | `f0-sentinel-mcp` | ✅ live-validated | data sources (ingest by volume), firewall/DNS/web hunt, M365 audit search, incident queue (MITRE tactics), detection coverage (custom vs. Microsoft-managed rules), custom KQL — needs **Log Analytics Reader**; `get_detection_coverage` additionally needs **Microsoft Sentinel Reader** and degrades gracefully without it |
 
 \* Identity Protection tools require Entra ID **P2** + the relevant Graph
 permissions; otherwise they return a graceful "permission/throttled" finding.

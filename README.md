@@ -10,7 +10,7 @@
 
 ## What works today
 
-Eight MCP servers — **all live-validated against a real tenant** — exposing read tools (and, for Defender and the ProjectAchilles actions server, gated write actions):
+Nine MCP servers — **all live-validated against a real tenant** — exposing read tools (and, for Defender and the ProjectAchilles actions server, gated write actions):
 
 | Server | Status | Tools | What it reads |
 |---|---|---|---|
@@ -22,8 +22,9 @@ Eight MCP servers — **all live-validated against a real tenant** — exposing 
 | `f0-tenable-mcp` | ✅ live-validated | 7 | vuln summary, top vulns, assets, per-asset vulns, plugin info, scans, plugin affected-hosts |
 | `f0-purview-mcp` | ✅ live-validated | 6 | DLP alert summary + alerts, insider-risk alerts, sensitivity labels, unified-audit search (async two-phase) |
 | `f0-projectachilles-actions-mcp` | ✅ live-validated | 7 (3 read + 4 gated) | list schedules, task status, list tasks; gated `run_test` / `schedule_test` (a single host **or a whole tag/fleet**) / `set_schedule_status` / `cancel_tasks` (one task or a bulk filter) |
+| `f0-sentinel-mcp` | ✅ live-validated | 7 | data sources, firewall/DNS/web hunt, M365 audit search, incidents (MITRE tactics), detection coverage, custom KQL |
 
-**51 registered tools** ([full tool reference](docs/reference/tools/README.md) — generated from code, drift-guarded in CI). Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 27 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
+**58 registered tools** ([full tool reference](docs/reference/tools/README.md) — generated from code, drift-guarded in CI). Plus a shared `core/` (findings schema, redaction, auth, pagination, gating, persona renderers), 30 portable [agentskills.io](https://agentskills.io) skills, four role personas, a Hermes integration, and a small-model eval harness.
 
 **Persona posture reports** — the `generate-report` skill (+ `scripts/gen_report.py`) turns gathered findings into a shareable deliverable in **English or Spanish**: **Markdown and a standalone, self-contained HTML page** every time, plus an optional **PDF**. An executive briefing for the CISO, or a dense operational report (with evidence + MITRE) for the other personas, ending with open questions for the operator. The agent writes the judgment; the engine re-gathers and writes every number, so no figure is ever transcribed by a model. Grounded in real, redacted data and produced entirely on the host. See [how to generate one](docs/user-guide/workflows.md#generate-a-posture-report-any-persona--markdown-html--pdf-enes).
 
@@ -133,17 +134,18 @@ flowchart TB
       I["intune"]
       T["tenable"]
       U["purview"]
+      S["sentinel"]
     end
     subgraph core["core/ — shared, safety-critical (imported by every server)"]
       C["findings schema · redaction · auth<br/>pagination · gating + audit · renderers"]
     end
     subgraph platforms["Your security platforms"]
-      API["Defender · Entra · LimaCharlie · ProjectAchilles<br/>Intune · Tenable · Purview APIs"]
+      API["Defender · Entra · LimaCharlie · ProjectAchilles<br/>Intune · Tenable · Purview · Sentinel APIs"]
     end
 
     LM <--> RT
     RT <-->|MCP stdio| servers
-    D & E & L & P & I & T & U --> C
+    D & E & L & P & I & T & U & S --> C
     servers -->|redacted findings| RT
     servers <-->|credentials never leave host| API
 ```
@@ -157,7 +159,7 @@ See the [documentation hub](docs/README.md) for all docs, and [CLAUDE.md](CLAUDE
 
 Not yet built — contributions welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)):
 
-- **SIEM/XDR:** Wazuh, Elastic/OpenSearch, Splunk, Microsoft Sentinel
+- **SIEM/XDR:** Wazuh, Elastic/OpenSearch, Splunk
 - **EDR:** CrowdStrike, SentinelOne, Sophos
 - **Threat intel & IR:** MISP, TheHive/Cortex, OpenCTI
 

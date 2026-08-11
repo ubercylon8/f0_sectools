@@ -92,6 +92,17 @@
       ],
       "transport": "stdio",
       "lifecycle": "eager"
+    },
+    "f0-sentinel": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/ABSOLUTE/PATH/TO/sec-tools",
+        "f0-sentinel-mcp"
+      ],
+      "transport": "stdio",
+      "lifecycle": "eager"
     }
   }
 }

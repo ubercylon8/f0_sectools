@@ -16,7 +16,7 @@
 # if you accept that a shell-capable model could bypass the confirmation gate.
 # See docs/user-guide/runtimes/hermes.md.
 
-# The 7 f0_sectools MCP servers. Hermes v0.18.2 reads servers from config.yaml's
+# The 8 f0_sectools MCP servers. Hermes v0.18.2 reads servers from config.yaml's
 # `mcp_servers` (a distribution mcp.json is copied but not auto-loaded by the
 # CLI). `uv run --directory ${F0_SECTOOLS_DIR}` runs each server from the
 # operator's checkout; ${F0_SECTOOLS_DIR} is set in this profile's .env.
@@ -55,6 +55,10 @@ mcp_servers:
   f0-purview:
     command: uv
     args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-purview-mcp]
+    enabled: true
+  f0-sentinel:
+    command: uv
+    args: [run, --directory, "${F0_SECTOOLS_DIR}", f0-sentinel-mcp]
     enabled: true
 
 skills:
