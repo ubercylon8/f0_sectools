@@ -436,3 +436,53 @@ async def test_get_detection_coverage_no_rules_is_a_finding_not_silence(fake):
     out = await tools.get_detection_coverage(client)
     assert len(out) >= 1
     assert "0" in out[0].title or "no" in out[0].title.lower()
+
+
+async def test_run_kql_passes_query_through(fake):
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    out = await tools.run_kql(client, "Heartbeat | project Computer")
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_run_kql_appends_bound_when_query_has_none(fake):
+    client = fake(rows={"Heartbeat": []})
+    await tools.run_kql(client, "Heartbeat | project Computer", limit=10)
+    assert "| take 10" in client.queries[0]
+
+
+async def test_run_kql_respects_an_existing_bound(fake):
+    client = fake(rows={"Heartbeat": []})
+    await tools.run_kql(client, "Heartbeat | take 5")
+    assert client.queries[0].count("take") == 1
+
+
+async def test_run_kql_rejects_control_commands(fake):
+    client = fake(rows={})
+    for bad in (".create table X", ".drop table X", ".set-or-append Y", ".ingest inline"):
+        out = await tools.run_kql(client, bad)
+        assert len(out) == 1 and out[0].finding_type.value == "posture", bad
+    assert client.queries == []
+
+
+async def test_run_kql_rejects_empty_query(fake):
+    client = fake(rows={})
+    out = await tools.run_kql(client, "   ")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+async def test_run_kql_semantic_error_returns_reason(fake):
+    client = fake(raise_on={"Bogus": GraphError(400, "SemanticError: Failed to resolve 'Nope'")})
+    out = await tools.run_kql(client, "Bogus | project Nope")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert "Nope" in out[0].title
+
+
+async def test_run_kql_rejects_control_command_hidden_by_invisible_chars(fake):
+    # str.strip() alone does not remove Unicode format characters (BOM,
+    # zero-width space, ...), so a naive "strip then check dot prefix" guard
+    # can be bypassed by hiding one in front of the dot. Prove it stays closed.
+    client = fake(rows={})
+    for bad in ("﻿.drop table X", "​.set-or-append Y", " \n\t﻿.ingest inline"):
+        out = await tools.run_kql(client, bad)
+        assert len(out) == 1 and out[0].finding_type.value == "posture", bad
+    assert client.queries == []

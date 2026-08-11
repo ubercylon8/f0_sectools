@@ -6,6 +6,7 @@ dict access is defensive throughout because the next workspace differs.
 """
 from __future__ import annotations
 
+import unicodedata
 from typing import Any
 
 from f0_sectools_core.auth.graph import GraphError
@@ -531,3 +532,73 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
             )
         )
     return out
+
+
+# Kusto control commands start with a dot and can mutate the workspace
+# (.create, .drop, .set-or-append, .ingest). This server is read-only, so they
+# never reach the API.
+_CONTROL_PREFIX = "."
+
+
+def _strip_leading_invisible(s: str) -> str:
+    """Strip leading whitespace AND Unicode format characters.
+
+    ``str.strip()`` removes whitespace (category Zs and friends) but leaves
+    format characters like U+FEFF (BOM) or U+200B (zero-width space) in
+    place. A query prefixed with one of those would still read as
+    non-dot-prefixed to a plain ``.strip().startswith(".")`` check even
+    though it hides a control command underneath -- Kusto's own tokenizer
+    treats such characters as insignificant. Strip them here so the
+    control-command check cannot be bypassed this way.
+    """
+    i = 0
+    while i < len(s) and (s[i].isspace() or unicodedata.category(s[i]) == "Cf"):
+        i += 1
+    return s[i:]
+
+
+async def run_kql(client: Any, kql: str, hours: float = 24, limit: int = 25) -> list[Finding]:
+    """Run a caller-supplied read-only KQL query, force-bounded."""
+    cap = "Sentinel KQL query"
+    query = _strip_leading_invisible((kql or "").strip()).rstrip()
+    if not query:
+        return [_bad_arg("kql", kql or "", "a KQL query, e.g. 'Heartbeat | take 10'")]
+    if query.startswith(_CONTROL_PREFIX):
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title="Kusto control commands are not permitted — this server is read-only",
+                recommended_action=RecommendedAction(
+                    summary="Use a tabular query (TableName | where ... | take N).",
+                    confidence="high",
+                ),
+            )
+        ]
+
+    hours = n.clamp_hours(hours, client.retention_days)
+    limit = clamp_limit(limit)
+    lowered = query.lower()
+    if " take " not in lowered and " limit " not in lowered and not lowered.endswith("take"):
+        query = f"{query} | take {limit}"
+
+    try:
+        rows = await client.query(query, n.timespan(hours))
+    except GraphError as e:
+        mapped = map_sentinel_error(e, cap, half="logs")
+        if mapped:
+            return [mapped]
+        raise
+
+    if not rows:
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.hunt_result,
+                severity=Severity.info,
+                title=f"Query returned no rows in the last {hours:g}h",
+            )
+        ]
+    first_col = next(iter(rows[0].keys()), "result")
+    return _rows_to_findings(rows, first_col, limit)
