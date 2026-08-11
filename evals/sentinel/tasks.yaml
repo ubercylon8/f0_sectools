@@ -1,0 +1,68 @@
+# Small-model tool-calling eval task set — Sentinel server.
+# See evals/defender/tasks.yaml for the field schema. evals/test_eval_coverage.py
+# enforces that every Sentinel tool has at least one task.
+#
+# The final block is ROUTING tasks: this server deliberately sits next to
+# f0-defender and f0-purview, and the risk it adds is misrouting, not a missing
+# capability. Those tasks must be run against TWO models — one model is not a
+# control (see the eval-findings notes on the hunt/logon misroute).
+
+- prompt: "What security data do we actually collect in Sentinel?"
+  expect_tool: list_data_sources
+
+- prompt: "Which log sources are feeding our SIEM?"
+  expect_tool: list_data_sources
+
+- prompt: "Show me traffic the firewall blocked in the last 12 hours."
+  expect_tool: hunt_firewall
+  expect_args_contains: { action: blocked }
+
+- prompt: "Did anything connect to 203.0.113.45 through the firewall?"
+  expect_tool: hunt_firewall
+  expect_args_contains: { indicator: "203.0.113.45" }
+
+- prompt: "Has anyone on the network resolved the domain evil-c2.com?"
+  expect_tool: hunt_dns_web
+  expect_args_contains: { indicator: "evil-c2.com" }
+
+- prompt: "What web categories are getting blocked by the proxy?"
+  expect_tool: hunt_dns_web
+  expect_args_contains: { surface: web }
+
+- prompt: "Show me remote access VPN sessions from the last day."
+  expect_tool: hunt_dns_web
+  expect_args_contains: { surface: vpn }
+
+- prompt: "Who downloaded files from OneDrive yesterday?"
+  expect_tool: search_office_activity
+  expect_args_contains: { workload: onedrive }
+
+- prompt: "Did anyone access mailboxes they shouldn't have in Exchange?"
+  expect_tool: search_office_activity
+
+- prompt: "What's in the Sentinel incident queue right now?"
+  expect_tool: list_sentinel_incidents
+
+- prompt: "Show me high severity Sentinel incidents that are still open."
+  expect_tool: list_sentinel_incidents
+  expect_args_contains: { severity_min: high }
+
+- prompt: "What attacks do our Sentinel analytics rules actually detect?"
+  expect_tool: get_detection_coverage
+
+- prompt: "Where are the gaps in our detection coverage?"
+  expect_tool: get_detection_coverage
+
+- prompt: "Run this Sentinel query for me: Heartbeat | summarize count() by Computer"
+  expect_tool: run_kql
+
+# --- routing tasks: the three deliberate adjacencies ---
+
+- prompt: "Search the firewall logs for connections to the domain badsite.io"
+  expect_tool: hunt_dns_web    # NOT hunt_firewall: the CEF table has no URLs
+
+- prompt: "Which MITRE tactics are showing up in our Sentinel SOC queue?"
+  expect_tool: list_sentinel_incidents
+
+- prompt: "Query the Sentinel workspace for the Syslog table."
+  expect_tool: run_kql
