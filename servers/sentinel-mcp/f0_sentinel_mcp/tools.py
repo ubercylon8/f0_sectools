@@ -259,3 +259,97 @@ async def hunt_dns_web(
         cap=f"Sentinel {surface} telemetry", human=_SURFACE_HUMAN[surface],
         action=action, indicator=indicator, hours=hours, limit=limit,
     )
+
+
+# Live-verified 2026-08-11: OfficeWorkload values are these exact strings.
+_WORKLOAD_VALUE = {
+    "sharepoint": "SharePoint",
+    "onedrive": "OneDrive",
+    "exchange": "Exchange",
+    "teams": "MicrosoftTeams",
+}
+_OA_PROJECT = (
+    "TimeGenerated", "OfficeWorkload", "Operation", "UserId",
+    "ClientIP", "OfficeObjectId", "ResultStatus",
+)
+
+
+async def search_office_activity(
+    client: Any,
+    workload: str = "any",
+    operation: str = "",
+    user: str = "",
+    hours: float = 24,
+    limit: int = 25,
+) -> list[Finding]:
+    """Microsoft 365 audit activity from OfficeActivity (fast path vs. Purview)."""
+    cap = "Sentinel Microsoft 365 activity"
+    if workload not in n.WORKLOADS:
+        return [_bad_arg("workload", workload, ", ".join(n.WORKLOADS))]
+    if operation and not n.WORD_RE.match(operation):
+        return [_bad_arg("operation", operation, "an exact operation name, e.g. FileDownloaded")]
+    if user and not n.UPN_RE.match(user):
+        return [_bad_arg("user", user, "a UPN, e.g. someone@contoso.com")]
+
+    missing = await require_table(client, "OfficeActivity", "Microsoft 365 audit (OfficeActivity)")
+    if missing:
+        return [missing]
+
+    hours = n.clamp_hours(hours, client.retention_days)
+    limit = clamp_limit(limit)
+
+    parts = ["OfficeActivity", f"| where TimeGenerated > ago({hours:g}h)"]
+    if workload != "any":
+        parts.append(f'| where OfficeWorkload =~ "{_WORKLOAD_VALUE[workload]}"')
+    if user:
+        parts.append(f'| where UserId =~ "{user}"')
+    if operation:
+        parts.append(f'| where Operation =~ "{operation}"')
+        parts.append(f"| project {', '.join(_OA_PROJECT)}")
+        parts.append(f"| order by TimeGenerated desc | take {limit}")
+    else:
+        # Discovery mode: hand back the operation vocabulary so the model can
+        # pick a real value rather than inventing one.
+        parts.append(f"| summarize Events=count() by Operation | top {limit} by Events desc")
+    kql = " ".join(parts)
+
+    try:
+        rows = await client.query(kql, n.timespan(hours))
+    except GraphError as e:
+        mapped = map_sentinel_error(e, cap, half="logs")
+        if mapped:
+            return [mapped]
+        raise
+
+    if not rows:
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.hunt_result,
+                severity=Severity.info,
+                title=f"No Microsoft 365 activity matched in the last {hours:g}h",
+                recommended_action=RecommendedAction(
+                    summary="Call again without `operation` to see which operations "
+                    "actually occur in this window.",
+                ),
+            )
+        ]
+    if not operation:
+        return [
+            Finding(
+                source="sentinel",
+                finding_type=FindingType.posture,
+                severity=Severity.info,
+                title=f"{r.get('Operation')} — {r.get('Events')} events ({hours:g}h)",
+                evidence=[
+                    Evidence(key="operation", value=str(r.get("Operation"))),
+                    Evidence(key="events", value=str(r.get("Events"))),
+                ],
+                recommended_action=RecommendedAction(
+                    summary=f"Call search_office_activity with "
+                    f"operation=\"{r.get('Operation')}\" to see the events.",
+                ),
+            )
+            for r in rows[:limit]
+        ]
+    return _rows_to_findings(rows, "Operation", limit)

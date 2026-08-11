@@ -242,3 +242,74 @@ async def test_hunt_dns_web_missing_umbrella_table_returns_posture(fake):
     client = fake(rows={USAGE: [{"DataType": "CommonSecurityLog", "GB": 1.0}]})
     out = await tools.hunt_dns_web(client, surface="dns")
     assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+OA = "OfficeActivity"
+
+
+async def test_search_office_activity_without_operation_returns_operation_breakdown(fake):
+    # Discovery in ONE call: the model learns valid operation names instead of
+    # guessing them, which is the two-call dance purview's audit search forces.
+    client = fake(rows={USAGE: _TABLES, OA: [{"Operation": "FileDownloaded", "Events": 48163}]})
+    out = await tools.search_office_activity(client)
+    kql = [q for q in client.queries if OA in q][0]
+    assert "summarize" in kql and "by Operation" in kql
+    assert any("FileDownloaded" in f.title for f in out)
+
+
+async def test_search_office_activity_with_operation_returns_events(fake):
+    client = fake(rows={USAGE: _TABLES, OA: [
+        {"TimeGenerated": "2026-08-11T00:00:00Z", "Operation": "FileDownloaded",
+         "UserId": "a@b.com", "OfficeWorkload": "OneDrive"},
+    ]})
+    out = await tools.search_office_activity(client, operation="FileDownloaded")
+    kql = [q for q in client.queries if OA in q][0]
+    assert 'Operation =~ "FileDownloaded"' in kql
+    assert "summarize" not in kql
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_search_office_activity_workload_filter(fake):
+    client = fake(rows={USAGE: _TABLES, OA: []})
+    await tools.search_office_activity(client, workload="exchange", operation="MailItemsAccessed")
+    kql = [q for q in client.queries if OA in q][0]
+    assert 'OfficeWorkload =~ "Exchange"' in kql
+
+
+async def test_search_office_activity_teams_workload_maps_to_microsoftteams(fake):
+    # Live-verified 2026-08-11: OfficeWorkload's Teams value is the string
+    # "MicrosoftTeams", NOT "Teams" -- pinned explicitly since it is exactly
+    # the kind of live-measured string a well-meaning refactor "corrects"
+    # into breakage without a dedicated test.
+    client = fake(rows={USAGE: _TABLES, OA: []})
+    await tools.search_office_activity(client, workload="teams", operation="MessageSent")
+    kql = [q for q in client.queries if OA in q][0]
+    assert 'OfficeWorkload =~ "MicrosoftTeams"' in kql
+    assert 'OfficeWorkload =~ "Teams"' not in kql
+
+
+async def test_search_office_activity_any_workload_emits_no_workload_filter(fake):
+    client = fake(rows={USAGE: _TABLES, OA: []})
+    await tools.search_office_activity(client, workload="any", operation="FileAccessed")
+    kql = [q for q in client.queries if OA in q][0]
+    assert "OfficeWorkload =~" not in kql
+
+
+async def test_search_office_activity_user_filter_validated(fake):
+    client = fake(rows={USAGE: _TABLES, OA: []})
+    ok = await tools.search_office_activity(client, user="a@b.com", operation="FileAccessed")
+    assert not (len(ok) == 1 and ok[0].title.startswith("Unsupported"))
+    bad = await tools.search_office_activity(client, user='a" or 1==1')
+    assert len(bad) == 1 and bad[0].finding_type.value == "posture"
+
+
+async def test_search_office_activity_bad_workload_reports(fake):
+    client = fake(rows={USAGE: _TABLES})
+    out = await tools.search_office_activity(client, workload="yammer")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+
+
+async def test_search_office_activity_missing_table_returns_posture(fake):
+    client = fake(rows={USAGE: [{"DataType": "Syslog", "GB": 1.0}]})
+    out = await tools.search_office_activity(client)
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
