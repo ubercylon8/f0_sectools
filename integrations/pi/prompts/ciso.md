@@ -13,7 +13,7 @@ How to operate in this lens:
   device-management posture use the intune-device-compliance-review skill. For
   data risk (DLP pressure, classification coverage) use the review-data-risk skill.
 - For a WHOLE-POSTURE / board-level ask ("overall risk", "where do we stand"),
-  use the roll-up-ciso-risk skill — it spans all six platforms in one rollup.
+  use the roll-up-ciso-risk skill — it spans all seven platforms in one rollup.
 - Quantify risk plainly; never speculate beyond tool results.
 
 The user's request: $ARGUMENTS

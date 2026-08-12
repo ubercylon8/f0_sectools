@@ -18,9 +18,9 @@ posture", "board-level security summary", "where do we stand across
 everything", "what are our top risks right now", "CISO dashboard". Best paired
 with the **CISO** persona.
 
-Pulls one headline posture number from each of six **f0_sectools** MCP servers,
-all read-only. Favour a capable local model — this is six sequential calls plus
-synthesis.
+Pulls one headline posture number from each of seven **f0_sectools** MCP
+servers, all read-only. Favour a capable local model — this is seven
+sequential calls plus synthesis.
 
 ## Tools
 
@@ -37,6 +37,10 @@ Claude Code `mcp__f0-<server>__<tool>`). One posture pillar each:
 - **Data risk** — Purview `get_dlp_summary` (data-loss pressure)
 - **Endpoint coverage** — LimaCharlie `get_org_overview` (sensor coverage;
   note dormant `lc:sleeper` sensors, which collect nothing)
+- **Detection coverage** — Sentinel `get_detection_coverage` (ATT&CK tactics
+  covered by the analytics-rule inventory). Use the CUSTOM figure
+  (`tactics_covered_custom` / `rules_custom`), never the overall one — see
+  Pitfalls.
 
 All read-only; nothing changes state.
 
@@ -46,14 +50,14 @@ Work **one tool at a time**: call, read the single posture finding it returns,
 record the number and its severity, then move to the next pillar. Do not chain
 or batch.
 
-1. Call each of the six tools above, in any order. Each returns one posture
+1. Call each of the seven tools above, in any order. Each returns one posture
    finding with the pillar's headline metric in its `evidence` and a severity.
 2. **Handle a dark pillar gracefully.** If a tool returns a `posture` finding
    that is a *degradation* — permission missing, not licensed, throttled, or
    "not configured" — that pillar is **NOT ASSESSED**. Record it as such and
    **keep going**; never abandon the rollup because one platform is dark. A
-   partial rollup across five pillars is still valuable; the CISO just needs to
-   know which one is missing.
+   partial rollup across the remaining six pillars is still valuable; the
+   CISO just needs to know which one is missing.
 3. **Rank by actual severity, not a fixed order.** Read each assessed pillar's
    severity and the number behind it; decide which 1–3 represent the biggest
    real risk *this week*. A low Secure Score, a pile of critical vulns, active
@@ -72,7 +76,7 @@ or batch.
 
 - **Don't fabricate a pillar you couldn't read.** A dark pillar is reported as
   "not assessed", never guessed or filled with a plausible number.
-- **Don't average the six into one score.** They measure different things on
+- **Don't average the seven into one score.** They measure different things on
   different scales; a single blended number misleads. Present them as distinct
   pillars with a reasoned top-risks list.
 - **Endpoint coverage nuance:** a fleet reporting many sensors can still be
@@ -82,6 +86,14 @@ or batch.
   ambiguous (quiet, no policies / licensing, or everything already resolved —
   the last means DLP is working, not absent) — re-run with `state: "all"` to
   tell them apart rather than reporting "no data risk".
+- **Detection coverage nuance:** always report the CUSTOM figure
+  (`tactics_covered_custom` / `rules_custom`), never the overall figure
+  (`tactics_covered_all`, which includes Microsoft-managed rule kinds —
+  `Fusion`, `MicrosoftSecurityIncidentCreation`, `MLBehaviorAnalytics`,
+  `ThreatIntelligence`). A tenant whose analytics coverage is nearly all
+  Microsoft-managed has built very little detection engineering of its own,
+  and the overall number hides exactly that gap — say so explicitly rather
+  than quoting only the flattering total.
 - Relay any degradation finding plainly and move on — do not retry a dark
   pillar in a loop.
 

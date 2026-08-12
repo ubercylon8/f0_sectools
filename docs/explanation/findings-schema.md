@@ -73,7 +73,7 @@ actionable guidance, and stack traces (a leak vector) never reach the model.
 | Field | Type | Notes |
 |---|---|---|
 | `schema_version` | str | `"1.0"` today; bump on breaking change |
-| `source` | str | platform slug: `defender`, `entra`, `limacharlie`, `projectachilles`, `intune`, `tenable`, `purview` |
+| `source` | str | platform slug: `defender`, `entra`, `limacharlie`, `projectachilles`, `intune`, `tenable`, `purview`, `sentinel` |
 | `finding_type` | enum | `alert` · `incident` · `misconfig` · `risk` · `ioc` · `posture` · `hunt_result` · `action` |
 | `severity` | enum | `info` · `low` · `medium` · `high` · `critical` |
 | `title` | str | one human-readable sentence; the model's primary summary cue |
