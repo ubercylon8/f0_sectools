@@ -849,6 +849,53 @@ async def test_run_kql_ordinary_queries_still_dispatch(fake):
     assert any(f.finding_type.value == "hunt_result" for f in out2)
 
 
+async def test_run_kql_rejects_control_command_on_a_later_line(fake):
+    # Issue #99: the guard used to check only the whole-string prefix
+    # (query.startswith(".")), so a dot-command on a second line reached
+    # client.query() -- "print 1\n.show diagnostics" is not itself a
+    # dot-prefixed string, but its second line is a control command.
+    client = fake(rows={})
+    for bad in (
+        "print 1\n.show diagnostics",
+        "Heartbeat | take 1\n.drop table X",
+        "print 1\n\n.drop table X",  # blank line between must not confuse it
+    ):
+        out = await tools.run_kql(client, bad)
+        assert len(out) == 1 and out[0].finding_type.value == "posture", bad
+    assert client.queries == []
+
+
+async def test_run_kql_rejects_control_command_on_a_later_line_hidden_by_nonprintable(fake):
+    # Same vector as above, but the offending line's dot is additionally
+    # hidden behind a leading invisible/control character -- the per-line
+    # hardening must match what the whole-query check already does.
+    client = fake(rows={})
+    for ch in _LEADING_NONPRINTABLE:
+        bad = f"print 1\n{ch}.drop table X"
+        out = await tools.run_kql(client, bad)
+        assert len(out) == 1 and out[0].finding_type.value == "posture", repr(bad)
+    assert client.queries == []
+
+
+async def test_run_kql_ordinary_multiline_query_still_dispatches(fake):
+    # The per-line guard must not regress into rejecting valid multi-line
+    # KQL -- e.g. a query broken across lines for readability.
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    out = await tools.run_kql(client, "Heartbeat\n| summarize count()\n| take 5")
+    assert client.queries == ["Heartbeat\n| summarize count()\n| take 5"]
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_run_kql_query_with_comment_line_still_dispatches(fake):
+    # A `//` line comment (on its own line) must not be mistaken for a
+    # control command -- "/" is printable and is not the dot prefix.
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    query = "Heartbeat\n// filter placeholder\n| take 5"
+    out = await tools.run_kql(client, query)
+    assert client.queries == [query]
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
 # --- Critical Rule: every tool returns a finding, never an exception, on a
 # platform error. `require_table` (-> `probed_tables` -> `client.query`) is a
 # real transport call and can raise `GraphError` exactly like any other query

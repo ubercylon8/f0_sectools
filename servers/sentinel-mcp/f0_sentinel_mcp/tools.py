@@ -747,8 +747,76 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
 
 # Kusto control commands start with a dot and can mutate the workspace
 # (.create, .drop, .set-or-append, .ingest). This server is read-only, so they
-# never reach the API.
+# never reach the API. The guard below checks every LINE, not just the whole
+# query: "print 1\n.show diagnostics" is a single query string but the second
+# line is a control command, and the Log Analytics /v1/.../query endpoint
+# ultimately decides what a raw string does, not us -- reject before dispatch,
+# don't rely on the endpoint being query-only today.
+#
+# Deliberately NOT rejecting ";": the same-line form
+# (`Heartbeat | take 1; .drop table X`) stays open. Rejecting ";" outright
+# would break legitimate KQL -- `let` statements are semicolon-separated --
+# and a same-line dot-command after ";" is a narrower, harder problem than
+# this fix. Documented here so the next reader doesn't mistake the gap for
+# an oversight.
 _CONTROL_PREFIX = "."
+
+
+def _line_control_command_reason(line: str) -> Literal["ok", "nonprintable", "control"]:
+    """Classify one line of a query for the control-command guard below.
+
+    "nonprintable": `line`, once stripped, opens with an invisible/control
+    character that could be hiding a dot control-command from the literal
+    `.` check. Whitelist, not blacklist: str.strip() only removes ordinary
+    whitespace, so a leading BOM/zero-width-space/C0/C1 control survives it.
+    Rather than enumerate every Unicode category that can do this, treat a
+    line that doesn't open with an ordinary printable character as unsafe by
+    construction -- no legitimate KQL line starts with one.
+
+    "control": `line`, once stripped, opens with a Kusto control-command dot
+    (`.create`, `.drop`, `.set-or-append`, `.ingest`, ...).
+
+    "ok": neither -- includes blank lines.
+
+    The caller applies this per line (not just to the whole query) so the
+    hardening covers a dot-command hidden on any line, not only the first.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return "ok"
+    if not stripped[0].isprintable():
+        return "nonprintable"
+    if stripped.startswith(_CONTROL_PREFIX):
+        return "control"
+    return "ok"
+
+
+def _nonprintable_prefix_finding() -> Finding:
+    return Finding(
+        source="sentinel",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title="Query must begin with ordinary text — leading invisible or "
+        "control characters are not permitted",
+        recommended_action=RecommendedAction(
+            summary="Remove any leading invisible/control characters and "
+            "retry with a plain KQL query (TableName | where ... | take N).",
+            confidence="high",
+        ),
+    )
+
+
+def _control_command_finding() -> Finding:
+    return Finding(
+        source="sentinel",
+        finding_type=FindingType.posture,
+        severity=Severity.info,
+        title="Kusto control commands are not permitted — this server is read-only",
+        recommended_action=RecommendedAction(
+            summary="Use a tabular query (TableName | where ... | take N).",
+            confidence="high",
+        ),
+    )
 
 
 async def run_kql(
@@ -759,42 +827,12 @@ async def run_kql(
     query = (kql or "").strip()
     if not query:
         return [_bad_arg("kql", kql or "", "a KQL query, e.g. 'Heartbeat | take 10'")]
-    if not query[0].isprintable():
-        # Whitelist, not blacklist: str.strip() only removes ordinary
-        # whitespace, so a leading invisible/control character (BOM,
-        # zero-width space, C0/C1 controls, ...) can survive it and hide a
-        # dot-prefixed control command from the startswith(".") check below.
-        # Rather than enumerate every Unicode category that can do this,
-        # reject any query that doesn't begin with an ordinary printable
-        # character -- no legitimate KQL query starts with one, so this
-        # closes the class by construction instead of one exploit at a time.
-        return [
-            Finding(
-                source="sentinel",
-                finding_type=FindingType.posture,
-                severity=Severity.info,
-                title="Query must begin with ordinary text — leading invisible or "
-                "control characters are not permitted",
-                recommended_action=RecommendedAction(
-                    summary="Remove any leading invisible/control characters and "
-                    "retry with a plain KQL query (TableName | where ... | take N).",
-                    confidence="high",
-                ),
-            )
-        ]
-    if query.startswith(_CONTROL_PREFIX):
-        return [
-            Finding(
-                source="sentinel",
-                finding_type=FindingType.posture,
-                severity=Severity.info,
-                title="Kusto control commands are not permitted — this server is read-only",
-                recommended_action=RecommendedAction(
-                    summary="Use a tabular query (TableName | where ... | take N).",
-                    confidence="high",
-                ),
-            )
-        ]
+    for line in query.splitlines():
+        reason = _line_control_command_reason(line)
+        if reason == "nonprintable":
+            return [_nonprintable_prefix_finding()]
+        if reason == "control":
+            return [_control_command_finding()]
 
     hours = n.clamp_hours(hours_back, client.retention_days)
     limit = clamp_limit(limit)
