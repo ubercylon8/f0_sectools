@@ -43,10 +43,10 @@ cloud model, which is the privacy point. See
 
 ## Which platforms are supported today?
 
-Eight live-validated servers: Microsoft Defender XDR, Entra ID, LimaCharlie,
-ProjectAchilles (read + gated actions), Intune, Tenable VM, and Microsoft
-Purview — [tool reference](../reference/tools/README.md). Planned (Wazuh,
-Elastic, Splunk, Sentinel, CrowdStrike, SentinelOne, Sophos, MISP,
+Nine live-validated servers: Microsoft Defender XDR, Entra ID, LimaCharlie,
+ProjectAchilles (read + gated actions), Intune, Tenable VM, Microsoft
+Purview, and Microsoft Sentinel — [tool reference](../reference/tools/README.md).
+Planned (Wazuh, Elastic, Splunk, CrowdStrike, SentinelOne, Sophos, MISP,
 TheHive, OpenCTI): see the roadmap table in [CLAUDE.md](../../CLAUDE.md#platform-integrations);
 contributions follow the recipe in [CONTRIBUTING.md](../../CONTRIBUTING.md).
 

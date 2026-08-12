@@ -60,7 +60,7 @@ these tools at 100%/100% per server.
 ## More demonstrations (no tenant needed)
 
 - **[Sample findings, one per server](../examples/findings/README.md)** — the
-  same normalized shape across all eight platforms; schema-validated in CI.
+  same normalized shape across all nine platforms; schema-validated in CI.
 - **[Annotated triage transcript](../examples/transcripts/defender-triage.md)** —
   a small model driving a full incident triage, step by step.
 - **[Gated-write transcript](../examples/transcripts/gated-run-test.md)** —

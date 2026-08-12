@@ -23,7 +23,7 @@ These mirror the Critical Rules in [CLAUDE.md](CLAUDE.md):
 
 ## Adding a platform server — the recipe
 
-The eight built servers follow an **identical pattern**; `core/` does not
+The nine built servers follow an **identical pattern**; `core/` does not
 change. Do it in this order, TDD-ing each code step. (Background:
 [architecture](docs/explanation/architecture.md#the-server-pattern).)
 

@@ -12,7 +12,7 @@ role personas.
 
 Read-only AI tooling over your own security platforms, running on **your**
 infrastructure with a **local open-weights model** (GPT-OSS, Gemma 4, Qwen3).
-Nothing leaves the host. All eight platforms (including the ProjectAchilles
+Nothing leaves the host. All nine platforms (including the ProjectAchilles
 gated actions) are live-validated today — see the support matrix below.
 
 ## Start here

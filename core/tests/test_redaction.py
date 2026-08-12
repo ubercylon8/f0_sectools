@@ -1,4 +1,5 @@
 import importlib
+from pathlib import Path
 
 import pytest
 from f0_sectools_core.redaction.redact import redact_obj, redact_text
@@ -109,6 +110,18 @@ _SERVER_RENDER_MODULES = [
     "f0_sentinel_mcp.server",
     "f0_tenable_mcp.server",
 ]
+
+_SERVERS_DIR = Path(__file__).resolve().parents[2] / "servers"
+_DISCOVERED_SERVER_COUNT = len(
+    [p for p in _SERVERS_DIR.iterdir() if p.is_dir() and p.name.endswith("-mcp")]
+)
+
+
+def test_server_render_modules_list_is_not_missing_a_server():
+    # This list is hand-maintained -- tie its length to the discovered
+    # server count so a tenth server added under servers/ can't silently
+    # skip this redaction regression test.
+    assert len(_SERVER_RENDER_MODULES) == _DISCOVERED_SERVER_COUNT
 
 
 @pytest.mark.parametrize("module_name", _SERVER_RENDER_MODULES)

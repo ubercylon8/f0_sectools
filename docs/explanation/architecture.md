@@ -39,17 +39,18 @@ flowchart TB
       I["intune"]
       T["tenable"]
       U["purview"]
+      N["sentinel"]
     end
     subgraph core["core/ — shared, safety-critical (imported by every server)"]
       C["findings schema · redaction · auth<br/>pagination · gating + audit · renderers"]
     end
     subgraph platforms["Your security platforms"]
-      API["Defender · Entra · LimaCharlie · ProjectAchilles<br/>Intune · Tenable · Purview APIs"]
+      API["Defender · Entra · LimaCharlie · ProjectAchilles<br/>Intune · Tenable · Purview · Sentinel APIs"]
     end
 
     LM <--> RT
     RT <-->|MCP stdio| servers
-    D & E & L & P & I & T & U --> C
+    D & E & L & P & I & T & U & N --> C
     servers -->|redacted findings| RT
     servers <-->|credentials never leave host| API
 ```
@@ -100,7 +101,7 @@ Three things to notice:
 
 ```mermaid
 flowchart LR
-    subgraph servers["servers/ (8 thin adapters)"]
+    subgraph servers["servers/ (9 thin adapters)"]
       direction TB
       S1["defender-mcp"]
       S2["entra-mcp"]
@@ -110,6 +111,7 @@ flowchart LR
       S6["intune-mcp"]
       S7["tenable-mcp"]
       S8["purview-mcp"]
+      S9["sentinel-mcp"]
     end
     subgraph core["core/f0_sectools_core"]
       direction TB
@@ -125,7 +127,7 @@ flowchart LR
     EV["evals/ — callability harness"]
     SC["scripts/ — smoke tests, confirm_action.py"]
 
-    S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 --> core
+    S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 --> core
     EV -.imports tool registries.-> servers
     SC -.operator side of gating.-> GATE
 ```
@@ -135,7 +137,7 @@ no server→server edges (cross-platform correlation happens in *skills*, at the
 agent layer — not in code). No server re-implements a core concern; that is
 [Critical Rule 6](../../CLAUDE.md#critical-rules-never-violate), and it is what
 makes the guarantees auditable — reviewing `core/` reviews the safety posture
-of all eight integrations at once.
+of all nine integrations at once.
 
 What each core package owns:
 

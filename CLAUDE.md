@@ -198,7 +198,7 @@ Note: the gate's guarantee holds only when confirm_action.py runs in a terminal 
 
 ## Platform Integrations
 
-Targets (build incrementally — the six built servers below are the reference implementations):
+Targets (build incrementally — the nine built servers below are the reference implementations):
 
 | Platform | Category | Auth | Read | Gated write (examples) |
 |---|---|---|---|---|

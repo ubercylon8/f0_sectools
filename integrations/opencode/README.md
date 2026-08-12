@@ -6,8 +6,8 @@ this directory:
 
 | What | Where | Why |
 |---|---|---|
-| MCP servers (7) | [`/opencode.json`](../../opencode.json) | opencode auto-loads the project config when run inside the checkout; commands are relative (`uv run --directory .`), so nothing needs rendering per user |
-| Skills (22) | [`/.opencode/skills/`](../../.opencode/skills/) | committed relative symlinks into [`skills/`](../../skills/) — opencode's **native** SKILL.md loader (progressive disclosure) picks up the one portable skill set, no forks |
+| MCP servers (9) | [`/opencode.json`](../../opencode.json) | opencode auto-loads the project config when run inside the checkout; commands are relative (`uv run --directory .`), so nothing needs rendering per user |
+| Skills (30) | [`/.opencode/skills/`](../../.opencode/skills/) | committed relative symlinks into [`skills/`](../../skills/) — opencode's **native** SKILL.md loader (progressive disclosure) picks up the one portable skill set, no forks |
 | Personas (4) | [`/.opencode/agents/`](../../.opencode/agents/) | project agent files (CISO, threat hunter, detection engineer, security engineer) — switch with the TUI agent selector |
 
 **Quickstart:** `cd` into the checkout (with `.env.<platform>` files in place —

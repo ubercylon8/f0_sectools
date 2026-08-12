@@ -6,12 +6,19 @@ from pathlib import Path
 import pytest
 from f0_sectools_core.schema.findings import Finding
 
-FINDINGS_DIR = Path(__file__).resolve().parents[2] / "examples" / "findings"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+FINDINGS_DIR = REPO_ROOT / "examples" / "findings"
 SAMPLES = sorted(FINDINGS_DIR.glob("*.json"))
+SERVER_COUNT = len(
+    [p for p in (REPO_ROOT / "servers").iterdir() if p.is_dir() and p.name.endswith("-mcp")]
+)
 
 
 def test_samples_exist():
-    assert len(SAMPLES) >= 8, "expected one sample finding per server"
+    # Equality, not >=, so a tenth server can't silently ship without a
+    # sample: >= would have kept passing forever even if a new server never
+    # got one.
+    assert len(SAMPLES) == SERVER_COUNT, "expected exactly one sample finding per server"
 
 
 @pytest.mark.parametrize("path", SAMPLES, ids=lambda p: p.name)

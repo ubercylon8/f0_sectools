@@ -79,7 +79,13 @@ These are the mistakes that happen in practice — check them before you call:
   views of overlapping data — Sentinel's SOC queue (MITRE tactics, status,
   owner) vs. Defender's XDR-native view (device/alert context). If both are
   configured and the user doesn't specify, Sentinel's queue is usually the
-  faster first stop; cross-reference Defender for device-level detail.
+  faster first stop; cross-reference Defender for device-level detail. Their
+  `severity_min` enums differ and are not interchangeable: Sentinel's
+  `list_sentinel_incidents` takes `informational|low|medium|high`, Defender's
+  `list_incidents` takes `info|low|medium|high|critical` — carrying a value
+  straight from one call into the other (e.g. Sentinel's `"informational"`
+  into Defender, or Defender's `"critical"` into Sentinel) is an argument
+  error, not a routing nuance.
 - **M365 audit activity** ("who downloaded/accessed/shared X"): prefer
   Sentinel's audit search over Purview's — Sentinel answers in seconds,
   Purview's equivalent is an asynchronous search that takes 5-15 minutes. Use

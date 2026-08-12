@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "source": "sentinel",
+  "finding_type": "incident",
+  "severity": "high",
+  "title": "#1042: Suspicious sign-in followed by anomalous mailbox rule",
+  "entity": { "kind": "tenant", "id": "1042", "name": "Suspicious sign-in followed by anomalous mailbox rule" },
+  "evidence": [
+    { "key": "status", "value": "Active" },
+    { "key": "severity", "value": "High" },
+    { "key": "tactics", "value": "InitialAccess, Persistence" },
+    { "key": "techniques", "value": "T1078, T1137" },
+    { "key": "owner", "value": "unassigned" }
+  ],
+  "recommended_action": {
+    "summary": "Review the correlated sign-in and mailbox-rule alerts in the Sentinel incident queue; escalate if the rule forwards mail externally.",
+    "gated_action": null,
+    "confidence": "medium"
+  },
+  "references": [ { "type": "mitre", "id": "T1137", "url": null } ],
+  "observed_at": "2026-06-28T10:00:00Z"
+}
