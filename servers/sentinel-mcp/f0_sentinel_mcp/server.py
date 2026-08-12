@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from f0_sectools_core.auth.config import SentinelConfig
 from f0_sectools_core.auth.env import load_platform_env
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -31,6 +32,7 @@ def _client() -> SentinelClient:
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def list_data_sources(limit: int = 25) -> list[dict[str, Any]]:
     """List which security telemetry this Sentinel workspace actually ingests.
 
@@ -45,6 +47,7 @@ async def list_data_sources(limit: int = 25) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def hunt_firewall(
     action: Literal["allowed", "blocked", "detected", "any"] = "any",
     indicator: str = "",
@@ -64,6 +67,7 @@ async def hunt_firewall(
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def hunt_dns_web(
     surface: Literal["dns", "web", "vpn"] = "dns",
     action: Literal["allowed", "blocked", "detected", "any"] = "any",
@@ -86,6 +90,7 @@ async def hunt_dns_web(
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def search_office_activity(
     workload: Literal["sharepoint", "onedrive", "exchange", "teams", "any"] = "any",
     operation: str = "",
@@ -108,6 +113,7 @@ async def search_office_activity(
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def list_sentinel_incidents(
     severity_min: Literal["informational", "low", "medium", "high"] = "low",
     status: Literal["open", "new", "active", "closed", "any"] = "open",
@@ -133,6 +139,7 @@ async def list_sentinel_incidents(
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def get_detection_coverage() -> list[dict[str, Any]]:
     """Report Sentinel's analytics-rule inventory and which MITRE tactics are UNCOVERED.
 
@@ -150,6 +157,7 @@ async def get_detection_coverage() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def run_kql(kql: str, hours_back: float = 24, limit: int = 25) -> list[dict[str, Any]]:
     """Run a CUSTOM read-only KQL query against the Sentinel Log Analytics workspace.
 

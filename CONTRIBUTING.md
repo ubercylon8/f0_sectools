@@ -46,8 +46,12 @@ change. Do it in this order, TDD-ing each code step. (Background:
 5. **Tools** (`tools.py`) — ≤ ~8 flat read tools returning `list[Finding]`;
    write the contract tests first (fake client) — live data validates real
    field names later.
-6. **Server** (`server.py`) — `FastMCP`, one `@mcp.tool()` per tool, build the
-   client from config, **redact at the boundary** (`redact_obj(f.model_dump())`).
+6. **Server** (`server.py`) — `MCPServer`, one `@mcp.tool()` per tool with
+   `@guarded_tool("<source>")` directly beneath it, build the client from
+   config, **redact at the boundary** (`redact_finding(f).model_dump()`).
+   The guard is not optional: it turns any error your mapper did not claim
+   into one redacted finding instead of a raw exception string, and a test
+   (`core/tests/test_tool_boundary.py`) fails if a tool is missing it.
 7. **Evals** — `evals/<platform>/tasks.yaml` (≥1 task per tool) + add the
    server to `SERVERS` in `evals/test_eval_coverage.py` and `SERVER_MODULES`
    in `evals/run.py`.

@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from f0_sectools_core.auth.config import LimaCharlieConfig
 from f0_sectools_core.auth.env import load_platform_env
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -31,6 +32,7 @@ def _client() -> LimaCharlieClient:
 
 
 @mcp.tool()
+@guarded_tool("limacharlie")
 async def get_org_overview() -> list[dict[str, Any]]:
     """LimaCharlie EDR deployment posture: sensor counts, D&R rule count, recent detection volume.
 
@@ -41,6 +43,7 @@ async def get_org_overview() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("limacharlie")
 async def list_sensors(
     online_only: bool = False, limit: int = 50, tag: str = ""
 ) -> list[dict[str, Any]]:
@@ -54,6 +57,7 @@ async def list_sensors(
 
 
 @mcp.tool()
+@guarded_tool("limacharlie")
 async def get_sensor(hostname: str) -> list[dict[str, Any]]:
     """Get LimaCharlie sensor detail by hostname (prefix match): platform, online status, sid, tags.
 
@@ -62,12 +66,14 @@ async def get_sensor(hostname: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("limacharlie")
 async def list_dr_rules(namespace: str = "general", limit: int = 50) -> list[dict[str, Any]]:
     """List Detection & Response (D&R) rules in the org (coverage). namespace: general|managed."""
     return _render(await asyncio.to_thread(tools.list_dr_rules, _client(), namespace, limit))
 
 
 @mcp.tool()
+@guarded_tool("limacharlie")
 async def list_detections(
     hours_back: float = 24, limit: int = 50, category: str | None = None
 ) -> list[dict[str, Any]]:
@@ -80,6 +86,7 @@ async def list_detections(
 
 
 @mcp.tool()
+@guarded_tool("limacharlie")
 async def query_telemetry(
     hunt: Literal[
         "new_processes", "powershell_activity", "dns_requests", "network_connections",

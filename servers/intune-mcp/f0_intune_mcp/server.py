@@ -11,6 +11,7 @@ from typing import Any, Literal
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -27,6 +28,7 @@ def _render(findings: list[Finding]) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("intune")
 async def list_managed_devices(
     compliance: Literal["all", "compliant", "noncompliant", "ingraceperiod", "unknown"] = "all",
     limit: int = 25,
@@ -41,6 +43,7 @@ async def list_managed_devices(
 
 
 @mcp.tool()
+@guarded_tool("intune")
 async def get_compliance_summary() -> list[dict[str, Any]]:
     """Intune device-compliance rollup: how many managed devices are compliant vs not."""
     cfg = PlatformConfig.from_env("INTUNE")
@@ -49,6 +52,7 @@ async def get_compliance_summary() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("intune")
 async def get_managed_device(device_name: str) -> list[dict[str, Any]]:
     """Get one Intune-managed device by its device name (compliance, encryption, owner, sync)."""
     cfg = PlatformConfig.from_env("INTUNE")
@@ -57,6 +61,7 @@ async def get_managed_device(device_name: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("intune")
 async def list_stale_devices(days: int = 30, limit: int = 25) -> list[dict[str, Any]]:
     """List Intune devices not synced in the last `days` (coverage drift / abandoned)."""
     cfg = PlatformConfig.from_env("INTUNE")
@@ -65,6 +70,7 @@ async def list_stale_devices(days: int = 30, limit: int = 25) -> list[dict[str, 
 
 
 @mcp.tool()
+@guarded_tool("intune")
 async def list_compliance_policies(limit: int = 25) -> list[dict[str, Any]]:
     """List Intune device COMPLIANCE POLICIES.
 
@@ -76,6 +82,7 @@ async def list_compliance_policies(limit: int = 25) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("intune")
 async def list_configuration_profiles(limit: int = 25) -> list[dict[str, Any]]:
     """List Intune device CONFIGURATION PROFILES.
 

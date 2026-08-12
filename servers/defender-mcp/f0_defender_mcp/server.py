@@ -15,6 +15,7 @@ from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -53,6 +54,7 @@ _ACTOR = os.environ.get("DEFENDER_AUDIT_ACTOR", "mcp-operator")
 
 
 @mcp.tool()
+@guarded_tool("defender")
 async def get_secure_score() -> list[dict[str, Any]]:
     """Get the Microsoft Secure Score — Microsoft 365 / Defender config-hardening posture (%).
 
@@ -65,6 +67,7 @@ async def get_secure_score() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("defender")
 async def list_incidents(
     severity_min: Literal["info", "low", "medium", "high", "critical"] = "medium",
     limit: int = 25,
@@ -87,6 +90,7 @@ async def list_incidents(
 
 
 @mcp.tool()
+@guarded_tool("defender")
 async def list_alerts(
     severity_min: Literal["info", "low", "medium", "high", "critical"] = "high",
     limit: int = 25,
@@ -104,6 +108,7 @@ async def list_alerts(
 
 
 @mcp.tool()
+@guarded_tool("defender")
 async def run_hunting_query(kql: str) -> list[dict[str, Any]]:
     """Run a Microsoft Defender advanced hunting query (KQL) — a READ-ONLY search of
     M365 / Entra / device telemetry (30d).
@@ -130,6 +135,7 @@ async def run_hunting_query(kql: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("defender")
 async def hunt(
     category: Literal["network", "process", "logon", "email"],
     indicator: str = "",
@@ -156,6 +162,7 @@ async def hunt(
 
 
 @mcp.tool()
+@guarded_tool("defender")
 async def isolate_host(
     device_id: str, comment: str, confirmation_token: str = ""
 ) -> list[dict[str, Any]]:
@@ -182,6 +189,7 @@ async def isolate_host(
 
 
 @mcp.tool()
+@guarded_tool("defender")
 async def release_host(
     device_id: str, comment: str, confirmation_token: str = ""
 ) -> list[dict[str, Any]]:

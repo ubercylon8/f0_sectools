@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from f0_sectools_core.auth.config import ProjectAchillesConfig
 from f0_sectools_core.auth.env import load_platform_env
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -29,6 +30,7 @@ def _client() -> ProjectAchillesClient:
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def get_defense_score(
     days: int = 30, over_time: bool = False, interval: str = "day"
 ) -> list[dict[str, Any]]:
@@ -50,6 +52,7 @@ async def get_defense_score(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def get_weak_techniques(days: int = 30, limit: int = 10) -> list[dict[str, Any]]:
     """Lowest-scoring MITRE techniques — where defenses most often fail."""
     async with _client() as pa:
@@ -57,6 +60,7 @@ async def get_weak_techniques(days: int = 30, limit: int = 10) -> list[dict[str,
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def list_test_executions(
     days: int = 7, limit: int = 25,
     test: str = "", tag: str = "", hostname: str = "",
@@ -73,6 +77,7 @@ async def list_test_executions(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def list_risk_acceptances(
     status: Literal["active", "revoked"] = "active", limit: int = 50
 ) -> list[dict[str, Any]]:
@@ -82,6 +87,7 @@ async def list_risk_acceptances(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def list_agents(
     status: str | None = None, online_only: bool = False, limit: int = 50
 ) -> list[dict[str, Any]]:
@@ -91,6 +97,7 @@ async def list_agents(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def get_fleet_health() -> list[dict[str, Any]]:
     """ProjectAchilles validation-agent fleet health: attack-simulation agents online/offline.
 
@@ -102,6 +109,7 @@ async def get_fleet_health() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def find_tests(
     by: Literal["technique", "actor", "tactic", "category", "tag", "keyword"],
     value: str,
@@ -116,6 +124,7 @@ async def find_tests(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def get_test(test_id: str) -> list[dict[str, Any]]:
     """Full detail for ONE specific test — use for "what does test X cover / do",
     "details on the <name> test". Returns description, OS/target, complexity, tactics,
