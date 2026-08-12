@@ -73,7 +73,7 @@ replace the placeholder path with your checkout:
 }
 ```
 
-(The shipped file wires all seven servers, including `f0-pa-actions` — the
+(The shipped file wires all nine servers, including `f0-pa-actions` — the
 gated-write ProjectAchilles companion, whose write tools stay inert without
 `PROJECTACHILLES_ALLOW_WRITE=true` and a per-action confirmation token.)
 

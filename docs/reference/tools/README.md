@@ -2,7 +2,7 @@
 
 # Tool reference
 
-**51 tools across 8 MCP servers**, harvested from the live FastMCP registries. Every tool returns the normalized [findings schema](../../explanation/findings-schema.md); every server follows the [thin-server pattern](../../explanation/architecture.md#the-server-pattern).
+**58 tools across 9 MCP servers**, harvested from the live FastMCP registries. Every tool returns the normalized [findings schema](../../explanation/findings-schema.md); every server follows the [thin-server pattern](../../explanation/architecture.md#the-server-pattern).
 
 Skills refer to tools by base name (`list_incidents`); runtimes prefix them (Hermes `mcp_f0-defender_list_incidents`, Claude Code `mcp__f0-defender__list_incidents`).
 
@@ -15,4 +15,5 @@ Skills refer to tools by base name (`list_incidents`); runtimes prefix them (Her
 | [`f0-projectachilles`](projectachilles.md) | `f0_projectachilles_mcp.server` | 8 | — |
 | [`f0-pa-actions`](projectachilles-actions.md) | `f0_pa_actions_mcp.server` | 7 | 4 |
 | [`f0-purview`](purview.md) | `f0_purview_mcp.server` | 6 | — |
+| [`f0-sentinel`](sentinel.md) | `f0_sentinel_mcp.server` | 7 | — |
 | [`f0-tenable`](tenable.md) | `f0_tenable_mcp.server` | 7 | — |

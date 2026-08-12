@@ -40,6 +40,7 @@ SERVER_MODULES = {
     "tenable": "f0_tenable_mcp.server",
     "projectachilles-actions": "f0_pa_actions_mcp.server",
     "purview": "f0_purview_mcp.server",
+    "sentinel": "f0_sentinel_mcp.server",
 }
 
 

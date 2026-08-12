@@ -76,6 +76,10 @@ async def list_incidents(
     Defaults to state="open" — excludes resolved incidents and ones redirected
     into another incident, which Defender retains indefinitely and which are
     already handled. Use state="all" for incident history.
+
+    If a Sentinel workspace is configured, for the Sentinel SOC queue view of
+    the same incidents — with MITRE tactics, SOC status and owner — use
+    f0-sentinel's list_sentinel_incidents.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
@@ -114,6 +118,11 @@ async def run_hunting_query(kql: str) -> list[dict[str, Any]]:
     DeviceName, FileName, ProcessCommandLine, AccountName), DeviceLogonEvents
     (Timestamp, ActionType, AccountName, DeviceName), EmailEvents (Timestamp,
     SenderFromAddress, Subject, ThreatTypes). Always bound results with `| take 50`.
+
+    This is Defender advanced hunting (device, email and identity tables), not
+    Sentinel workspace KQL. If a Sentinel workspace is configured, for
+    firewall, DNS, syslog or other Log Analytics tables use f0-sentinel's
+    run_kql.
     """
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:

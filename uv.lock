@@ -22,6 +22,7 @@ members = [
     "f0-purview-mcp",
     "f0-sectools",
     "f0-sectools-core",
+    "f0-sentinel-mcp",
     "f0-tenable-mcp",
 ]
 overrides = [
@@ -640,6 +641,25 @@ requires-dist = [
     { name = "weasyprint", marker = "extra == 'reports'", specifier = ">=62" },
 ]
 provides-extras = ["reports"]
+
+[[package]]
+name = "f0-sentinel-mcp"
+version = "0.0.1"
+source = { editable = "servers/sentinel-mcp" }
+dependencies = [
+    { name = "f0-sectools-core" },
+    { name = "httpx" },
+    { name = "mcp" },
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "f0-sectools-core", editable = "core" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "mcp", specifier = ">=1.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+]
 
 [[package]]
 name = "f0-tenable-mcp"

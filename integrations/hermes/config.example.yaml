@@ -44,6 +44,9 @@ mcp_servers:
   f0-purview:
     command: "uv"
     args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-purview-mcp"]
+  f0-sentinel:
+    command: "uv"
+    args: ["run", "--directory", "${F0_SECTOOLS_DIR}", "f0-sentinel-mcp"]
 
 # 2) Load the f0_sectools skills straight from the repo (no copying).
 skills:

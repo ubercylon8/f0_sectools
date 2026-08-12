@@ -44,10 +44,10 @@ flowchart LR
 
 ## Look it up (reference)
 
-- **[Tool reference](reference/tools/README.md)** — all 51 tools across the
-  8 servers: descriptions, parameters, enums, defaults, gated-write badges.
+- **[Tool reference](reference/tools/README.md)** — all 58 tools across the
+  9 servers: descriptions, parameters, enums, defaults, gated-write badges.
   *Generated from the live tool registries; CI fails if it drifts.*
-- **[Skills catalog](reference/skills.md)** — all 25 portable skills, by
+- **[Skills catalog](reference/skills.md)** — all 30 portable skills, by
   platform. *Generated from `SKILL.md` frontmatter.*
 - **[Glossary](reference/glossary.md)** — every term, defined once.
 - **[Eval scorecard](../evals/SCORECARD.md)** — measured model × server

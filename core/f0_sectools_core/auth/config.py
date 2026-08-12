@@ -143,3 +143,62 @@ class TenableConfig:
             base_url=base_url,
             verify_tls=verify,
         )
+
+
+@dataclass
+class SentinelConfig:
+    """Microsoft Sentinel credentials: an Entra app plus workspace coordinates.
+
+    Two API surfaces with different RBAC. The logs half (KQL) needs only
+    ``workspace_id`` and the Log Analytics Reader role. The objects half
+    (analytics rules, watchlists) needs the ARM triple and Microsoft Sentinel
+    Reader; when it is absent the server degrades gracefully rather than
+    failing, so a logs-only deployment is a supported configuration.
+
+    Loaded from .env.sentinel. Secrets never leave this layer or get logged.
+    """
+
+    tenant_id: str
+    client_id: str
+    client_secret: str
+    workspace_id: str
+    subscription_id: str | None = None
+    resource_group: str | None = None
+    workspace_name: str | None = None
+    retention_days: int = 30
+    verify_tls: bool = True
+
+    @property
+    def has_arm(self) -> bool:
+        """True when all three ARM coordinates are present."""
+        return bool(self.subscription_id and self.resource_group and self.workspace_name)
+
+    @classmethod
+    def from_env(
+        cls, prefix: str = "SENTINEL", env: Mapping[str, str] | None = None
+    ) -> SentinelConfig:
+        env = env if env is not None else os.environ
+        required = {
+            k: f"{prefix}_{k.upper()}"
+            for k in ("tenant_id", "client_id", "client_secret", "workspace_id")
+        }
+        missing = [name for name in required.values() if not env.get(name)]
+        if missing:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        try:
+            retention = int(env.get(f"{prefix}_RETENTION_DAYS", "30"))
+        except ValueError:
+            retention = 30
+        if retention < 1:
+            retention = 30
+        return cls(
+            tenant_id=env[required["tenant_id"]],
+            client_id=env[required["client_id"]],
+            client_secret=env[required["client_secret"]],
+            workspace_id=env[required["workspace_id"]],
+            subscription_id=env.get(f"{prefix}_SUBSCRIPTION_ID") or None,
+            resource_group=env.get(f"{prefix}_RESOURCE_GROUP") or None,
+            workspace_name=env.get(f"{prefix}_WORKSPACE_NAME") or None,
+            retention_days=retention,
+            verify_tls=env.get(f"{prefix}_VERIFY_TLS", "true").strip().lower() in _TRUE,
+        )

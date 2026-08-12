@@ -17,11 +17,11 @@ from evals.run import (
 
 
 @pytest.mark.asyncio
-async def test_combined_registry_unions_all_45_tools():
+async def test_combined_registry_unions_all_58_tools():
     tools = await combined_tool_schemas()
     names = [t["function"]["name"] for t in tools]
-    assert len(names) == 51, f"expected 51 tools, got {len(names)}"
-    assert len(set(names)) == 51, "tool names must be unique across servers"
+    assert len(names) == 58, f"expected 58 tools, got {len(names)}"
+    assert len(set(names)) == 58, "tool names must be unique across servers"
     # spot-check one tool from each server is present
     for expected in (
         "isolate_host",
@@ -31,6 +31,7 @@ async def test_combined_registry_unions_all_45_tools():
         "list_assets",
         "schedule_test",
         "get_dlp_summary",
+        "list_sentinel_incidents",
     ):
         assert expected in names
 
@@ -64,18 +65,18 @@ def test_combined_tasks_tagged_with_origin_and_include_probes():
     import yaml
     tasks = combined_tasks()
     # 15 defender + 8 entra + 14 limacharlie + 14 projectachilles + 8 intune
-    # + 10 tenable + 16 projectachilles-actions + 8 purview = 93, plus probes.
+    # + 10 tenable + 16 projectachilles-actions + 8 purview + 19 sentinel = 112, plus probes.
     # Distinguish by checking against native task prompts.
     native_prompts = set()
     for server in [
         "defender", "entra", "limacharlie", "projectachilles", "intune", "tenable",
-        "projectachilles-actions", "purview",
+        "projectachilles-actions", "purview", "sentinel",
     ]:
         with open(f"evals/{server}/tasks.yaml") as fh:
             native = yaml.safe_load(fh)
         native_prompts.update(t["prompt"] for t in (native or []))
     per_server = [t for t in tasks if t["prompt"] in native_prompts]
-    assert len(per_server) == 93
+    assert len(per_server) == 112
     probes = [t for t in tasks if t["prompt"] not in native_prompts]
     assert len(probes) >= 6, "expected the cross-platform probe set"
     assert all("origin" in t and "prompt" in t and "expect_tool" in t for t in tasks)

@@ -64,6 +64,13 @@ Used by skills: [`review-data-risk`](../../../skills/purview/data-risk-review/SK
 
 Search the Microsoft 365 unified audit log: who did what, when.
 
+If a Sentinel workspace is configured, prefer f0-sentinel's
+search_office_activity for SharePoint / OneDrive / Exchange / Teams file and
+mail activity: it queries the same audit data through Log Analytics and
+returns in under a second, where this tool's asynchronous search takes 5-15
+minutes. Use this tool when there is no Sentinel workspace, or for audit
+records that predate the workspace's retention.
+
 Optional flat filters: activity (an EXACT operation name like "FileDeleted",
 "FileDownloaded", "MailItemsAccessed" — when unsure, search once with no
 activity filter and read the operation names that return) and user (a UPN).
@@ -79,7 +86,7 @@ get_audit_results. NEVER resubmit the same search while one is running
 | `hours_back` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
-Used by skills: [`investigate-audit-activity`](../../../skills/purview/audit-investigation/SKILL.md)
+Used by skills: [`investigate-audit-activity`](../../../skills/purview/audit-investigation/SKILL.md), [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
 
 ## `get_audit_results`
 
