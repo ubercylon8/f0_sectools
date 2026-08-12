@@ -1,6 +1,6 @@
 """Platform-aware finding gather for reports. Lives in scripts/ (may import
 servers/*); core/reports stays platform-free. Each persona gathers its own
-groups (GATHER_MAP) — the CISO the six-pillar rollup, the operational personas
+groups (GATHER_MAP) — the CISO the seven-pillar rollup, the operational personas
 their working data. Each factory mirrors the matching live_smoke_*.py client
 construction. A platform that raises degrades to a posture finding so the report
 still generates (graceful-partial)."""
@@ -113,6 +113,23 @@ async def _pillar_endpoint_coverage(window_hours: int) -> list[Finding]:
     return await asyncio.to_thread(tools.get_org_overview, lc)
 
 
+async def _pillar_detection_coverage(window_hours: int) -> list[Finding]:
+    from f0_sectools_core.auth.config import SentinelConfig
+    from f0_sentinel_mcp import tools
+    from f0_sentinel_mcp.client import SentinelClient
+    load_dotenv(".env.sentinel")
+    cfg = SentinelConfig.from_env("SENTINEL")
+    async with SentinelClient(cfg) as c:
+        findings = await tools.get_detection_coverage(c)
+    # Unlike every other pillar tool, this one also returns up to 25 per-rule
+    # findings alongside the summary. Every CISO pillar is a single headline
+    # number, so keep only the summary (the first element) -- the per-rule
+    # inventory belongs to the detection-engineer group below, not the
+    # executive rollup. Sliced, not indexed, so an (unexpected) empty result
+    # comes back as [] rather than raising.
+    return findings[:1]
+
+
 # ── Detection-engineer / threat-hunter factories ─────────────────────
 async def _defender_alerts(window_hours: int) -> list[Finding]:
     from f0_defender_mcp import tools
@@ -154,6 +171,19 @@ async def _lc_detections(window_hours: int) -> list[Finding]:
     load_dotenv(".env.limacharlie")
     lc = LimaCharlieClient(LimaCharlieConfig.from_env())
     return await asyncio.to_thread(tools.list_detections, lc, float(window_hours), 15)
+
+
+async def _sentinel_analytics_rules(window_hours: int) -> list[Finding]:
+    from f0_sectools_core.auth.config import SentinelConfig
+    from f0_sentinel_mcp import tools
+    from f0_sentinel_mcp.client import SentinelClient
+    load_dotenv(".env.sentinel")
+    cfg = SentinelConfig.from_env("SENTINEL")
+    async with SentinelClient(cfg) as c:
+        # Full result, including the per-rule findings the CISO pillar above
+        # trims away -- the rule inventory is exactly what this persona's
+        # report exists to show.
+        return await tools.get_detection_coverage(c)
 
 
 async def _pa_weak_techniques(window_hours: int) -> list[Finding]:
@@ -221,7 +251,7 @@ async def _tenable_top_vulns(window_hours: int) -> list[Finding]:
 
 
 # persona -> {group label: factory}. Patched in tests.
-# The CISO map is the six-pillar rollup; operational personas gather their own
+# The CISO map is the seven-pillar rollup; operational personas gather their own
 # working data (see docs/superpowers/specs/2026-07-25-report-persona-gathering-design.md).
 GATHER_MAP: dict[str, dict[str, Callable[[int], Awaitable[list[Finding]]]]] = {
     "ciso": {
@@ -231,6 +261,7 @@ GATHER_MAP: dict[str, dict[str, Callable[[int], Awaitable[list[Finding]]]]] = {
         "device_compliance": _pillar_device_compliance,
         "data_risk": _pillar_data_risk,
         "endpoint_coverage": _pillar_endpoint_coverage,
+        "detection_coverage": _pillar_detection_coverage,
     },
     "detection_engineer": {
         "alerts_mitre": _defender_alerts,
@@ -238,6 +269,7 @@ GATHER_MAP: dict[str, dict[str, Callable[[int], Awaitable[list[Finding]]]]] = {
         "detection_rules": _lc_dr_rules,
         "endpoint_detections": _lc_detections,
         "weak_techniques": _pa_weak_techniques,
+        "analytics_rules": _sentinel_analytics_rules,
     },
     "threat_hunter": {
         "incidents": _defender_incidents,
