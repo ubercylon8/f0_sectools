@@ -93,10 +93,15 @@ the Defender XDR-native incident view (with its own alert and device
 context) use f0-defender's list_incidents. Not an alert list — for
 individual alerts use f0-defender's list_alerts.
 
+Returns open work by default (`status="open"` = everything not Closed),
+because a queue of already-handled incidents is not a queue. Pass
+`status="closed"` for handled work or `status="any"` for both. When more
+incidents match than `limit`, a final "showing N" finding says so.
+
 | Parameter | Type | Default |
 |---|---|---|
 | `severity_min` | `"informational"` \| `"low"` \| `"medium"` \| `"high"` | `"low"` |
-| `status` | `"new"` \| `"active"` \| `"closed"` \| `"any"` | `"any"` |
+| `status` | `"open"` \| `"new"` \| `"active"` \| `"closed"` \| `"any"` | `"open"` |
 | `hours_back` | `number` | `168` |
 | `limit` | `integer` | `25` |
 

@@ -29,8 +29,11 @@ Base tool names: `get_detection_coverage`, `list_sentinel_incidents`,
    the custom figure — it is what the operator actually built.
 2. **Only enabled rules count.** A disabled rule contributes to neither
    figure; do not credit coverage for a rule that is off.
-3. Call `list_sentinel_incidents` and compare tactics against what
-   `get_detection_coverage` reports. A large incident volume against a small
+3. Call `list_sentinel_incidents` with `status="any"` and compare tactics
+   against what `get_detection_coverage` reports. Pass `status="any"`
+   deliberately: the tool defaults to open work, but this comparison is about
+   the whole population a rule set produced, and closed incidents count toward
+   that just as much as open ones. A large incident volume against a small
    custom rule count means most incidents come from a connected product (e.g.
    Defender XDR mirroring into Sentinel) rather than Sentinel analytics —
    that is a real, commonly-missed finding, and it is invisible from the

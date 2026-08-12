@@ -110,7 +110,7 @@ async def search_office_activity(
 @mcp.tool()
 async def list_sentinel_incidents(
     severity_min: Literal["informational", "low", "medium", "high"] = "low",
-    status: Literal["new", "active", "closed", "any"] = "any",
+    status: Literal["open", "new", "active", "closed", "any"] = "open",
     hours_back: float = 168,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
@@ -120,7 +120,12 @@ async def list_sentinel_incidents(
     or which ATT&CK tactics are showing up. This is the Sentinel-side view; for
     the Defender XDR-native incident view (with its own alert and device
     context) use f0-defender's list_incidents. Not an alert list — for
-    individual alerts use f0-defender's list_alerts."""
+    individual alerts use f0-defender's list_alerts.
+
+    Returns open work by default (`status="open"` = everything not Closed),
+    because a queue of already-handled incidents is not a queue. Pass
+    `status="closed"` for handled work or `status="any"` for both. When more
+    incidents match than `limit`, a final "showing N" finding says so."""
     async with _client() as c:
         return _render(
             await tools.list_sentinel_incidents(c, severity_min, status, hours_back, limit)

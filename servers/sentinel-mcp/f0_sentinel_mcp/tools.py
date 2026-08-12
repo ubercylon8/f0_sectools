@@ -10,7 +10,11 @@ import json
 from typing import Any, Literal
 
 from f0_sectools_core.auth.graph import GraphError
-from f0_sectools_core.paging import clamp_limit, more_available_finding
+from f0_sectools_core.paging import (
+    clamp_limit,
+    more_available_finding,
+    truncation_finding,
+)
 from f0_sectools_core.schema.findings import (
     Entity,
     EntityKind,
@@ -172,6 +176,27 @@ _INDICATOR_HELP = {
 }
 
 
+def _fetch_bound(limit: int) -> int:
+    """Ask the platform for one row more than we intend to show.
+
+    `len(rows) >= limit` cannot tell "exactly limit rows exist" from "limit
+    rows and more", so it reports truncation that never happened. Fetching one
+    spare row turns the question into a fact for the cost of a single row.
+    """
+    return limit + 1
+
+
+def _split_page(rows: list[dict[str, Any]], limit: int) -> tuple[list[dict[str, Any]], bool]:
+    """Split a `_fetch_bound` result into the rows to show and "was there more?"."""
+    return rows[:limit], len(rows) > limit
+
+
+def _more(shown: int, has_more: bool, hint: str) -> list[Finding]:
+    """The core truncation note, or nothing when the page was complete."""
+    f = truncation_finding("sentinel", shown=shown, fetched=shown, has_more=has_more, hint=hint)
+    return [f] if f else []
+
+
 def _rows_to_findings(rows: list[dict[str, Any]], title_key: str, limit: int) -> list[Finding]:
     out: list[Finding] = []
     for r in rows[:limit]:
@@ -242,7 +267,7 @@ async def _run_surface(
     ]
     if indicator:
         parts.append(f"| project {', '.join(spec.project)}")
-        parts.append(f"| order by TimeGenerated desc | take {limit}")
+        parts.append(f"| order by TimeGenerated desc | take {_fetch_bound(limit)}")
     else:
         # No indicator -> aggregate. Never dump rows from a table this large.
         parts.append(
@@ -273,15 +298,11 @@ async def _run_surface(
         ]
 
     title_key = spec.indicator_fields[0] if indicator else spec.action_field
-    findings = _rows_to_findings(rows, title_key, limit)
-    if len(rows) >= limit:
-        findings.append(
-            more_available_finding(
-                "sentinel", shown=len(findings),
-                hint="Narrow with an indicator or a shorter hours window.",
-            )
-        )
-    return findings
+    shown, has_more = _split_page(rows, limit)
+    findings = _rows_to_findings(shown, title_key, limit)
+    return findings + _more(
+        len(findings), has_more, "Narrow with an indicator or a shorter hours window."
+    )
 
 
 async def hunt_firewall(
@@ -371,11 +392,14 @@ async def search_office_activity(
     if operation:
         parts.append(f'| where Operation =~ "{operation}"')
         parts.append(f"| project {', '.join(_OA_PROJECT)}")
-        parts.append(f"| order by TimeGenerated desc | take {limit}")
+        parts.append(f"| order by TimeGenerated desc | take {_fetch_bound(limit)}")
     else:
         # Discovery mode: hand back the operation vocabulary so the model can
         # pick a real value rather than inventing one.
-        parts.append(f"| summarize Events=count() by Operation | top {limit} by Events desc")
+        parts.append(
+            f"| summarize Events=count() by Operation "
+            f"| top {_fetch_bound(limit)} by Events desc"
+        )
     kql = " ".join(parts)
 
     try:
@@ -399,6 +423,7 @@ async def search_office_activity(
                 ),
             )
         ]
+    shown_rows, has_more = _split_page(rows, limit)
     if not operation:
         return [
             Finding(
@@ -415,9 +440,14 @@ async def search_office_activity(
                     f"operation=\"{r.get('Operation')}\" to see the events.",
                 ),
             )
-            for r in rows[:limit]
-        ]
-    return _rows_to_findings(rows, "Operation", limit)
+            for r in shown_rows
+        ] + _more(
+            len(shown_rows), has_more,
+            "Raise limit to see more operations, or pick one and call again with it.",
+        )
+    return _rows_to_findings(shown_rows, "Operation", limit) + _more(
+        len(shown_rows), has_more, "Narrow with a shorter hours window or raise limit."
+    )
 
 
 _SEV_ORDER = ("informational", "low", "medium", "high")
@@ -429,6 +459,11 @@ _SEV_FINDING = {
     "medium": Severity.medium, "high": Severity.high,
 }
 _STATUS_VALUE = {"new": "New", "active": "Active", "closed": "Closed"}
+# "open" is an exclusion, not a value: Sentinel's Status vocabulary can grow
+# (an allow-list of ("New","Active") would silently drop a state added later),
+# so open work is defined as "not Closed". Same reasoning as the Defender read
+# tools, which prefer ne-exclusions of closed states over allow-lists.
+_STATUS_CHOICES = ("open", "new", "active", "closed", "any")
 
 
 def _parse_json_object(raw: Any) -> dict[str, Any]:
@@ -486,7 +521,7 @@ def _incident_tactics_techniques(raw: Any) -> tuple[str, str]:
 async def list_sentinel_incidents(
     client: Any,
     severity_min: str = "low",
-    status: str = "any",
+    status: str = "open",
     hours_back: float = 168,
     limit: int = 25,
 ) -> list[Finding]:
@@ -494,8 +529,8 @@ async def list_sentinel_incidents(
     cap = "Sentinel incidents"
     if severity_min not in _SEV_ORDER:
         return [_bad_arg("severity_min", severity_min, ", ".join(_SEV_ORDER))]
-    if status != "any" and status not in _STATUS_VALUE:
-        return [_bad_arg("status", status, "new, active, closed, any")]
+    if status not in _STATUS_CHOICES:
+        return [_bad_arg("status", status, ", ".join(_STATUS_CHOICES))]
 
     missing = await _probe_or_finding(client, "SecurityIncident", "Sentinel incidents", cap)
     if missing:
@@ -514,10 +549,12 @@ async def list_sentinel_incidents(
         "| summarize arg_max(TimeGenerated, *) by IncidentNumber",
         f"| where Severity in~ ({sev_list})",
     ]
-    if status != "any":
+    if status == "open":
+        parts.append('| where Status !~ "Closed"')
+    elif status != "any":
         parts.append(f'| where Status =~ "{_STATUS_VALUE[status]}"')
     parts.append("| order by TimeGenerated desc")
-    parts.append(f"| take {limit}")
+    parts.append(f"| take {_fetch_bound(limit)}")
     kql = " ".join(parts)
 
     try:
@@ -534,12 +571,16 @@ async def list_sentinel_incidents(
                 source="sentinel",
                 finding_type=FindingType.posture,
                 severity=Severity.info,
-                title=f"No Sentinel incidents at severity {severity_min}+ in the last {hours:g}h",
+                title=(
+                    f"No {'open ' if status == 'open' else ''}Sentinel incidents at "
+                    f"severity {severity_min}+ in the last {hours:g}h"
+                ),
             )
         ]
 
+    shown_rows, has_more = _split_page(rows, limit)
     out: list[Finding] = []
-    for r in rows[:limit]:
+    for r in shown_rows:
         num = str(r.get("IncidentNumber", "?"))
         tactics, techniques = _incident_tactics_techniques(r.get("AdditionalData"))
         out.append(
@@ -559,7 +600,9 @@ async def list_sentinel_incidents(
                 observed_at=str(r.get("TimeGenerated") or "") or None,
             )
         )
-    return out
+    return out + _more(
+        len(out), has_more, "Raise limit, shorten hours_back, or filter with severity_min."
+    )
 
 
 # The MITRE tactics Sentinel analytics rules can carry. Used to name the GAP —
@@ -901,7 +944,12 @@ async def run_kql(
         # take 25"` -- the whole bound silently swallowed by the comment, so
         # the query dispatches unbounded. A KQL line comment only extends to
         # the end of its own line, so a bound on the NEXT line always applies.
-        query = f"{query}\n| take {limit}"
+        query = f"{query}\n| take {_fetch_bound(limit)}"
+        bounded = True
+    else:
+        # The caller supplied their own bound; we cannot tell a complete result
+        # from a truncated one, so we must not claim either way.
+        bounded = False
 
     try:
         rows = await client.query(query, n.timespan(hours))
@@ -920,5 +968,8 @@ async def run_kql(
                 title=f"Query returned no rows in the last {hours:g}h",
             )
         ]
-    first_col = next(iter(rows[0].keys()), "result")
-    return _rows_to_findings(rows, first_col, limit)
+    shown, has_more = _split_page(rows, limit) if bounded else (rows[:limit], False)
+    first_col = next(iter(shown[0].keys()), "result")
+    return _rows_to_findings(shown, first_col, limit) + _more(
+        len(shown), has_more, "Add a filter to the query or raise limit."
+    )

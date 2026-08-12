@@ -199,14 +199,18 @@ async def test_hunt_firewall_indicator_mode_kql_ends_with_bounded_take(fake):
     client = fake(rows={USAGE: _TABLES, CEF: []})
     await tools.hunt_firewall(client, indicator="10.1.2.3", limit=7)
     kql = [q for q in client.queries if CEF in q][0]
-    assert kql.rstrip().endswith("| take 7")
+    # limit + 1: one spare row makes "was there more?" a fact rather than the
+    # `len(rows) >= limit` guess, which over-reports on an exactly-full page.
+    assert kql.rstrip().endswith("| take 8")
 
 
 async def test_hunt_firewall_indicator_mode_clamps_huge_limit(fake):
     client = fake(rows={USAGE: _TABLES, CEF: []})
     await tools.hunt_firewall(client, indicator="10.1.2.3", limit=100000)
     kql = [q for q in client.queries if CEF in q][0]
-    assert kql.rstrip().endswith("| take 100")
+    # Clamped to MAX_LIMIT (100), then one spare row for truncation detection.
+    # The extra row is fetched, never shown -- the cap on returned findings holds.
+    assert kql.rstrip().endswith("| take 101")
 
 
 async def test_hunt_firewall_time_predicate_comes_first(fake):
@@ -758,7 +762,7 @@ async def test_run_kql_passes_query_through(fake):
 async def test_run_kql_appends_bound_when_query_has_none(fake):
     client = fake(rows={"Heartbeat": []})
     await tools.run_kql(client, "Heartbeat | project Computer", limit=10)
-    assert "| take 10" in client.queries[0]
+    assert "| take 11" in client.queries[0]  # limit + 1 spare, as above
 
 
 async def test_run_kql_respects_an_existing_bound(fake):
@@ -780,7 +784,7 @@ async def test_run_kql_force_bound_survives_a_trailing_line_comment(fake):
     lines = dispatched.split("\n")
     take_line = next(line for line in lines if "take" in line)
     assert "//" not in take_line
-    assert "| take 25" in take_line
+    assert "| take 26" in take_line
 
 
 async def test_run_kql_rejects_control_commands(fake):
@@ -1096,3 +1100,61 @@ async def test_every_tool_returns_finding_not_exception_on_graph_error(fake, too
     out = await _ALL_SEVEN_TOOLS[tool_name](client)
     assert isinstance(out, list) and len(out) >= 1
     assert all(f.finding_type.value == "posture" for f in out), (tool_name, status)
+
+
+# --- Read-tool audit (2026-07-25 framework) applied to sentinel, server #9 ---
+# Q2: can already-handled records come back as current?  Q4: is truncation
+# disclosed?  Both were live-confirmed on the validation workspace: the default
+# queue returned 23 Closed + 2 New while only 2 incidents were actually open,
+# and 25 of 55 deduped incidents were dropped with no disclosure.
+
+def _incidents(n, status="New"):
+    return [dict(_INC[0], IncidentNumber=4000 + i, Status=status) for i in range(n)]
+
+
+async def test_incident_queue_excludes_closed_by_default(fake):
+    """A SOC queue is open work. Closed incidents are not the analyst's queue."""
+    client = fake(rows={USAGE: _TABLES, SI: _INC})
+    await tools.list_sentinel_incidents(client)
+    kql = client.queries[-1]
+    assert 'Status !~ "Closed"' in kql
+
+
+async def test_incident_queue_status_any_still_includes_closed(fake):
+    """The old behaviour stays reachable -- it just stops being the default."""
+    client = fake(rows={USAGE: _TABLES, SI: _INC})
+    await tools.list_sentinel_incidents(client, status="any")
+    assert "Closed" not in client.queries[-1]
+
+
+async def test_incident_queue_status_closed_is_still_selectable(fake):
+    client = fake(rows={USAGE: _TABLES, SI: _INC})
+    await tools.list_sentinel_incidents(client, status="closed")
+    assert 'Status =~ "Closed"' in client.queries[-1]
+
+
+async def test_incident_queue_discloses_truncation(fake):
+    client = fake(rows={USAGE: _TABLES, SI: _incidents(6)})
+    out = await tools.list_sentinel_incidents(client, limit=5)
+    assert sum(f.finding_type.value == "incident" for f in out) == 5
+    assert any("more results available" in f.title for f in out)
+
+
+async def test_incident_queue_silent_when_nothing_hidden(fake):
+    client = fake(rows={USAGE: _TABLES, SI: _incidents(5)})
+    out = await tools.list_sentinel_incidents(client, limit=5)
+    assert not any("more results available" in f.title for f in out)
+
+
+async def test_office_activity_discloses_truncation(fake):
+    rows = [{"Operation": f"Op{i}", "TimeGenerated": "2026-08-10T12:00:00Z"} for i in range(6)]
+    client = fake(rows={USAGE: _TABLES, OA: rows})
+    out = await tools.search_office_activity(client, operation="FileDownloaded", limit=5)
+    assert any("more results available" in f.title for f in out)
+
+
+async def test_run_kql_discloses_truncation(fake):
+    rows = [{"Computer": f"host{i}"} for i in range(6)]
+    client = fake(rows={USAGE: _TABLES, "Heartbeat": rows})
+    out = await tools.run_kql(client, "Heartbeat", limit=5)
+    assert any("more results available" in f.title for f in out)
