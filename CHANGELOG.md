@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`sentinel-mcp` — ninth server** (Microsoft Sentinel, SIEM pillar).
+  Read-only: KQL telemetry over the Log Analytics workspace (guided
+  `hunt_firewall` and `hunt_dns_web` plus a custom `run_kql` escape hatch),
+  fast M365 audit search (`search_office_activity`, seconds instead of
+  Purview's 5-15 minute asynchronous search), the Sentinel SOC incident queue
+  (`list_sentinel_incidents`, with MITRE tactics, status and owner), analytics-
+  rule detection coverage (`get_detection_coverage`), and `list_data_sources`
+  to discover what a given workspace actually ingests before hunting it.
+  Two-way routing docstrings point operators at the right server: Sentinel vs.
+  Defender for incidents and for KQL (different table universes), Sentinel vs.
+  Purview for M365 audit.
+
+### Fixed
+
+- **`run_kql`'s control-command guard now rejects a dot-command on any line**,
+  not just the first — a Kusto control command (`.drop`, `.create`, …) smuggled
+  onto a second line previously reached the client unrejected.
+- **Every server's `_render` now redacts through `redact_finding`**, not the
+  weaker `redact_obj`. `redact_obj` only ever sees the literal `key`/`value`
+  keys of a flat evidence entry; `redact_finding`'s extra evidence-key pass
+  blanks a value sitting under a secret-hinting key name (e.g.
+  `client_secret`), which previously only the generated-report path did.
+
 ## [0.2.1] — 2026-07-25
 
 Twenty-seven merged PRs since 0.2.0. Two themes: **persona posture reports** as a
