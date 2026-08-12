@@ -26,7 +26,7 @@ That's it. The project config auto-loads:
 - **7 MCP servers** from [`opencode.json`](../../../opencode.json) (relative
   `uv run` commands — verify with `opencode mcp list`: six read servers
   `connected`, `f0-pa-actions` `disabled`).
-- **22 skills** from `.opencode/skills/` (symlinks into the portable
+- **30 skills** from `.opencode/skills/` (symlinks into the portable
   [`skills/`](../../../skills/) set — the agent loads the matching playbook
   on demand via its `skill` tool).
 - **4 personas** from `.opencode/agents/` — switch agents in the TUI (Tab or

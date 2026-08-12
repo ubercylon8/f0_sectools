@@ -9,8 +9,8 @@ persona-shaped summary. Source of truth:
 
 Security platforms disagree about everything — field names, severity scales,
 pagination, error shapes. An agent gluing them together would need per-platform
-parsing logic, and a **small local model** would need to hold eight mental
-models at once. Instead, every tool — all 51, across all eight servers —
+parsing logic, and a **small local model** would need to hold nine mental
+models at once. Instead, every tool — all 58, across all nine servers —
 returns the same flat, predictable shape. The model parses one structure,
 always; skills chain results across platforms without translation; and
 human-facing views are *rendered from* the data rather than being the data.

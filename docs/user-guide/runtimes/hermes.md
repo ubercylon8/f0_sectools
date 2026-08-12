@@ -42,6 +42,8 @@ Hermes profiles let you install f0_sectools in one command. The recommended path
    cp servers/projectachilles-mcp/.env.projectachilles.example .env.projectachilles
    cp servers/intune-mcp/.env.intune.example .env.intune
    cp servers/tenable-mcp/.env.tenable.example .env.tenable
+   cp servers/purview-mcp/.env.purview.example .env.purview
+   cp servers/sentinel-mcp/.env.sentinel.example .env.sentinel
    ```
    No credentials are stored in Hermes — the MCP servers load them from these files at the repo root.
 
@@ -51,10 +53,10 @@ Hermes profiles let you install f0_sectools in one command. The recommended path
    ```
    This creates `~/.hermes/profiles/f0sectools/` with:
    - `SOUL.md` (base identity: read-only / never-fabricate principles)
-   - `config.yaml` (the seven MCP servers — defender, entra, limacharlie,
-     projectachilles, pa-actions, intune, tenable — under `mcp_servers`, plus
-     personas and skills). Hermes reads MCP servers from `config.yaml`, not a
-     separate `mcp.json`.
+   - `config.yaml` (the nine MCP servers — defender, entra, limacharlie,
+     projectachilles, pa-actions, intune, tenable, purview, sentinel — under
+     `mcp_servers`, plus personas and skills). Hermes reads MCP servers from
+     `config.yaml`, not a separate `mcp.json`.
 
 4. **Set the checkout path** in the profile's environment:
    ```bash
@@ -94,8 +96,9 @@ If you prefer to configure Hermes manually:
 
 3. **Merge the config** — combine [`integrations/hermes/config.example.yaml`](../../../integrations/hermes/config.example.yaml)
    into your `~/.hermes/config.yaml`, adjusting paths as needed. It wires:
-   - `mcp_servers` → the seven f0_sectools servers (defender, entra, limacharlie,
-     projectachilles, pa-actions, intune, tenable), launched via `uv run --directory`.
+   - `mcp_servers` → the nine f0_sectools servers (defender, entra, limacharlie,
+     projectachilles, pa-actions, intune, tenable, purview, sentinel), launched
+     via `uv run --directory`.
    - `skills.external_dirs` → this repo's `skills/` (loaded **in place**, version-controlled).
    - `agent.personalities` → `ciso`, `threat-hunter`, `detection-engineer`,
      `security-engineer`.

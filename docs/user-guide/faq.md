@@ -19,7 +19,7 @@ frontier-API dependency. See the [security model](../explanation/security-model.
 
 ## Can the AI isolate a host / disable a user / change anything on its own?
 
-No. Of the 51 tools, only six change state, and each requires an operator-set
+No. Of the 58 tools, only six change state, and each requires an operator-set
 write flag **and** a per-action human confirmation delivered on a channel the
 model cannot read, and is audited locally. Both fail-closed paths are shown in
 [this transcript](../../examples/transcripts/gated-run-test.md); the mechanism
