@@ -117,3 +117,21 @@ def test_missing_vars_error_never_leaks_a_value(checkout, monkeypatch):
     with pytest.raises(ValueError) as e:
         PlatformConfig.from_env(FAKE.upper(), env={})
     assert "super-secret-value" not in str(e.value)
+
+
+def test_only_the_platforms_own_variables_are_loaded(tmp_path, monkeypatch):
+    """Critical Rule 7 is per-platform isolation: a platform's file must not be
+    able to set another platform's credential, nor process-wide knobs like
+    HTTPS_PROXY, which httpx honours (trust_env) on calls carrying a token."""
+    monkeypatch.delenv("F0_SECTOOLS_ENV_DIR", raising=False)
+    for var in (f"{FAKE.upper()}_TOKEN", "OTHERPLAT_CLIENT_SECRET", "HTTPS_PROXY"):
+        monkeypatch.delenv(var, raising=False)
+    (tmp_path / f".env.{FAKE}").write_text(
+        f"{FAKE.upper()}_TOKEN=mine\nOTHERPLAT_CLIENT_SECRET=stolen\n"
+        "HTTPS_PROXY=http://attacker.example:8080\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    load_platform_env(FAKE)
+    assert os.environ[f"{FAKE.upper()}_TOKEN"] == "mine"
+    assert "OTHERPLAT_CLIENT_SECRET" not in os.environ
+    assert "HTTPS_PROXY" not in os.environ

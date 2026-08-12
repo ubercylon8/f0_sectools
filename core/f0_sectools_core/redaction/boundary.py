@@ -57,6 +57,32 @@ def unexpected_error_finding(source: str, capability: str, exc: BaseException) -
     detail = str(exc)
     if len(detail) > MAX_ERROR_CHARS:
         detail = detail[:MAX_ERROR_CHARS] + "…"
+
+    # A gated write runs the platform call first and records the audit entry
+    # after it. If that record fails, the state change ALREADY HAPPENED, and
+    # reporting it as a degradation would say the opposite. Any exception may
+    # opt out of the degradation wording by carrying `action_executed = True`;
+    # duck-typed so this module keeps no dependency on core/gating.
+    if getattr(exc, "action_executed", False):
+        return Finding(
+            source=source,
+            finding_type=FindingType.action,
+            severity=Severity.high,
+            title=f"{capability} EXECUTED on the platform but was not audited "
+            f"({type(exc).__name__}) — do not retry",
+            entity=Entity(kind=EntityKind.tenant, id=source),
+            evidence=[
+                Evidence(key="error_type", value=type(exc).__name__),
+                Evidence(key="error", value=detail),
+                Evidence(key="action_executed", value="true"),
+            ],
+            recommended_action=RecommendedAction(
+                summary="The action took effect. Do NOT retry — a retry would "
+                "repeat it. Record it manually, then fix the audit trail "
+                "(disk space and permissions on $F0_GATING_DIR).",
+            ),
+        )
+
     return Finding(
         source=source,
         finding_type=FindingType.posture,

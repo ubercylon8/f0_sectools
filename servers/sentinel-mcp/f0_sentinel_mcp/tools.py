@@ -276,7 +276,10 @@ async def _run_surface(
         parts.append(
             f"| summarize Events=count() by {spec.action_field}, {spec.indicator_fields[0]}"
         )
-        parts.append(f"| top {limit} by Events desc")
+        # limit + 1 here as well: `top {limit}` can never return more than
+        # limit rows, so has_more was structurally always False and the
+        # aggregate silently hid every group past the cut.
+        parts.append(f"| top {_fetch_bound(limit)} by Events desc")
     kql = " ".join(p for p in parts if p)
 
     try:

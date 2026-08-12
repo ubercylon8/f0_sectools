@@ -19,6 +19,10 @@ Search order, highest precedence first:
 3. The installed package's directory and each of its ancestors -- reached
    when the checkout is nowhere near the working directory at all.
 
+Only variables named ``<PLATFORM>_*`` are injected; anything else in the
+file is ignored, so one platform's file can neither set another's
+credential nor alter the process environment.
+
 A file that is *not* found is not an error: supplying credentials as real
 environment variables is a supported deployment, and ``python-dotenv`` never
 overwrites a variable that is already set, so the surrounding environment
@@ -33,7 +37,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 __all__ = ["env_search_dirs", "find_platform_env", "load_platform_env"]
 
@@ -83,6 +87,16 @@ def load_platform_env(platform: str) -> Path | None:
     -- never log or return the file's *contents*.
     """
     path = find_platform_env(platform)
-    if path is not None:
-        load_dotenv(path)
+    if path is None:
+        return None
+    # Only this platform's own variables are injected. Two reasons, both
+    # Critical Rules: Rule 7 is per-platform credential isolation, and a file
+    # loaded wholesale could also set process-wide knobs -- HTTPS_PROXY is the
+    # sharp one, since httpx honours it (trust_env) on calls carrying a live
+    # token. `setdefault` keeps dotenv's override=False semantics: a variable
+    # already exported wins.
+    prefix = f"{platform.upper()}_"
+    for key, value in dotenv_values(path).items():
+        if value is not None and key.startswith(prefix):
+            os.environ.setdefault(key, value)
     return path

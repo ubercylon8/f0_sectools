@@ -1197,3 +1197,25 @@ async def test_hunt_firewall_perimeter_still_rejects_an_identity_indicator(fake)
     client = fake(rows={USAGE: _TABLES, CEF: []})
     out = await tools.hunt_firewall(client, indicator="someone@example.gob.do")
     assert "indicator" in out[0].title
+
+
+async def test_aggregate_mode_discloses_truncation(fake):
+    """`top {limit}` can never return more than limit, so has_more was always
+    False — the row path was fixed but the aggregate path kept truncating
+    silently. cloud_firewall has 286 distinct identities against a default
+    limit of 25, so a bare call hides 261 users without saying so."""
+    client = fake(rows={USAGE: _TABLES + [{"DataType": UFW, "GB": 1.0}], UFW: []})
+    await tools.hunt_firewall(client, surface="cloud", limit=5)
+    kql = [q for q in client.queries if UFW in q][0]
+    # Asserted on the emitted KQL, not on rows the fake hands back: the fake
+    # returns its canned list whatever the query says, so a row-count assertion
+    # here would pass against the very bug it is meant to catch.
+    assert "| top 6 by Events desc" in kql, "aggregate must fetch limit + 1 too"
+
+
+async def test_aggregate_mode_silent_when_nothing_hidden(fake):
+    rows = [{"verdict_s": "ALLOW", "Identity_s": f"user{i}", "Events": 9 - i} for i in range(5)]
+    client = fake(rows={USAGE: _TABLES + [{"DataType": UFW, "GB": 1.0}], UFW: rows})
+    out = await tools.hunt_firewall(client, surface="cloud", limit=5)
+    assert not any("more results available" in f.title for f in out)
+    assert sum(f.finding_type.value == "hunt_result" for f in out) == 5

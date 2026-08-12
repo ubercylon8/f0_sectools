@@ -121,3 +121,24 @@ def test_every_registered_tool_is_guarded(server):
     assert unguarded == [], f"tools missing @guarded_tool: {unguarded}"
     assert len(sources) == 1, f"one server must report one source, got {sources}"
     assert sources.pop(), "guarded_tool source must be a non-empty string"
+
+
+async def test_a_write_that_executed_but_failed_to_audit_is_not_a_degradation():
+    """Rule 8. The gated write runs, THEN the audit record is written. If the
+    audit throws, a generic "temporarily unavailable" finding says nothing
+    happened — while the live platform change already happened. In chat-confirm
+    mode the token is not single-use, so a model that retries re-executes."""
+
+    class Executed(RuntimeError):
+        action_executed = True
+
+    @guarded_tool("projectachilles")
+    async def run_test():
+        raise Executed("audit trail write failed")
+
+    out = (await run_test())[0]
+    assert out["severity"] == "high"
+    assert "temporarily unavailable" not in out["title"], "must not read as a degradation"
+    assert not any(m in out["title"] for m in DEGRADATION_MARKERS)
+    assert "executed" in out["title"].lower()
+    assert "not retry" in str(out).lower()

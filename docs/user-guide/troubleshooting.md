@@ -53,6 +53,13 @@ a subdirectory of the repo works. Variables already exported in the environment
 always win over the file, which is how container and systemd deployments supply
 credentials without a file at all.
 
+**Only `<PLATFORM>_*` variables are read from the file.** Anything else in it is
+ignored, so one platform's file cannot set another platform's credential or
+change the process environment (a stray `HTTPS_PROXY` in a `.env` would
+otherwise be honoured on outbound calls carrying a live token). If you need a
+proxy or other process-wide setting, export it in the environment that launches
+your runtime rather than putting it in a `.env.<platform>` file.
+
 ## Tool not found / wrong name
 
 Runtimes prefix MCP tool names differently (Hermes

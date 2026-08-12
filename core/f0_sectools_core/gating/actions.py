@@ -215,6 +215,21 @@ class ApprovalStore:
         return True
 
 
+class AuditWriteFailed(RuntimeError):
+    """The platform write succeeded but recording it to the audit trail did not.
+
+    Rule 8 requires every write to be audited, and the write necessarily runs
+    before the record can describe its result -- so this window cannot be
+    designed away, only reported honestly. ``action_executed`` is read
+    (duck-typed, no import) by ``core/redaction/boundary.py`` so the caller is
+    told the action TOOK EFFECT rather than being handed a generic failure it
+    might retry. That matters most in chat-confirm mode, where the token is not
+    single-use and a retry would execute the action a second time.
+    """
+
+    action_executed = True
+
+
 class GatedAction:
     def __init__(
         self,
@@ -270,12 +285,21 @@ class GatedAction:
         )
         self.audit.record(self.name, target, actor, token or "", method=method, ref=ref)
 
+    def _audit_or_flag(self, target: str, actor: str, token: str | None, method: str) -> None:
+        """Audit the completed write, or fail in a way that says it completed."""
+        try:
+            self._audit(target, actor, token, method)
+        except Exception as exc:
+            raise AuditWriteFailed(
+                f"{self.name} executed against {target} but the audit record failed"
+            ) from exc
+
     def execute(
         self, *, target: str, actor: str, token: str | None, run: Callable[[], Any]
     ) -> Any:
         method = self._authorize(target, token)
         result = run()
-        self._audit(target, actor, token, method)
+        self._audit_or_flag(target, actor, token, method)
         return result
 
     async def execute_async(
@@ -288,5 +312,5 @@ class GatedAction:
     ) -> Any:
         method = self._authorize(target, token)
         result = await run()
-        self._audit(target, actor, token, method)
+        self._audit_or_flag(target, actor, token, method)
         return result
