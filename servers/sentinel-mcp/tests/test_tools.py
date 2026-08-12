@@ -909,23 +909,30 @@ async def test_run_kql_decimal_literal_on_a_continuation_line_still_dispatches(f
     assert any(f.finding_type.value == "hunt_result" for f in out)
 
 
-async def test_run_kql_dot_line_inside_verbatim_string_still_dispatches(fake):
-    # Review follow-up on #99: a Kusto verbatim string literal (```...```)
-    # can span multiple lines, e.g. an embedded multi-line sample log whose
-    # body happens to start with ".". Lines inside an open ``` block are not
-    # classified at all.
-    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+async def test_run_kql_dot_line_inside_verbatim_string_now_rejected(fake):
+    # This is a deliberate, documented FALSE REJECTION, not a regression. A
+    # Kusto verbatim string literal (```...```) can span multiple lines, e.g.
+    # an embedded multi-line sample log whose body happens to open with
+    # ".example" -- legal KQL. An earlier version of this guard tried to
+    # track ``` fences so it could exempt exactly this line. That fence
+    # tracking was computed from the caller's own query and activated over
+    # caller-controlled lines, so it was itself a repeatedly-exploited
+    # bypass (see the comment above `_line_control_command_reason`) and was
+    # removed with no replacement. Every line is now classified at face
+    # value, so this exotic-but-legal query is rejected. The guard prefers
+    # refusing a rare legal query over ever dispatching a control command.
+    client = fake(rows={})
     query = "print s = ```\n.example log line\n```\n| take 5"
     out = await tools.run_kql(client, query)
-    assert client.queries == [query]
-    assert any(f.finding_type.value == "hunt_result" for f in out)
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert client.queries == []
 
 
 async def test_run_kql_control_command_after_a_closed_verbatim_string_still_blocks(fake):
-    # The ``` toggle exempts genuine interior string content -- it must not
-    # become an evasion route: a control command placed on a line AFTER a
-    # verbatim-string block has already closed is still a real control
-    # command and must still be rejected.
+    # There is no ``` fence handling at all anymore -- backtick lines are
+    # ordinary text to this guard. A control command on a line after some
+    # backtick-fenced text is still just a line starting with a dot-letter
+    # sequence and must still be rejected.
     client = fake(rows={})
     query = "print s = ```\nx\n```\n.drop table X"
     out = await tools.run_kql(client, query)
@@ -946,14 +953,11 @@ async def test_run_kql_dot_followed_by_non_letter_is_never_a_control_command(fak
 
 
 async def test_run_kql_appending_a_fence_to_a_command_does_not_evade_the_guard(fake):
-    # Security regression caught by review: the first version of the ```
-    # exemption skipped a line WHOLESALE whenever it merely contained a
-    # fence ("if '```' in line: continue"), so appending a stray ``` to a
-    # control command exempted the whole line -- worse than pre-fix, where
-    # the plain startswith(".") check on the whole query would have caught
-    # ".drop table X ```" (a single-line query) outright. The guard must
-    # classify the text OUTSIDE any provably-closed block, never skip a line
-    # just because a fence appears on it somewhere.
+    # Historical regression: earlier versions of this guard tried to treat
+    # ``` as a meaningful delimiter, and appending a stray fence to a
+    # control command could exempt the whole line. There is no fence
+    # handling left at all now -- a trailing ``` is just ordinary trailing
+    # text and has no effect on classification.
     client = fake(rows={})
     for bad in (
         ".drop table X ```",
@@ -966,12 +970,10 @@ async def test_run_kql_appending_a_fence_to_a_command_does_not_evade_the_guard(f
 
 
 async def test_run_kql_unclosed_verbatim_block_disables_the_exemption(fake):
-    # A block that opens but is never closed by the end of the query has an
-    # odd total fence count -- we cannot prove the backend would treat the
-    # remainder as inert string content, so the exemption is disabled for
-    # the WHOLE query (strictness over cleverness) and ".drop table X" on
-    # the following line is classified at face value, same as if there were
-    # no ``` handling at all.
+    # An unclosed ``` fence used to matter for the (now-removed) exemption's
+    # bookkeeping. It has no meaning to this guard anymore -- the fence line
+    # is ordinary text, and ".drop table X" on the following line is
+    # classified at face value, same as always.
     client = fake(rows={})
     out = await tools.run_kql(client, "``` \n.drop table X")
     assert len(out) == 1 and out[0].finding_type.value == "posture"
@@ -979,10 +981,9 @@ async def test_run_kql_unclosed_verbatim_block_disables_the_exemption(fake):
 
 
 async def test_run_kql_balanced_inline_block_still_blocks_trailing_command(fake):
-    # A block that opens and closes entirely on one line (fence count on
-    # that line is even) is balanced, so the exemption stays active -- but
-    # the command on the NEXT line is still outside any block and must
-    # still be classified and rejected.
+    # A ``` pair opening and closing on one line is, again, just ordinary
+    # text to this guard -- the command on the next line is classified at
+    # face value and must still be rejected.
     client = fake(rows={})
     out = await tools.run_kql(client, "```x``` \n.drop table X")
     assert len(out) == 1 and out[0].finding_type.value == "posture"
@@ -997,6 +998,69 @@ async def test_run_kql_let_statement_before_query_still_dispatches(fake):
     out = await tools.run_kql(client, query)
     assert client.queries == [query]
     assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_run_kql_trailing_comment_before_a_new_take_line_still_dispatches(fake):
+    # A same-line trailing "// note" comment followed by an explicit
+    # "| take N" on the NEXT line is ordinary, already-bounded KQL and must
+    # not be affected by the control-command guard at all.
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    query = "Heartbeat // note\n| take 5"
+    out = await tools.run_kql(client, query)
+    assert client.queries == [query]
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_run_kql_confirmed_bypasses_are_now_blocked(fake):
+    # Regression lock for the three-times-broken verbatim-string exemption
+    # (removed above): every one of these confirmed the exemption could be
+    # made to hide a real control command, either behind a fence that is
+    # inert to the Kusto engine (inside a `//` comment or a quoted string
+    # literal) or behind whitespace/invisible characters the old
+    # "dot immediately followed by a letter" check didn't tolerate. With the
+    # exemption gone and the classifier closed up, every one must be
+    # rejected before dispatch.
+    client = fake(rows={})
+    zwsp = "​"  # zero-width space (category Cf)
+    bom = "﻿"  # BOM / zero-width no-break space (category Cf)
+    bad_queries = (
+        # Fence hidden inside a `//` line comment -- inert to Kusto, but the
+        # old exemption still counted it and treated the line in between as
+        # exempt verbatim-string content.
+        "// ```\n.drop table X\n// ```",
+        # Fence hidden inside quoted string literals on their own lines --
+        # again inert to Kusto's own string parsing, but still counted by
+        # the old `query.count("```")` check.
+        'print s = "```"\n.drop table X\nprint t = "```"',
+        # Fence trailing a same-line comment, control command on the next
+        # line.
+        "Heartbeat | take 1 // ```\n.drop table VictimTable\n// ```",
+        # Same comment-fence trick, with the control-command line itself
+        # additionally hidden behind a leading zero-width space -- this used
+        # to defeat the nonprintable-prefix branch too, because the old
+        # exemption skipped classifying the line at all.
+        f"// ```\n{zwsp}.drop table X\n// ```",
+        # Whitespace/invisible characters between the dot and the command
+        # name -- the classifier must skip these, not treat them as
+        # disqualifying.
+        ". drop table X",
+        ".\tdrop table X",
+        f".{zwsp}drop table X",
+        # A trailing fence appended to a single-line command.
+        ".drop table X ```",
+        # A control command on a later line, no fences involved at all.
+        "print 1\n.drop table X",
+        ".create table X",
+        # A later-line control command additionally hidden behind a BOM.
+        f"print 1\n{bom}.drop table X",
+        # A control command shape not covered by the other literal-command
+        # test above.
+        ".ingest inline into table X <| 1",
+    )
+    for bad in bad_queries:
+        out = await tools.run_kql(client, bad)
+        assert len(out) == 1 and out[0].finding_type.value == "posture", repr(bad)
+    assert client.queries == []
 
 
 # --- Critical Rule: every tool returns a finding, never an exception, on a

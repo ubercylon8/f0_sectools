@@ -753,15 +753,45 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
 # ultimately decides what a raw string does, not us -- reject before dispatch,
 # don't rely on the endpoint being query-only today.
 #
-# A line only counts as a control command when the dot is immediately
-# followed by a letter (.drop, .show, .set-or-append, ...) -- every real
-# Kusto control command has that shape. A bare "." check over-rejected: KQL
-# is whitespace-insensitive across an unterminated expression, so a decimal
+# EVERY LINE IS CLASSIFIED AT FACE VALUE. There is no verbatim-string
+# exemption, and none should be re-added. A previous version tried to skip
+# lines that a caller-controlled ``` fence count claimed were inside a
+# multi-line Kusto verbatim string literal, so genuine interior content
+# (e.g. an embedded multi-line sample log) wouldn't be misread as a control
+# command. That exemption was calculated from `query.count("```") % 2`, a
+# value the caller fully controls, and it activated over lines the caller
+# also fully controls -- so it was possible to hide a real control command
+# behind a fence that only *looks* like a verbatim string to this guard
+# (inside a `//` comment, inside a quoted string literal, or simply an
+# unbalanced fence) while it stays inert to the actual Kusto engine. Real
+# bypasses confirmed under that scheme included a fence inside a `//`
+# comment, a fence inside a `"..."` string literal, and a fence trailing a
+# same-line comment -- three different ways to toggle the guard's state
+# without toggling the engine's. A partial lexer here can only ever
+# SUBTRACT text from the check (mark more of the query as exempt); it has no
+# way to make the guard stricter, only blinder. Properly fixing it means
+# tracking comments, quoted strings and fences together -- a real KQL lexer,
+# far beyond what this guard is worth. So the exemption is gone, deliberately,
+# and every line -- fenced or not -- is classified as-is.
+#
+# The cost of that is one narrow, accepted false rejection: a query that
+# embeds a multi-line verbatim string whose interior line happens to open
+# with a dot-letter sequence (e.g. a sample log line starting ".example")
+# now gets rejected as a control command even though it's legal KQL. See
+# `test_run_kql_dot_line_inside_verbatim_string_now_rejected`. That trade is
+# intentional -- this guard prefers refusing an exotic-but-legal query over
+# ever dispatching a control command -- and is a strictly better trade than
+# the fence machinery's failure mode, which was dispatching a real one.
+#
+# A line only counts as a control command when it opens with a dot and the
+# first subsequent non-digit character (skipping any whitespace or other
+# invisible characters in between) is a letter (.drop, .show,
+# .set-or-append, . drop, .\tdrop, ...) -- every real Kusto control command
+# has that shape, and Kusto's own parser tolerates the whitespace variants.
+# A dot followed by a digit is a decimal literal, not a command: KQL is
+# whitespace-insensitive across an unterminated expression, so a decimal
 # literal opening a continuation line (`| where Ratio >` then `    .5`) is
-# legal KQL, not a command. Lines inside an open triple-backtick verbatim
-# string literal (```...```) are skipped entirely by the caller below, so an
-# embedded sample log line that happens to start with "." (or contains one)
-# is not mistaken for a command either -- see the loop in run_kql.
+# legal KQL and must still dispatch.
 #
 # Deliberately NOT rejecting ";": the same-line form
 # (`Heartbeat | take 1; .drop table X`) stays open. Rejecting ";" outright
@@ -783,27 +813,36 @@ def _line_control_command_reason(line: str) -> Literal["ok", "nonprintable", "co
     line that doesn't open with an ordinary printable character as unsafe by
     construction -- no legitimate KQL line starts with one.
 
-    "control": `line`, once stripped, opens with a dot immediately followed
-    by a letter (`.drop`, `.show`, `.set-or-append`, `.ingest`, ...) -- the
-    only shape a real Kusto control command takes. A dot followed by
-    anything else (a digit, another dot, end of line, ...) is not a command
-    -- most commonly a decimal literal, e.g. the ".5" in a continuation line
-    after `| where Ratio >`.
+    "control": `line`, once stripped, opens with a dot, and the first
+    subsequent character that is not a digit and not whitespace/invisible is
+    a letter -- e.g. `.drop`, `.show`, `. drop`, `.\tset-or-append`. Any
+    whitespace or other invisible characters between the dot and the letter
+    are skipped, not treated as disqualifying, because Kusto's own control
+    command parser tolerates them too -- a naive "immediately followed by a
+    letter" check is bypassable with a single space or zero-width character.
+    A dot followed by a digit (skipping nothing) is a decimal literal, e.g.
+    the ".5" in a continuation line after `| where Ratio >`, and is never a
+    command.
 
-    "ok": neither -- includes blank lines.
+    "ok": neither -- includes blank lines, a bare ".", ".." and similar.
 
-    The caller applies this per line (not just to the whole query, and not
-    to lines inside a triple-backtick verbatim string) so the hardening
-    covers a dot-command hidden on any line, not only the first.
+    The caller applies this per line (not just to the whole query) so the
+    hardening covers a dot-command hidden on any line, not only the first.
     """
     stripped = line.strip()
     if not stripped:
         return "ok"
     if not stripped[0].isprintable():
         return "nonprintable"
-    if stripped[0] == _CONTROL_PREFIX and len(stripped) > 1 and stripped[1].isalpha():
-        return "control"
-    return "ok"
+    if stripped[0] != _CONTROL_PREFIX:
+        return "ok"
+    for ch in stripped[1:]:
+        if ch.isdigit():
+            return "ok"  # decimal literal, e.g. ".5", ".5e3"
+        if ch.isspace() or not ch.isprintable():
+            continue  # whitespace/invisible characters between "." and the name
+        return "control" if ch.isalpha() else "ok"
+    return "ok"  # a bare ".", ".." or "." followed only by whitespace
 
 
 def _nonprintable_prefix_finding() -> Finding:
@@ -842,42 +881,11 @@ async def run_kql(
     query = (kql or "").strip()
     if not query:
         return [_bad_arg("kql", kql or "", "a KQL query, e.g. 'Heartbeat | take 10'")]
-    # Kusto verbatim string literals are delimited by ``` ``` ```` and can span
-    # multiple lines (e.g. an embedded multi-line sample log). A line that
-    # merely CONTAINS a fence must never be skipped wholesale -- an earlier
-    # version of this guard did `if "```" in line: continue`, which let
-    # `.drop table X ``` ` (append a fence to smuggle a command past the
-    # check) dispatch unrejected. Instead, split every line on the fence and
-    # classify only the text OUTSIDE any open block; text inside a block is
-    # dropped, never the whole line.
-    #
-    # This exemption only activates when the fence count across the WHOLE
-    # query is even -- i.e. every opened block is provably closed somewhere
-    # in the query. If it is odd (a block opened but never closed by the end
-    # of the query), we cannot know whether the backend will actually treat
-    # the remainder as inert string content, so the exemption is disabled
-    # entirely for the whole query and every line is classified at face
-    # value, fences included -- strictness over cleverness. This also means
-    # a control command placed on a line AFTER a block has genuinely closed
-    # is still classified and still rejected; the exemption only ever
-    # removes text that is provably inside a matched pair of fences.
-    exempt_verbatim_strings = query.count("```") % 2 == 0
-    in_string_block = False
+    # Every line is classified at face value -- see the comment block above
+    # `_line_control_command_reason` for why there is no verbatim-string
+    # exemption here (and why one must not be re-added).
     for line in query.splitlines():
-        if exempt_verbatim_strings:
-            outside_parts: list[str] = []
-            state = in_string_block
-            segments = line.split("```")
-            for i, seg in enumerate(segments):
-                if not state:
-                    outside_parts.append(seg)
-                if i < len(segments) - 1:
-                    state = not state
-            in_string_block = state
-            line_text = "".join(outside_parts)
-        else:
-            line_text = line
-        reason = _line_control_command_reason(line_text)
+        reason = _line_control_command_reason(line)
         if reason == "nonprintable":
             return [_nonprintable_prefix_finding()]
         if reason == "control":
