@@ -16,13 +16,16 @@ Claude Code `mcp__f0-defender__list_incidents`.
 
 Replace the `/ABSOLUTE/PATH/TO/sec-tools` placeholder with your checkout path.
 
-**No drift guard on `mcp.json`.** Unlike the Hermes/pi/opencode wiring
-templates (each checked by `integrations/test_integrations_valid.py`), this
-file has no automated test tying it to the live server registry — if you add
-or remove a platform, update it by hand. It also, unlike every other
-template, ships `f0-pa-actions` (the gated-write ProjectAchilles actions
-server) with no `enabled: false` equivalent or caveat: this generic MCP
-config format has no such flag, so the server is wired in and reachable as
-soon as its `.env.projectachilles` is populated. Remove the `f0-pa-actions`
-entry, or leave its `.env.projectachilles` unconfigured, unless you actually
-want a gated-write server available to this client.
+**`f0-pa-actions` is reachable by default here — unlike every other template.**
+This file ships `f0-pa-actions` (the gated-write ProjectAchilles actions
+server) with no `enabled: false` equivalent: the generic MCP config format has
+no such flag, so the server is wired in and reachable as soon as its
+`.env.projectachilles` is populated. opencode and Hermes both ship it disabled;
+this template cannot. Remove the `f0-pa-actions` entry, or leave its
+`.env.projectachilles` unconfigured, unless you actually want a gated-write
+server available to this client.
+
+`integrations/test_integrations_valid.py` guards this file the same way it
+guards the Hermes/pi/opencode templates — the server list is checked against
+the live registry, the placeholder path is checked, and the caveat above is
+checked to still be here, because on this template it is the only safeguard.

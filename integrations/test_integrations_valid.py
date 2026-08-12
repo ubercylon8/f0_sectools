@@ -122,12 +122,17 @@ def test_generic_mcp_example_warns_about_the_gated_write_server():
     if "f0-pa-actions" not in cfg["mcpServers"]:
         return
     readme = (ROOT / "examples/mcp/README.md").read_text(encoding="utf-8")
-    assert "f0-pa-actions" in readme, (
+    # Scoped to the paragraph, not the file: a whole-file substring search would
+    # still pass if this caveat were deleted while "gated-write" survived in some
+    # unrelated paragraph, which is exactly the deletion this test exists to catch.
+    paragraphs = [p for p in readme.split("\n\n") if "f0-pa-actions" in p]
+    assert paragraphs, (
         "examples/mcp/mcp.json ships the gated-write server but examples/mcp/README.md "
         "never names it — the caveat is this template's only safeguard"
     )
-    assert "gated-write" in readme.lower(), (
-        "examples/mcp/README.md no longer explains that f0-pa-actions is gated-write"
+    assert any("gated-write" in p.lower() for p in paragraphs), (
+        "examples/mcp/README.md names f0-pa-actions but no longer explains, in the same "
+        "paragraph, that it is gated-write"
     )
 
 
