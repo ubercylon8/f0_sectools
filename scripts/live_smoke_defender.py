@@ -1,6 +1,6 @@
 """Live smoke test for the Defender MCP server against a real tenant.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/defender-mcp/.env.defender.example to ./.env.defender
        and fill in DEFENDER_TENANT_ID / DEFENDER_CLIENT_ID / DEFENDER_CLIENT_SECRET.
     2. uv run python scripts/live_smoke_defender.py
@@ -15,14 +15,14 @@ import argparse
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_defender_mcp import tools
 from f0_sectools_core.auth.config import PlatformConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.renderers import Persona, render_findings
 
-load_dotenv(".env.defender")
+load_platform_env("defender")
 
 # A harmless, bounded hunting query to validate ThreatHunting.Read.All.
 SMOKE_KQL = "DeviceInfo | take 1"

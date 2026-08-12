@@ -8,16 +8,17 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
 
 from . import tools
 
-load_dotenv(".env.purview")
+load_platform_env("purview")
 
 mcp = MCPServer("f0-purview")
 
@@ -31,6 +32,7 @@ def _client() -> GraphClient:
 
 
 @mcp.tool()
+@guarded_tool("purview")
 async def get_dlp_summary(
     hours_back: float = 168, state: Literal["open", "all"] = "open"
 ) -> list[dict[str, Any]]:
@@ -45,6 +47,7 @@ async def get_dlp_summary(
 
 
 @mcp.tool()
+@guarded_tool("purview")
 async def list_dlp_alerts(
     hours_back: float = 168,
     severity_min: Literal["low", "medium", "high"] = "low",
@@ -60,6 +63,7 @@ async def list_dlp_alerts(
 
 
 @mcp.tool()
+@guarded_tool("purview")
 async def list_insider_risk_alerts(
     hours_back: float = 168, limit: int = 25, state: Literal["open", "all"] = "open"
 ) -> list[dict[str, Any]]:
@@ -72,6 +76,7 @@ async def list_insider_risk_alerts(
 
 
 @mcp.tool()
+@guarded_tool("purview")
 async def list_sensitivity_labels() -> list[dict[str, Any]]:
     """List the organization's Purview sensitivity labels (classification
     inventory) — answers whether data classification is actually deployed."""
@@ -80,6 +85,7 @@ async def list_sensitivity_labels() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("purview")
 async def search_audit_log(
     activity: str = "",
     user: str = "",
@@ -107,6 +113,7 @@ async def search_audit_log(
 
 
 @mcp.tool()
+@guarded_tool("purview")
 async def get_audit_results(audit_query_id: str, limit: int = 25) -> list[dict[str, Any]]:
     """Fetch the results of a previously submitted audit search (the
     audit_query_id returned by search_audit_log when it was still running).

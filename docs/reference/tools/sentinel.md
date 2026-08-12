@@ -23,17 +23,23 @@ Used by skills: [`data-source-coverage`](../../../skills/sentinel/data-source-co
 
 ## `hunt_firewall`
 
-SEARCH firewall traffic (Check Point / Fortinet) for an IP or port.
+SEARCH firewall traffic for an IP, a port, or (cloud only) a user.
 
-Use for questions about network connections, blocked traffic, or a
-suspicious IP talking through the perimeter. `indicator` must be an IP
-ADDRESS or PORT NUMBER — this table carries almost no URLs or usernames, so
-a domain here finds nothing: for domains, URLs and web categories use
-hunt_dns_web instead. Without an indicator this returns an aggregate
-(top talkers by action), not individual events.
+Two different firewalls, so pick by where the traffic went. perimeter —
+the on-prem CEF appliances (Check Point / Fortinet); use for connections
+crossing the office network. Its `indicator` must be an IP ADDRESS or PORT
+NUMBER: it carries almost no URLs or usernames. cloud — Cisco Umbrella's
+cloud-delivered firewall, which sees roaming and remote clients that never
+reach the perimeter at all; every one of its flows names the AD user, so
+`indicator` may also be a username, and a bare call aggregates by user.
+If you need to know WHO made a connection, use surface="cloud"; the
+perimeter surface cannot answer it. For domains, URLs and web categories
+use hunt_dns_web instead. Without an indicator this returns an aggregate,
+not individual events.
 
 | Parameter | Type | Default |
 |---|---|---|
+| `surface` | `"perimeter"` \| `"cloud"` | `"perimeter"` |
 | `action` | `"allowed"` \| `"blocked"` \| `"detected"` \| `"any"` | `"any"` |
 | `indicator` | `string` | `""` |
 | `hours_back` | `number` | `24` |
@@ -48,9 +54,13 @@ SEARCH DNS, web-proxy, or remote-access VPN activity (Cisco Umbrella).
 Choose surface by what you are looking for: dns — a domain was resolved or
 blocked (C2, newly-registered domains, blocked categories); web — a URL was
 fetched, a file downloaded, or a proxy verdict applied; vpn — remote-access
-VPN sessions and failures. `indicator` is a domain, URL fragment or IP.
-Without an indicator this returns an aggregate, not individual events. For
-perimeter firewall connections by IP/port use hunt_firewall.
+VPN sessions and failures. `indicator` is a domain, URL fragment, IP
+address, or an identity — Umbrella names the AD user or roaming-client
+machine behind each request, so pass a hostname or username to see what it
+did, or pass an IP or domain to see who was behind it. Every returned row
+carries that identity, so you do not need another platform to answer "who
+was this?". Without an indicator this returns an aggregate, not individual
+events. For perimeter firewall connections by IP/port use hunt_firewall.
 
 | Parameter | Type | Default |
 |---|---|---|
@@ -93,10 +103,15 @@ the Defender XDR-native incident view (with its own alert and device
 context) use f0-defender's list_incidents. Not an alert list — for
 individual alerts use f0-defender's list_alerts.
 
+Returns open work by default (`status="open"` = everything not Closed),
+because a queue of already-handled incidents is not a queue. Pass
+`status="closed"` for handled work or `status="any"` for both. When more
+incidents match than `limit`, a final "showing N" finding says so.
+
 | Parameter | Type | Default |
 |---|---|---|
 | `severity_min` | `"informational"` \| `"low"` \| `"medium"` \| `"high"` | `"low"` |
-| `status` | `"new"` \| `"active"` \| `"closed"` \| `"any"` | `"any"` |
+| `status` | `"open"` \| `"new"` \| `"active"` \| `"closed"` \| `"any"` | `"open"` |
 | `hours_back` | `number` | `168` |
 | `limit` | `integer` | `25` |
 

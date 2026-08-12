@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import TenableConfig
+from f0_sectools_core.auth.env import load_platform_env
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -15,7 +16,7 @@ from mcp.server import MCPServer
 from . import tools
 from .client import TenableClient
 
-load_dotenv(".env.tenable")
+load_platform_env("tenable")
 
 mcp = MCPServer("f0-tenable")
 
@@ -29,6 +30,7 @@ def _client() -> TenableClient:
 
 
 @mcp.tool()
+@guarded_tool("tenable")
 async def get_vulnerability_summary() -> list[dict[str, Any]]:
     """Tenable environment-wide vulnerability posture — counts by severity.
 
@@ -40,6 +42,7 @@ async def get_vulnerability_summary() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("tenable")
 async def list_top_vulnerabilities(
     severity_min: Literal["low", "medium", "high", "critical"] = "high", limit: int = 10
 ) -> list[dict[str, Any]]:
@@ -53,6 +56,7 @@ async def list_top_vulnerabilities(
 
 
 @mcp.tool()
+@guarded_tool("tenable")
 async def list_assets(hostname: str = "", limit: int = 25) -> list[dict[str, Any]]:
     """Tenable asset inventory — hosts Tenable has scanned.
 
@@ -64,6 +68,7 @@ async def list_assets(hostname: str = "", limit: int = 25) -> list[dict[str, Any
 
 
 @mcp.tool()
+@guarded_tool("tenable")
 async def get_asset_vulnerabilities(
     asset: str,
     severity_min: Literal["low", "medium", "high", "critical"] = "high",
@@ -80,6 +85,7 @@ async def get_asset_vulnerabilities(
 
 
 @mcp.tool()
+@guarded_tool("tenable")
 async def get_vulnerability_info(plugin_id: str) -> list[dict[str, Any]]:
     """Tenable detail for one plugin/vulnerability: CVSS, VPR, description, remediation.
 
@@ -90,6 +96,7 @@ async def get_vulnerability_info(plugin_id: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("tenable")
 async def list_vulnerability_assets(plugin_id: str, limit: int = 25) -> list[dict[str, Any]]:
     """List the hosts affected by a specific Tenable vulnerability (plugin_id).
 
@@ -100,6 +107,7 @@ async def list_vulnerability_assets(plugin_id: str, limit: int = 25) -> list[dic
 
 
 @mcp.tool()
+@guarded_tool("tenable")
 async def list_scans(limit: int = 25) -> list[dict[str, Any]]:
     """Tenable scan inventory — each scan's status and last-run time (coverage freshness)."""
     async with _client() as tio:

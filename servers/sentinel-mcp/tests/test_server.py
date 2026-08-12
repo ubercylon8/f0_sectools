@@ -37,3 +37,26 @@ async def test_routing_docstrings_name_the_neighbouring_tool():
     assert "run_hunting_query" in (tools["run_kql"].description or "")
     assert "list_incidents" in (tools["list_sentinel_incidents"].description or "")
     assert "search_audit_log" in (tools["search_office_activity"].description or "")
+
+
+async def test_transport_failure_returns_a_finding_not_a_raw_exception(monkeypatch):
+    """End-to-end through the real registration path: a DNS/TLS failure used to
+    reach the MCP client as a bare ConnectError string, bypassing redaction."""
+    class Boom:
+        retention_days = 30
+        has_arm = True
+        workspace_id = "ws"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def query(self, *a, **k):
+            raise ConnectionError("failed to resolve internal-collector.example")
+
+    monkeypatch.setattr(server, "_client", lambda: Boom())
+    out = await server.list_data_sources()
+    assert out[0]["finding_type"] == "posture"
+    assert "temporarily unavailable" in out[0]["title"]

@@ -1,6 +1,6 @@
 """Live smoke test for the Entra MCP server against a real tenant.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/entra-mcp/.env.entra.example to ./.env.entra and fill in
        ENTRA_TENANT_ID / ENTRA_CLIENT_ID / ENTRA_CLIENT_SECRET.
     2. uv run python scripts/live_smoke_entra.py
@@ -14,13 +14,13 @@ from __future__ import annotations
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_entra_mcp import tools
 from f0_sectools_core.auth.config import PlatformConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.redaction.redact import redact_finding
 
-load_dotenv(".env.entra")
+load_platform_env("entra")
 
 
 def _show(label: str, findings) -> None:

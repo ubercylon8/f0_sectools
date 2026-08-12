@@ -8,17 +8,18 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
 
 from . import tools
 
-# Load .env.entra from the working directory if present (no-op otherwise).
-load_dotenv(".env.entra")
+# Locate .env.entra by searching upward from the working directory (no-op if absent).
+load_platform_env("entra")
 
 mcp = MCPServer("f0-entra")
 
@@ -29,6 +30,7 @@ def _render(findings: list[Finding]) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("entra")
 async def list_risky_users(
     limit: int = 25, state: Literal["active", "all"] = "active"
 ) -> list[dict[str, Any]]:
@@ -44,6 +46,7 @@ async def list_risky_users(
 
 
 @mcp.tool()
+@guarded_tool("entra")
 async def list_risk_detections(
     limit: int = 25, state: Literal["active", "all"] = "active"
 ) -> list[dict[str, Any]]:
@@ -59,6 +62,7 @@ async def list_risk_detections(
 
 
 @mcp.tool()
+@guarded_tool("entra")
 async def list_conditional_access_policies() -> list[dict[str, Any]]:
     """List Conditional Access policies, flagging disabled and report-only ones."""
     cfg = PlatformConfig.from_env("ENTRA")
@@ -67,6 +71,7 @@ async def list_conditional_access_policies() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("entra")
 async def list_privileged_role_assignments(limit: int = 25) -> list[dict[str, Any]]:
     """List directory role assignments, highlighting critical privileged roles.
 

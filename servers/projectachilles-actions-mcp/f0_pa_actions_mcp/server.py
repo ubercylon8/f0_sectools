@@ -10,9 +10,10 @@ from __future__ import annotations
 import os
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import ProjectAchillesConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -20,7 +21,7 @@ from mcp.server import MCPServer
 from . import tools
 from .client import ProjectAchillesClient
 
-load_dotenv(".env.projectachilles")
+load_platform_env("projectachilles")
 
 mcp = MCPServer("f0-pa-actions")
 
@@ -49,6 +50,7 @@ _Day = Literal[
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def run_test(
     test_id: str, hostname: str = "", tag: str = "", confirmation_token: str = ""
 ) -> list[dict[str, Any]]:
@@ -75,6 +77,7 @@ async def run_test(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def schedule_test(
     test_id: str,
     hostname: str = "",
@@ -107,6 +110,7 @@ async def schedule_test(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def set_schedule_status(
     schedule_id: str,
     status: Literal["active", "paused"],
@@ -129,6 +133,7 @@ async def set_schedule_status(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def cancel_tasks(
     task_id: str = "",
     status: Literal["pending", "assigned", "running", "completed", "failed", "expired"] = "pending",
@@ -151,6 +156,7 @@ async def cancel_tasks(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def list_schedules(
     status: Literal["", "active", "paused", "completed"] = "",
 ) -> list[dict[str, Any]]:
@@ -165,6 +171,7 @@ async def list_schedules(
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def get_task_status(task_id: str) -> list[dict[str, Any]]:
     """One-shot status check for a ProjectAchilles test-run task (read-only).
 
@@ -179,6 +186,7 @@ async def get_task_status(task_id: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("projectachilles")
 async def list_tasks(
     status: Literal["", "pending", "assigned", "running", "completed", "failed", "expired"] = "",
     search: str = "",

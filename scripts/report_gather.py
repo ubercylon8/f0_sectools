@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
-from dotenv import load_dotenv
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.redaction.redact import redact_finding, redact_text
 from f0_sectools_core.reports.content import MetricCard, ScopeMeta
 from f0_sectools_core.reports.i18n import group_label
@@ -60,7 +60,7 @@ async def _pillar_config_hardening(window_hours: int) -> list[Finding]:
     from f0_defender_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.defender")
+    load_platform_env("defender")
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
         return await tools.get_secure_score(gc)
@@ -70,7 +70,7 @@ async def _pillar_vuln_exposure(window_hours: int) -> list[Finding]:
     from f0_sectools_core.auth.config import TenableConfig
     from f0_tenable_mcp import tools
     from f0_tenable_mcp.client import TenableClient
-    load_dotenv(".env.tenable")
+    load_platform_env("tenable")
     async with TenableClient(TenableConfig.from_env()) as tio:
         return await tools.get_vulnerability_summary(tio)
 
@@ -79,7 +79,7 @@ async def _pillar_device_compliance(window_hours: int) -> list[Finding]:
     from f0_intune_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.intune")
+    load_platform_env("intune")
     cfg = PlatformConfig.from_env("INTUNE")
     async with GraphClient(cfg) as gc:
         return await tools.get_compliance_summary(gc)
@@ -89,7 +89,7 @@ async def _pillar_data_risk(window_hours: int) -> list[Finding]:
     from f0_purview_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.purview")
+    load_platform_env("purview")
     cfg = PlatformConfig.from_env("PURVIEW")
     async with GraphClient(cfg) as gc:
         return await tools.get_dlp_summary(gc, hours_back=window_hours)
@@ -99,7 +99,7 @@ async def _pillar_attack_validation(window_hours: int) -> list[Finding]:
     from f0_projectachilles_mcp import tools
     from f0_projectachilles_mcp.client import ProjectAchillesClient
     from f0_sectools_core.auth.config import ProjectAchillesConfig
-    load_dotenv(".env.projectachilles")
+    load_platform_env("projectachilles")
     async with ProjectAchillesClient(ProjectAchillesConfig.from_env()) as pa:
         return await tools.get_defense_score(pa)
 
@@ -108,7 +108,7 @@ async def _pillar_endpoint_coverage(window_hours: int) -> list[Finding]:
     from f0_limacharlie_mcp import tools
     from f0_limacharlie_mcp.client import LimaCharlieClient
     from f0_sectools_core.auth.config import LimaCharlieConfig
-    load_dotenv(".env.limacharlie")
+    load_platform_env("limacharlie")
     lc = LimaCharlieClient(LimaCharlieConfig.from_env())
     return await asyncio.to_thread(tools.get_org_overview, lc)
 
@@ -117,7 +117,7 @@ async def _pillar_detection_coverage(window_hours: int) -> list[Finding]:
     from f0_sectools_core.auth.config import SentinelConfig
     from f0_sentinel_mcp import tools
     from f0_sentinel_mcp.client import SentinelClient
-    load_dotenv(".env.sentinel")
+    load_platform_env("sentinel")
     cfg = SentinelConfig.from_env("SENTINEL")
     async with SentinelClient(cfg) as c:
         findings = await tools.get_detection_coverage(c)
@@ -135,7 +135,7 @@ async def _defender_alerts(window_hours: int) -> list[Finding]:
     from f0_defender_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.defender")
+    load_platform_env("defender")
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
         return _within_window(
@@ -147,7 +147,7 @@ async def _defender_incidents(window_hours: int) -> list[Finding]:
     from f0_defender_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.defender")
+    load_platform_env("defender")
     cfg = PlatformConfig.from_env("DEFENDER")
     async with GraphClient(cfg) as gc:
         return _within_window(
@@ -159,7 +159,7 @@ async def _lc_dr_rules(window_hours: int) -> list[Finding]:
     from f0_limacharlie_mcp import tools
     from f0_limacharlie_mcp.client import LimaCharlieClient
     from f0_sectools_core.auth.config import LimaCharlieConfig
-    load_dotenv(".env.limacharlie")
+    load_platform_env("limacharlie")
     lc = LimaCharlieClient(LimaCharlieConfig.from_env())
     return await asyncio.to_thread(tools.list_dr_rules, lc, "general", 15)
 
@@ -168,7 +168,7 @@ async def _lc_detections(window_hours: int) -> list[Finding]:
     from f0_limacharlie_mcp import tools
     from f0_limacharlie_mcp.client import LimaCharlieClient
     from f0_sectools_core.auth.config import LimaCharlieConfig
-    load_dotenv(".env.limacharlie")
+    load_platform_env("limacharlie")
     lc = LimaCharlieClient(LimaCharlieConfig.from_env())
     return await asyncio.to_thread(tools.list_detections, lc, float(window_hours), 15)
 
@@ -177,7 +177,7 @@ async def _sentinel_analytics_rules(window_hours: int) -> list[Finding]:
     from f0_sectools_core.auth.config import SentinelConfig
     from f0_sentinel_mcp import tools
     from f0_sentinel_mcp.client import SentinelClient
-    load_dotenv(".env.sentinel")
+    load_platform_env("sentinel")
     cfg = SentinelConfig.from_env("SENTINEL")
     async with SentinelClient(cfg) as c:
         # Full result, including the per-rule findings the CISO pillar above
@@ -190,7 +190,7 @@ async def _pa_weak_techniques(window_hours: int) -> list[Finding]:
     from f0_projectachilles_mcp import tools
     from f0_projectachilles_mcp.client import ProjectAchillesClient
     from f0_sectools_core.auth.config import ProjectAchillesConfig
-    load_dotenv(".env.projectachilles")
+    load_platform_env("projectachilles")
     async with ProjectAchillesClient(ProjectAchillesConfig.from_env()) as pa:
         return await tools.get_weak_techniques(pa, days=max(1, window_hours // 24), limit=10)
 
@@ -200,7 +200,7 @@ async def _entra_conditional_access(window_hours: int) -> list[Finding]:
     from f0_entra_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.entra")
+    load_platform_env("entra")
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
         # list_conditional_access_policies has no limit param (it pages unbounded),
@@ -213,7 +213,7 @@ async def _entra_privileged_roles(window_hours: int) -> list[Finding]:
     from f0_entra_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.entra")
+    load_platform_env("entra")
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
         return await tools.list_privileged_role_assignments(gc, limit=10)
@@ -223,7 +223,7 @@ async def _entra_risky_users(window_hours: int) -> list[Finding]:
     from f0_entra_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.entra")
+    load_platform_env("entra")
     cfg = PlatformConfig.from_env("ENTRA")
     async with GraphClient(cfg) as gc:
         return await tools.list_risky_users(gc, limit=10)
@@ -233,7 +233,7 @@ async def _intune_stale_devices(window_hours: int) -> list[Finding]:
     from f0_intune_mcp import tools
     from f0_sectools_core.auth.config import PlatformConfig
     from f0_sectools_core.auth.graph import GraphClient
-    load_dotenv(".env.intune")
+    load_platform_env("intune")
     cfg = PlatformConfig.from_env("INTUNE")
     async with GraphClient(cfg) as gc:
         # Deliberately NOT window_hours: "stale" is defined by the tool's own
@@ -245,7 +245,7 @@ async def _tenable_top_vulns(window_hours: int) -> list[Finding]:
     from f0_sectools_core.auth.config import TenableConfig
     from f0_tenable_mcp import tools
     from f0_tenable_mcp.client import TenableClient
-    load_dotenv(".env.tenable")
+    load_platform_env("tenable")
     async with TenableClient(TenableConfig.from_env()) as tio:
         return await tools.list_top_vulnerabilities(tio, limit=10)
 

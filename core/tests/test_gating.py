@@ -5,6 +5,7 @@ import pytest
 from f0_sectools_core.gating.actions import (
     ApprovalStore,
     AuditLog,
+    AuditWriteFailed,
     GatedAction,
     GateDenied,
     TokenStore,
@@ -382,3 +383,30 @@ def test_chat_mode_empty_target_and_token_denied(tmp_path):
     g = _gate(tmp_path, enabled=True, confirm_mode="chat")
     with pytest.raises(GateDenied):
         g.execute(target="", actor="james", token="", run=lambda: "ok")
+
+
+# ── audit-write failure must not look like "the write did not happen" ──
+def test_audit_failure_reports_that_the_action_already_executed(tmp_path):
+    """Rule 8. The platform call runs before the audit record can describe it,
+    so this window cannot be designed away — only reported honestly. A generic
+    failure here would invite a retry, and in chat-confirm mode the token is
+    not single-use, so the retry would execute the action a second time."""
+    ran = []
+    g = GatedAction(
+        "defender.isolate_host",
+        enabled=True,
+        audit=AuditLog(str(tmp_path / "a.log")),
+        token_store=TokenStore(str(tmp_path / "pending")),
+    )
+    tok = g.token_store.issue("defender.isolate_host", "web-01")
+
+    def boom(*a, **k):
+        raise OSError("read-only file system")
+
+    g.audit.record = boom  # type: ignore[method-assign]
+    with pytest.raises(AuditWriteFailed) as e:
+        g.execute(target="web-01", actor="james", token=tok, run=lambda: ran.append("x"))
+
+    assert ran == ["x"], "the platform call really did run"
+    assert getattr(e.value, "action_executed", False) is True
+    assert "web-01" in str(e.value)

@@ -1,6 +1,6 @@
 """Live smoke test for the ProjectAchilles ACTIONS server against a real instance.
 
-Usage (from the repo root):
+Usage:
     1. Ensure ./.env.projectachilles has PROJECTACHILLES_BASE_URL and a
        READ-WRITE-scope PROJECTACHILLES_API_KEY (pa_...). Writes additionally
        need PROJECTACHILLES_ALLOW_WRITE=true.
@@ -20,14 +20,14 @@ import argparse
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_pa_actions_mcp import tools
 from f0_pa_actions_mcp.client import ProjectAchillesClient
 from f0_sectools_core.auth.config import ProjectAchillesConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
 from f0_sectools_core.redaction.redact import redact_finding
 
-load_dotenv(".env.projectachilles")
+load_platform_env("projectachilles")
 
 
 def _show(label: str, findings) -> None:

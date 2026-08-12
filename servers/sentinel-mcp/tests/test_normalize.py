@@ -130,3 +130,101 @@ def test_validate_indicator_empty_string_passes_for_every_kind():
     # implicit.
     assert n.validate_indicator("", "net") is True
     assert n.validate_indicator("", "domain") is True
+
+
+# --- Identity/IP search on the Umbrella surfaces -------------------------
+# Live-verified 2026-08-12 on the validation workspace: Identities_s is 100%
+# populated on Cisco_Umbrella_dns_CL (1,245 distinct in 24h; identity types are
+# "AD Users" and "Anyconnect Roaming Client"), and `has` matched a token drawn
+# from the same row on 359,304 of 359,304 rows. The "who" was always in the row
+# the tool already returned -- it just could not be searched for.
+
+def test_dns_indicator_searches_the_ip_columns():
+    """`_INDICATOR_HELP` promised IP matching for dns; only Domain_s was searched."""
+    spec = n.SURFACE_SPECS["dns"]
+    clause = n.indicator_clause(spec, "192.168.1.29")
+    assert "InternalIp_s has" in clause
+    assert "ExternalIp_s has" in clause
+
+
+def test_dns_indicator_searches_identity():
+    clause = n.indicator_clause(n.SURFACE_SPECS["dns"], "lt-tpl-l114")
+    assert "Identities_s has" in clause
+
+
+def test_web_indicator_searches_identity():
+    clause = n.indicator_clause(n.SURFACE_SPECS["web"], "lt-tpl-l114")
+    assert "Identities_s has" in clause
+
+
+def test_a_upn_is_a_valid_indicator():
+    """Umbrella identities are AD users, so an indicator must survive an '@'."""
+    assert n.validate_indicator("rherrera@example.gob.do", "domain") is True
+
+
+def test_upn_widening_still_rejects_a_kql_break_out():
+    """The charset is the injection boundary; widening it must not open a quote."""
+    for bad in ['a" or 1==1 //', "a\\b", "a'b", "a b"]:
+        assert n.validate_indicator(bad, "domain") is False
+
+
+def test_identity_is_projected_on_the_umbrella_surfaces():
+    """Returning the answer matters as much as being able to search for it."""
+    for surface in ("dns", "web"):
+        assert "Identities_s" in n.SURFACE_SPECS[surface].project
+
+
+# --- Umbrella cloud firewall (CDFW) -------------------------------------
+# Live-verified 2026-08-12 (24h, 3,630,796 rows): Identity_s 100% populated /
+# 286 distinct, Identity_Type_s "AD Users" on 3,629,629 rows; SourceIP,
+# destinationIp_s, destinationPort_s and Bytes_Sent_s all 100%. By contrast
+# CommonSecurityLog carries SourceUserName on 0.14% of 108M rows/7d — the two
+# firewalls are complements, not duplicates: the perimeter sees the traffic,
+# the cloud sees who made it.
+
+def test_cloud_firewall_surface_targets_the_umbrella_table():
+    assert n.SURFACE_SPECS["cloud_firewall"].table == "Cisco_Umbrella_firewall_CL"
+
+
+def test_firewall_surface_names_map_to_specs():
+    assert n.FIREWALL_SURFACES["perimeter"] == "firewall"
+    assert n.FIREWALL_SURFACES["cloud"] == "cloud_firewall"
+
+
+def test_cloud_firewall_action_vocabulary_is_its_own():
+    """Live values are ALLOW/BLOCK, not the CEF Accept/Drop/Detect."""
+    spec = n.SURFACE_SPECS["cloud_firewall"]
+    assert "ALLOW" in n.action_clause(spec, "allowed")
+    assert "BLOCK" in n.action_clause(spec, "blocked")
+
+
+def test_cloud_firewall_drops_the_ingested_csv_header_row():
+    """verdict_s == "Action" is a header row ingested as data (~1,152/24h)."""
+    clause = n.hygiene_clause(n.SURFACE_SPECS["cloud_firewall"])
+    assert "verdict_s !in~" in clause
+    assert '"Action"' in clause
+
+
+def test_cloud_firewall_is_searchable_by_identity_ip_and_port():
+    clause = n.indicator_clause(n.SURFACE_SPECS["cloud_firewall"], "10.1.2.3")
+    for f in ("Identity_s", "SourceIP", "destinationIp_s", "destinationPort_s"):
+        assert f"{f} has" in clause
+
+
+def test_cloud_firewall_aggregates_by_identity():
+    """Grouping by user is what this table adds over the perimeter firewall."""
+    assert n.SURFACE_SPECS["cloud_firewall"].indicator_fields[0] == "Identity_s"
+
+
+def test_cloud_firewall_does_not_advertise_its_empty_columns():
+    """FQDNS 2.5%, Destination_Country 1%, App_ID 0.8% — searching them would
+    answer "nothing found" to questions that were never really asked."""
+    spec = n.SURFACE_SPECS["cloud_firewall"]
+    for absent in ("FQDNS_s", "Destination_Country_s", "App_ID_s"):
+        assert absent not in spec.indicator_fields
+
+
+def test_a_flow_indicator_accepts_an_identity_and_a_port():
+    assert n.validate_indicator("someone@example.gob.do", "flow") is True
+    assert n.validate_indicator("443", "flow") is True
+    assert n.validate_indicator('x" or 1==1', "flow") is False

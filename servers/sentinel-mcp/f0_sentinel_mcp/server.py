@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import SentinelConfig
+from f0_sectools_core.auth.env import load_platform_env
+from f0_sectools_core.redaction.boundary import guarded_tool
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -17,7 +18,7 @@ from mcp.server import MCPServer
 from . import tools
 from .client import SentinelClient
 
-load_dotenv(".env.sentinel")
+load_platform_env("sentinel")
 
 mcp = MCPServer("f0-sentinel")
 
@@ -31,6 +32,7 @@ def _client() -> SentinelClient:
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def list_data_sources(limit: int = 25) -> list[dict[str, Any]]:
     """List which security telemetry this Sentinel workspace actually ingests.
 
@@ -45,25 +47,35 @@ async def list_data_sources(limit: int = 25) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def hunt_firewall(
+    surface: Literal["perimeter", "cloud"] = "perimeter",
     action: Literal["allowed", "blocked", "detected", "any"] = "any",
     indicator: str = "",
     hours_back: float = 24,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
-    """SEARCH firewall traffic (Check Point / Fortinet) for an IP or port.
+    """SEARCH firewall traffic for an IP, a port, or (cloud only) a user.
 
-    Use for questions about network connections, blocked traffic, or a
-    suspicious IP talking through the perimeter. `indicator` must be an IP
-    ADDRESS or PORT NUMBER — this table carries almost no URLs or usernames, so
-    a domain here finds nothing: for domains, URLs and web categories use
-    hunt_dns_web instead. Without an indicator this returns an aggregate
-    (top talkers by action), not individual events."""
+    Two different firewalls, so pick by where the traffic went. perimeter —
+    the on-prem CEF appliances (Check Point / Fortinet); use for connections
+    crossing the office network. Its `indicator` must be an IP ADDRESS or PORT
+    NUMBER: it carries almost no URLs or usernames. cloud — Cisco Umbrella's
+    cloud-delivered firewall, which sees roaming and remote clients that never
+    reach the perimeter at all; every one of its flows names the AD user, so
+    `indicator` may also be a username, and a bare call aggregates by user.
+    If you need to know WHO made a connection, use surface="cloud"; the
+    perimeter surface cannot answer it. For domains, URLs and web categories
+    use hunt_dns_web instead. Without an indicator this returns an aggregate,
+    not individual events."""
     async with _client() as c:
-        return _render(await tools.hunt_firewall(c, action, indicator, hours_back, limit))
+        return _render(
+            await tools.hunt_firewall(c, surface, action, indicator, hours_back, limit)
+        )
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def hunt_dns_web(
     surface: Literal["dns", "web", "vpn"] = "dns",
     action: Literal["allowed", "blocked", "detected", "any"] = "any",
@@ -76,9 +88,13 @@ async def hunt_dns_web(
     Choose surface by what you are looking for: dns — a domain was resolved or
     blocked (C2, newly-registered domains, blocked categories); web — a URL was
     fetched, a file downloaded, or a proxy verdict applied; vpn — remote-access
-    VPN sessions and failures. `indicator` is a domain, URL fragment or IP.
-    Without an indicator this returns an aggregate, not individual events. For
-    perimeter firewall connections by IP/port use hunt_firewall."""
+    VPN sessions and failures. `indicator` is a domain, URL fragment, IP
+    address, or an identity — Umbrella names the AD user or roaming-client
+    machine behind each request, so pass a hostname or username to see what it
+    did, or pass an IP or domain to see who was behind it. Every returned row
+    carries that identity, so you do not need another platform to answer "who
+    was this?". Without an indicator this returns an aggregate, not individual
+    events. For perimeter firewall connections by IP/port use hunt_firewall."""
     async with _client() as c:
         return _render(
             await tools.hunt_dns_web(c, surface, action, indicator, hours_back, limit)
@@ -86,6 +102,7 @@ async def hunt_dns_web(
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def search_office_activity(
     workload: Literal["sharepoint", "onedrive", "exchange", "teams", "any"] = "any",
     operation: str = "",
@@ -108,9 +125,10 @@ async def search_office_activity(
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def list_sentinel_incidents(
     severity_min: Literal["informational", "low", "medium", "high"] = "low",
-    status: Literal["new", "active", "closed", "any"] = "any",
+    status: Literal["open", "new", "active", "closed", "any"] = "open",
     hours_back: float = 168,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
@@ -120,7 +138,12 @@ async def list_sentinel_incidents(
     or which ATT&CK tactics are showing up. This is the Sentinel-side view; for
     the Defender XDR-native incident view (with its own alert and device
     context) use f0-defender's list_incidents. Not an alert list — for
-    individual alerts use f0-defender's list_alerts."""
+    individual alerts use f0-defender's list_alerts.
+
+    Returns open work by default (`status="open"` = everything not Closed),
+    because a queue of already-handled incidents is not a queue. Pass
+    `status="closed"` for handled work or `status="any"` for both. When more
+    incidents match than `limit`, a final "showing N" finding says so."""
     async with _client() as c:
         return _render(
             await tools.list_sentinel_incidents(c, severity_min, status, hours_back, limit)
@@ -128,6 +151,7 @@ async def list_sentinel_incidents(
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def get_detection_coverage() -> list[dict[str, Any]]:
     """Report Sentinel's analytics-rule inventory and which MITRE tactics are UNCOVERED.
 
@@ -145,6 +169,7 @@ async def get_detection_coverage() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@guarded_tool("sentinel")
 async def run_kql(kql: str, hours_back: float = 24, limit: int = 25) -> list[dict[str, Any]]:
     """Run a CUSTOM read-only KQL query against the Sentinel Log Analytics workspace.
 
