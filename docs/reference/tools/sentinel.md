@@ -23,17 +23,23 @@ Used by skills: [`data-source-coverage`](../../../skills/sentinel/data-source-co
 
 ## `hunt_firewall`
 
-SEARCH firewall traffic (Check Point / Fortinet) for an IP or port.
+SEARCH firewall traffic for an IP, a port, or (cloud only) a user.
 
-Use for questions about network connections, blocked traffic, or a
-suspicious IP talking through the perimeter. `indicator` must be an IP
-ADDRESS or PORT NUMBER — this table carries almost no URLs or usernames, so
-a domain here finds nothing: for domains, URLs and web categories use
-hunt_dns_web instead. Without an indicator this returns an aggregate
-(top talkers by action), not individual events.
+Two different firewalls, so pick by where the traffic went. perimeter —
+the on-prem CEF appliances (Check Point / Fortinet); use for connections
+crossing the office network. Its `indicator` must be an IP ADDRESS or PORT
+NUMBER: it carries almost no URLs or usernames. cloud — Cisco Umbrella's
+cloud-delivered firewall, which sees roaming and remote clients that never
+reach the perimeter at all; every one of its flows names the AD user, so
+`indicator` may also be a username, and a bare call aggregates by user.
+If you need to know WHO made a connection, use surface="cloud"; the
+perimeter surface cannot answer it. For domains, URLs and web categories
+use hunt_dns_web instead. Without an indicator this returns an aggregate,
+not individual events.
 
 | Parameter | Type | Default |
 |---|---|---|
+| `surface` | `"perimeter"` \| `"cloud"` | `"perimeter"` |
 | `action` | `"allowed"` \| `"blocked"` \| `"detected"` \| `"any"` | `"any"` |
 | `indicator` | `string` | `""` |
 | `hours_back` | `number` | `24` |

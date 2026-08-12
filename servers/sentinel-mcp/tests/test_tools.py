@@ -1158,3 +1158,42 @@ async def test_run_kql_discloses_truncation(fake):
     client = fake(rows={USAGE: _TABLES, "Heartbeat": rows})
     out = await tools.run_kql(client, "Heartbeat", limit=5)
     assert any("more results available" in f.title for f in out)
+
+
+# --- hunt_firewall: perimeter + cloud ------------------------------------
+UFW = "Cisco_Umbrella_firewall_CL"
+
+
+async def test_hunt_firewall_still_defaults_to_the_perimeter_table(fake):
+    """Adding a surface must not move the default out from under existing callers."""
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    await tools.hunt_firewall(client)
+    assert any(CEF in q for q in client.queries)
+    assert not any(UFW in q for q in client.queries)
+
+
+async def test_hunt_firewall_cloud_surface_queries_the_umbrella_table(fake):
+    client = fake(rows={USAGE: _TABLES + [{"DataType": UFW, "GB": 12.3}], UFW: []})
+    await tools.hunt_firewall(client, surface="cloud")
+    assert any(UFW in q for q in client.queries)
+
+
+async def test_hunt_firewall_rejects_an_unknown_surface(fake):
+    client = fake(rows={USAGE: _TABLES})
+    out = await tools.hunt_firewall(client, surface="datacenter")
+    assert "surface" in out[0].title
+    assert not any(CEF in q or UFW in q for q in client.queries)
+
+
+async def test_hunt_firewall_cloud_searches_identity(fake):
+    client = fake(rows={USAGE: _TABLES + [{"DataType": UFW, "GB": 12.3}], UFW: []})
+    await tools.hunt_firewall(client, surface="cloud", indicator="someone@example.gob.do")
+    kql = [q for q in client.queries if UFW in q][0]
+    assert 'Identity_s has "someone@example.gob.do"' in kql
+
+
+async def test_hunt_firewall_perimeter_still_rejects_an_identity_indicator(fake):
+    """The CEF table carries usernames on 0.14% of rows; it is IP/port only."""
+    client = fake(rows={USAGE: _TABLES, CEF: []})
+    out = await tools.hunt_firewall(client, indicator="someone@example.gob.do")
+    assert "indicator" in out[0].title

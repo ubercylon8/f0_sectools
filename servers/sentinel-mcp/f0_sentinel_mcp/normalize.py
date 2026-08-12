@@ -20,6 +20,12 @@ from dataclasses import dataclass, field
 
 ACTIONS = ("allowed", "blocked", "detected", "any")
 SURFACES = ("dns", "web", "vpn")
+# The two firewalls are complements, not duplicates. The perimeter (CEF)
+# appliances see traffic that crosses the office network; Umbrella's
+# cloud-delivered firewall sees roaming clients that never touch it. Live
+# 2026-08-12: CommonSecurityLog 108M rows/7d with a named user on 0.14% of
+# them, Cisco_Umbrella_firewall_CL 10.6M rows/7d with one on 100%.
+FIREWALL_SURFACES: dict[str, str] = {"perimeter": "firewall", "cloud": "cloud_firewall"}
 WORKLOADS = ("sharepoint", "onedrive", "exchange", "teams", "any")
 
 DEFAULT_HOURS = 24.0
@@ -76,6 +82,31 @@ SURFACE_SPECS: dict[str, Surface] = {
         ),
         indicator_kind="net",
         port_field="DestinationPort",
+    ),
+    "cloud_firewall": Surface(
+        table="Cisco_Umbrella_firewall_CL",
+        action_field="verdict_s",
+        # Live 24h: ALLOW 3,629,635 / BLOCK 9. There is no "detected" verdict
+        # on this surface, so the bucket is absent rather than guessed into.
+        action_map={"allowed": ("ALLOW",), "blocked": ("BLOCK",)},
+        # Identity first: it is both the most useful thing to search and the
+        # aggregate group-by, so a bare call answers "which users generated
+        # this traffic, allowed vs blocked" -- the question the perimeter
+        # firewall cannot answer. Ports are string-typed here (unlike CEF's
+        # int DestinationPort), so they need no port_field special case.
+        indicator_fields=(
+            "Identity_s", "SourceIP", "destinationIp_s", "destinationPort_s",
+        ),
+        project=(
+            "TimeGenerated", "verdict_s", "Identity_s", "SourceIP",
+            "destinationIp_s", "destinationPort_s", "ipProtocol_s",
+            "Bytes_Sent_s", "Bytes_Received_s",
+        ),
+        # Live fill rates make FQDNS_s (2.5%), Destination_Country_s (1%) and
+        # App_ID_s (0.8%) unusable as search fields: a miss would read as "no
+        # such traffic" when it means "that column is mostly empty".
+        indicator_kind="flow",
+        junk=("Action",),
     ),
     "dns": Surface(
         table="Cisco_Umbrella_dns_CL",

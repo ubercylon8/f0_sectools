@@ -174,6 +174,8 @@ _INDICATOR_HELP = {
     "usernames — for domains and URLs use hunt_dns_web)",
     "domain": "a domain, URL fragment, IP address, or an Umbrella identity "
     "(the AD user or roaming-client machine name that made the request)",
+    "flow": "an IP address, a port number, or the identity (AD user) behind "
+    "the flow — this table carries no usable URL, domain or country data",
 }
 
 
@@ -306,17 +308,26 @@ async def _run_surface(
     )
 
 
+_FIREWALL_HUMAN = {
+    "perimeter": "perimeter firewall (CEF)",
+    "cloud": "cloud firewall (Cisco Umbrella)",
+}
+
+
 async def hunt_firewall(
     client: Any,
+    surface: str = "perimeter",
     action: str = "any",
     indicator: str = "",
     hours_back: float = 24,
     limit: int = 25,
 ) -> list[Finding]:
-    """Firewall traffic from the CEF table (Check Point / Fortinet)."""
+    """Firewall traffic: on-prem CEF appliances, or Umbrella's cloud firewall."""
+    if surface not in n.FIREWALL_SURFACES:
+        return [_bad_arg("surface", surface, ", ".join(n.FIREWALL_SURFACES))]
     return await _run_surface(
-        client, n.SURFACE_SPECS["firewall"],
-        cap="Sentinel firewall telemetry", human="firewall (CEF)",
+        client, n.SURFACE_SPECS[n.FIREWALL_SURFACES[surface]],
+        cap=f"Sentinel {surface} firewall telemetry", human=_FIREWALL_HUMAN[surface],
         action=action, indicator=indicator, hours_back=hours_back, limit=limit,
     )
 

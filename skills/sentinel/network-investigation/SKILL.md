@@ -27,11 +27,18 @@ Base tool names: `list_data_sources`, `hunt_firewall`, `hunt_dns_web`,
    in this skill:
    - **Domain or URL** → `hunt_dns_web` (`surface="dns"` for resolutions,
      `surface="web"` for fetches and downloads).
-   - **IP address or port** → `hunt_firewall` for perimeter connections. An
-     *internal* IP also goes to `hunt_dns_web` — Umbrella rows name the AD
-     user or roaming-client machine behind the address, so that is how you
-     turn an IP into a who.
-   - **A user or a hostname** → `hunt_dns_web` (`surface="dns"` or `"web"`).
+   - **IP address or port** → `hunt_firewall`. Choose the surface by where
+     the traffic went: `surface="perimeter"` (default) for the on-prem CEF
+     appliances, `surface="cloud"` for Umbrella's cloud firewall, which sees
+     roaming and remote clients that never reach the perimeter. **Check both
+     before concluding a host had no network activity** — on a validated
+     workspace the perimeter carried a named user on 0.14% of rows and the
+     cloud firewall on 100%, so they answer different questions and neither
+     is a superset. An *internal* IP also goes to `hunt_dns_web`, whose rows
+     name the AD user behind the address.
+   - **A user or a hostname** → `hunt_dns_web` (`surface="dns"` or `"web"`)
+     for name resolution and web fetches, or `hunt_firewall`
+     (`surface="cloud"`) for their L3/L4 connections.
      Umbrella identities are searchable, so "what did this host resolve" is
      one call. Do not go hunting for an IP-to-user mapping in other platforms
      before trying this: the identity is in the same row as the query.
