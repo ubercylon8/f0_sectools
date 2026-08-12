@@ -37,9 +37,21 @@ retry once** — don't hammer it, which refreshes the throttle window.
 
 ## "Missing required environment variables"
 
-The server couldn't find its credentials. Ensure `.env.defender` / `.env.entra`
-exist at the **repo root** and the runtime launches the server with
-`uv run --directory <repo-root>` (so it loads them).
+The server couldn't find a credential it needs. The error names the missing
+variables *and* where it looked, which tells you which of two problems you have:
+
+- **`found .env.<platform> in <dir>`** — the file exists but is missing a key.
+  Add it there. Compare against
+  `servers/<platform>-mcp/.env.<platform>.example`.
+- **`no .env.<platform> was found`** — there is no credential file. Create one
+  at the repo root, or set `F0_SECTOOLS_ENV_DIR` to the directory holding your
+  `.env.*` files (useful for keeping credentials outside the checkout).
+
+Servers locate `.env.<platform>` by searching the working directory and its
+parents, then the installed package's checkout — so launching your runtime from
+a subdirectory of the repo works. Variables already exported in the environment
+always win over the file, which is how container and systemd deployments supply
+credentials without a file at all.
 
 ## Tool not found / wrong name
 

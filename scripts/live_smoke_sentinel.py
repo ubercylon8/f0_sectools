@@ -1,6 +1,6 @@
 """Live smoke test for the Sentinel MCP server against a real workspace.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/sentinel-mcp/.env.sentinel.example to ./.env.sentinel and fill
        it in. Required Azure roles on the Log Analytics workspace resource:
        Log Analytics Reader (all telemetry tools) and, optionally, Microsoft
@@ -34,8 +34,8 @@ import argparse
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import SentinelConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.renderers import Persona, render_findings
 from f0_sentinel_mcp import tools
@@ -43,7 +43,7 @@ from f0_sentinel_mcp.client import SentinelClient
 
 # Mirrors every other live_smoke_*.py script: reads local env vars into this
 # process only. Never printed, logged, or otherwise surfaced below.
-load_dotenv(".env.sentinel")
+load_platform_env("sentinel")
 
 
 def _show(label: str, findings, persona: str | None = None, show: int = 6) -> None:

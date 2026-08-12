@@ -1,6 +1,6 @@
 """Live smoke test for the ProjectAchilles MCP server against a real instance.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/projectachilles-mcp/.env.projectachilles.example to
        ./.env.projectachilles and fill in PROJECTACHILLES_BASE_URL and a read-scope
        PROJECTACHILLES_API_KEY (pa_...).
@@ -23,13 +23,13 @@ import argparse
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_projectachilles_mcp import tools
 from f0_projectachilles_mcp.client import ProjectAchillesClient
 from f0_sectools_core.auth.config import ProjectAchillesConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.redaction.redact import redact_finding, redact_obj
 
-load_dotenv(".env.projectachilles")
+load_platform_env("projectachilles")
 
 
 def _show(label: str, findings) -> None:

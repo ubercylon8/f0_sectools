@@ -1,6 +1,6 @@
 """Live smoke test for the LimaCharlie MCP server against a real org.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/limacharlie-mcp/.env.limacharlie.example to ./.env.limacharlie
        and fill in LIMACHARLIE_OID / LIMACHARLIE_API_KEY.
     2. uv run python scripts/live_smoke_limacharlie.py
@@ -14,13 +14,13 @@ from __future__ import annotations
 import json
 import os
 
-from dotenv import load_dotenv
 from f0_limacharlie_mcp import tools
 from f0_limacharlie_mcp.client import LimaCharlieClient
 from f0_sectools_core.auth.config import LimaCharlieConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.redaction.redact import redact_finding
 
-load_dotenv(".env.limacharlie")
+load_platform_env("limacharlie")
 
 # Optional: set LIMACHARLIE_SMOKE_HOSTNAME to a real sensor to exercise host-scoping.
 # Empty -> query_telemetry runs unscoped (all sensors), so the step still runs.

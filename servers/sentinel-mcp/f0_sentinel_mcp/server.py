@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import SentinelConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
@@ -17,7 +17,7 @@ from mcp.server import MCPServer
 from . import tools
 from .client import SentinelClient
 
-load_dotenv(".env.sentinel")
+load_platform_env("sentinel")
 
 mcp = MCPServer("f0-sentinel")
 

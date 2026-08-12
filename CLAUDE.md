@@ -243,6 +243,7 @@ Each integration follows `.env.<platform>` and the thin-server pattern. Read too
 ## Secrets & Privacy
 
 - **Per-platform `.env`.** `.env.wazuh`, `.env.defender`, `.env.entra`, … Each server loads only its own. All `.env*` files are gitignored.
+- **Credential files are located by search, never by CWD.** Servers and scripts call `core/auth/env.py`'s `load_platform_env("<platform>")`, which searches the working directory and its parents, then the installed package's checkout, with `$F0_SECTOOLS_ENV_DIR` as an explicit override. A bare `load_dotenv(".env.<platform>")` is a defect — it silently loads nothing whenever the MCP client is launched from anywhere but the repo root, and a test in `core/tests/test_auth_env.py` guards against reintroducing it.
 - **Nothing leaves the host.** No telemetry, no analytics, no external calls except to the operator's own configured security platforms.
 - **Secrets never reach the model.** Credentials live in `core/auth/`; they are used to make API calls and are never placed in tool output, prompts, or model context.
 - **Redaction is mandatory and centralized.** Every return path goes through `core/redaction/`, including error/exception paths.

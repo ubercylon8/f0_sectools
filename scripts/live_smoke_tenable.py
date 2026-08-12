@@ -1,6 +1,6 @@
 """Live smoke test for the Tenable MCP server against a real Tenable VM instance.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/tenable-mcp/.env.tenable.example to ./.env.tenable and fill in
        TENABLE_ACCESS_KEY and TENABLE_SECRET_KEY.
     2. uv run python scripts/live_smoke_tenable.py [--persona ciso]
@@ -15,14 +15,14 @@ import argparse
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import TenableConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.renderers import Persona, render_findings
 from f0_tenable_mcp import tools
 from f0_tenable_mcp.client import TenableClient
 
-load_dotenv(".env.tenable")
+load_platform_env("tenable")
 
 
 def _show(label: str, findings, persona: str | None = None) -> None:

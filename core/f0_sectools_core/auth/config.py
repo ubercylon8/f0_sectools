@@ -7,10 +7,37 @@ cross-bleed.
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
+from .env import find_platform_env
+
 _TRUE = {"1", "true", "yes", "on"}
+
+
+def _require_env(prefix: str, names: Iterable[str], env: Mapping[str, str]) -> None:
+    """Raise if any required variable is unset, saying where credentials were looked for.
+
+    The variable names alone are a dead end: the usual cause is not a missing
+    key but a credential file that was never located, which looks identical
+    from the caller's side. Naming the file and its search result turns a
+    guessing game into a one-line fix. Values are never included.
+    """
+    missing = [name for name in names if not env.get(name)]
+    if not missing:
+        return
+    platform = prefix.lower()
+    found = find_platform_env(platform)
+    where = (
+        f"found .env.{platform} in {found.parent} - add the missing keys there"
+        if found
+        else (
+            f"no .env.{platform} was found in the working directory, its parents, "
+            "or the installed package's checkout - create one in the repo root "
+            "or point F0_SECTOOLS_ENV_DIR at it"
+        )
+    )
+    raise ValueError(f"Missing required environment variables: {', '.join(missing)} ({where})")
 
 
 @dataclass
@@ -26,9 +53,7 @@ class PlatformConfig:
     def from_env(cls, prefix: str, env: Mapping[str, str] | None = None) -> PlatformConfig:
         env = env if env is not None else os.environ
         required = {k: f"{prefix}_{k.upper()}" for k in ("tenant_id", "client_id", "client_secret")}
-        missing = [name for name in required.values() if not env.get(name)]
-        if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        _require_env(prefix, required.values(), env)
         verify = env.get(f"{prefix}_VERIFY_TLS", "true").strip().lower() in _TRUE
         allow_write = env.get(f"{prefix}_ALLOW_WRITE", "false").strip().lower() in _TRUE
         return cls(
@@ -58,9 +83,7 @@ class LimaCharlieConfig:
     ) -> LimaCharlieConfig:
         env = env if env is not None else os.environ
         required = {"oid": f"{prefix}_OID", "api_key": f"{prefix}_API_KEY"}
-        missing = [name for name in required.values() if not env.get(name)]
-        if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        _require_env(prefix, required.values(), env)
         allow_write = env.get(f"{prefix}_ALLOW_WRITE", "false").strip().lower() in _TRUE
         return cls(
             oid=env[required["oid"]],
@@ -90,9 +113,7 @@ class ProjectAchillesConfig:
     ) -> ProjectAchillesConfig:
         env = env if env is not None else os.environ
         required = {"base_url": f"{prefix}_BASE_URL", "api_key": f"{prefix}_API_KEY"}
-        missing = [name for name in required.values() if not env.get(name)]
-        if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        _require_env(prefix, required.values(), env)
         verify = env.get(f"{prefix}_VERIFY_TLS", "true").strip().lower() in _TRUE
         allow_write = env.get(f"{prefix}_ALLOW_WRITE", "false").strip().lower() in _TRUE
         confirm_mode = env.get(f"{prefix}_CONFIRM_MODE", "token").strip().lower()
@@ -132,9 +153,7 @@ class TenableConfig:
             "access_key": f"{prefix}_ACCESS_KEY",
             "secret_key": f"{prefix}_SECRET_KEY",
         }
-        missing = [name for name in required.values() if not env.get(name)]
-        if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        _require_env(prefix, required.values(), env)
         verify = env.get(f"{prefix}_VERIFY_TLS", "true").strip().lower() in _TRUE
         base_url = env.get(f"{prefix}_BASE_URL", "https://cloud.tenable.com").rstrip("/")
         return cls(
@@ -182,9 +201,7 @@ class SentinelConfig:
             k: f"{prefix}_{k.upper()}"
             for k in ("tenant_id", "client_id", "client_secret", "workspace_id")
         }
-        missing = [name for name in required.values() if not env.get(name)]
-        if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        _require_env(prefix, required.values(), env)
         try:
             retention = int(env.get(f"{prefix}_RETENTION_DAYS", "30"))
         except ValueError:

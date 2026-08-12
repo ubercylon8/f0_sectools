@@ -1,6 +1,6 @@
 """Live smoke test for the Purview MCP server against a real tenant.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/purview-mcp/.env.purview.example to ./.env.purview and fill
        in PURVIEW_TENANT_ID / PURVIEW_CLIENT_ID / PURVIEW_CLIENT_SECRET.
        Required app permissions: SecurityAlert.Read.All, AuditLogsQuery.Read.All,
@@ -15,13 +15,13 @@ from __future__ import annotations
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_purview_mcp import tools
 from f0_sectools_core.auth.config import PlatformConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.redaction.redact import redact_finding
 
-load_dotenv(".env.purview")
+load_platform_env("purview")
 
 
 def _show(label: str, findings) -> None:

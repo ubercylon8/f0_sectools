@@ -1,6 +1,6 @@
 """Live smoke test for the Intune MCP server against a real tenant.
 
-Usage (from the repo root):
+Usage:
     1. Copy servers/intune-mcp/.env.intune.example to ./.env.intune and fill in
        INTUNE_TENANT_ID / INTUNE_CLIENT_ID / INTUNE_CLIENT_SECRET (an Entra app with
        DeviceManagementManagedDevices.Read.All + DeviceManagementConfiguration.Read.All).
@@ -15,13 +15,13 @@ from __future__ import annotations
 import asyncio
 import json
 
-from dotenv import load_dotenv
 from f0_intune_mcp import tools
 from f0_sectools_core.auth.config import PlatformConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.redaction.redact import redact_finding
 
-load_dotenv(".env.intune")
+load_platform_env("intune")
 
 
 def _show(label: str, findings) -> None:

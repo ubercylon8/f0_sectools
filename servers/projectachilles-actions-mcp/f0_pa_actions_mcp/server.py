@@ -10,8 +10,8 @@ from __future__ import annotations
 import os
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import ProjectAchillesConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
@@ -20,7 +20,7 @@ from mcp.server import MCPServer
 from . import tools
 from .client import ProjectAchillesClient
 
-load_dotenv(".env.projectachilles")
+load_platform_env("projectachilles")
 
 mcp = MCPServer("f0-pa-actions")
 

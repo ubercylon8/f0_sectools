@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
+from f0_sectools_core.auth.env import load_platform_env
 from f0_sectools_core.auth.graph import GraphClient
 from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
@@ -17,8 +17,8 @@ from mcp.server import MCPServer
 
 from . import tools
 
-# Load .env.entra from the working directory if present (no-op otherwise).
-load_dotenv(".env.entra")
+# Locate .env.entra by searching upward from the working directory (no-op if absent).
+load_platform_env("entra")
 
 mcp = MCPServer("f0-entra")
 

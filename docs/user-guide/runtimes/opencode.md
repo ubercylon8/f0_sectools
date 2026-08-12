@@ -92,7 +92,8 @@ Supervised sessions only.
 
 - **`opencode mcp list` shows a server failed** — run the server directly
   (`uv run --directory . f0-defender-mcp`) to see the startup error; usually a
-  missing `.env.<platform>` (servers resolve them from the repo root).
+  missing `.env.<platform>` (servers search the working directory upward, so
+  a checkout-root file is found even when you start opencode in a subdirectory).
 - **Skills missing from `opencode debug skill`** — that CLI snapshot races the
   skill scan and shows a partial list (observed on 1.18.4); a real session
   sees all skills. Trust an in-session check ("list your available skills"),
