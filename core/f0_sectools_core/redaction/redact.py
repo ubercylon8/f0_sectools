@@ -48,9 +48,11 @@ def redact_finding(finding: Finding) -> Finding:
     blanks any evidence value whose *key* hints at a secret. Evidence is a flat
     ``{key, value}`` list, so ``redact_obj``'s dict-key check never sees the
     evidence key name (it is stored as a value under the literal ``"key"``); this
-    pass closes that gap. Use it on findings that flow into a shared artifact
-    (e.g. a generated report) so the redaction guarantee matches every server's
-    ``_render``. Centralized here per Critical Rule 3/6 — never reimplement per caller.
+    pass closes that gap. This is what every server's ``_render`` calls before a
+    finding leaves the process, and it is also what a generated report (e.g.
+    ``core/reports/emit.py``) uses on the same findings — one entry point, same
+    guarantee on both paths. Centralized here per Critical Rule 3/6 — never
+    reimplement per caller.
     """
     from f0_sectools_core.schema.findings import Finding as _Finding
 

@@ -19,7 +19,7 @@ frontier-API dependency. See the [security model](../explanation/security-model.
 
 ## Can the AI isolate a host / disable a user / change anything on its own?
 
-No. Of the 51 tools, only six change state, and each requires an operator-set
+No. Of the 58 tools, only six change state, and each requires an operator-set
 write flag **and** a per-action human confirmation delivered on a channel the
 model cannot read, and is audited locally. Both fail-closed paths are shown in
 [this transcript](../../examples/transcripts/gated-run-test.md); the mechanism
@@ -43,10 +43,10 @@ cloud model, which is the privacy point. See
 
 ## Which platforms are supported today?
 
-Eight live-validated servers: Microsoft Defender XDR, Entra ID, LimaCharlie,
-ProjectAchilles (read + gated actions), Intune, Tenable VM, and Microsoft
-Purview — [tool reference](../reference/tools/README.md). Planned (Wazuh,
-Elastic, Splunk, Sentinel, CrowdStrike, SentinelOne, Sophos, MISP,
+Nine live-validated servers: Microsoft Defender XDR, Entra ID, LimaCharlie,
+ProjectAchilles (read + gated actions), Intune, Tenable VM, Microsoft
+Purview, and Microsoft Sentinel — [tool reference](../reference/tools/README.md).
+Planned (Wazuh, Elastic, Splunk, CrowdStrike, SentinelOne, Sophos, MISP,
 TheHive, OpenCTI): see the roadmap table in [CLAUDE.md](../../CLAUDE.md#platform-integrations);
 contributions follow the recipe in [CONTRIBUTING.md](../../CONTRIBUTING.md).
 

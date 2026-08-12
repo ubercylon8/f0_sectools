@@ -11,4 +11,4 @@ Code), use [`../skills/`](../skills/) and (for Hermes) the role profiles in
 
 | File | Use |
 |------|-----|
-| `f0-sectools-system-prompt.md` | Persona-switchable SOC assistant prompt covering the Defender + Entra tools |
+| `f0-sectools-system-prompt.md` | Persona-switchable SOC assistant prompt orienting a model across all nine servers |

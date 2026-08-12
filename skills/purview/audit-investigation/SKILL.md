@@ -17,6 +17,15 @@ yesterday", "what did jsmith do today", "any mass downloads from SharePoint".
 
 ## Procedure
 
+**Prefer the fast path if Sentinel is configured.** For SharePoint, OneDrive,
+Exchange or Teams file/mail activity, call `search_office_activity`
+(f0-sentinel) first — it queries the same `OfficeActivity` data in Log
+Analytics and answers in under a second, not minutes. Fall back to
+`search_audit_log` below only when there is no Sentinel workspace configured,
+or when the activity you need predates the workspace's Log Analytics
+retention — Sentinel only has what was ingested, while the M365 unified audit
+log itself reaches back further.
+
 Base tool names: `search_audit_log`, `get_audit_results`.
 
 1. Call `search_audit_log` with flat filters: `activity` (an operation name

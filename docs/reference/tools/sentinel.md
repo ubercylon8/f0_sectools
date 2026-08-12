@@ -81,7 +81,7 @@ submits an asynchronous query that takes 5-15 minutes to return.
 | `hours_back` | `number` | `24` |
 | `limit` | `integer` | `25` |
 
-Used by skills: [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
+Used by skills: [`investigate-audit-activity`](../../../skills/purview/audit-investigation/SKILL.md), [`network-investigation`](../../../skills/sentinel/network-investigation/SKILL.md)
 
 ## `list_sentinel_incidents`
 
@@ -118,7 +118,7 @@ coordinates in .env.sentinel; without them it says so.
 
 *No parameters.*
 
-Used by skills: [`data-source-coverage`](../../../skills/sentinel/data-source-coverage/SKILL.md), [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md)
+Used by skills: [`roll-up-ciso-risk`](../../../skills/cross-platform/ciso-risk-rollup/SKILL.md), [`data-source-coverage`](../../../skills/sentinel/data-source-coverage/SKILL.md), [`detection-coverage`](../../../skills/sentinel/detection-coverage/SKILL.md)
 
 ## `run_kql`
 

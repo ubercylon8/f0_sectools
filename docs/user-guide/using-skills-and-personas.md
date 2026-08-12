@@ -10,7 +10,7 @@ Skills are step-by-step procedures the agent follows for a task. They live in
 pi, opencode).
 
 **The full, always-current list is the [skills catalog](../reference/skills.md)**
-— all 25 skills by platform, generated from their `SKILL.md` frontmatter (so it
+— all 30 skills by platform, generated from their `SKILL.md` frontmatter (so it
 cannot drift). Each platform has a default-focus skill (e.g. Defender's
 incident triage, Intune's compliance review, Tenable's exposure-posture
 review); the [tool reference](../reference/tools/README.md) shows the inverse

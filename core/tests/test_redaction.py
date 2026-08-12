@@ -1,3 +1,7 @@
+import importlib
+from pathlib import Path
+
+import pytest
 from f0_sectools_core.redaction.redact import redact_obj, redact_text
 
 
@@ -87,3 +91,54 @@ def test_redact_finding_still_applies_value_patterns():
     )
     red = redact_finding(f)
     assert "«redacted»" in red.evidence[0].value
+
+
+# Issue #100: every server's `_render` must use `redact_finding` (not the bare
+# `redact_obj`), so the evidence-key-hint pass runs on the live tool-output path
+# -- not only on the generated-report path (`core/reports/emit.py`). `_render`
+# is a module-private helper with no server-specific behaviour to exercise, so
+# this is one parametrised test over every server module rather than nine
+# near-identical copies.
+_SERVER_RENDER_MODULES = [
+    "f0_defender_mcp.server",
+    "f0_entra_mcp.server",
+    "f0_intune_mcp.server",
+    "f0_limacharlie_mcp.server",
+    "f0_projectachilles_mcp.server",
+    "f0_pa_actions_mcp.server",
+    "f0_purview_mcp.server",
+    "f0_sentinel_mcp.server",
+    "f0_tenable_mcp.server",
+]
+
+_SERVERS_DIR = Path(__file__).resolve().parents[2] / "servers"
+_DISCOVERED_SERVER_COUNT = len(
+    [p for p in _SERVERS_DIR.iterdir() if p.is_dir() and p.name.endswith("-mcp")]
+)
+
+
+def test_server_render_modules_list_is_not_missing_a_server():
+    # This list is hand-maintained -- tie its length to the discovered
+    # server count so a tenth server added under servers/ can't silently
+    # skip this redaction regression test.
+    assert len(_SERVER_RENDER_MODULES) == _DISCOVERED_SERVER_COUNT
+
+
+@pytest.mark.parametrize("module_name", _SERVER_RENDER_MODULES)
+def test_server_render_blanks_secret_hinting_evidence_value(module_name):
+    from f0_sectools_core.schema.findings import Evidence, Finding, FindingType, Severity
+
+    server = importlib.import_module(module_name)
+    f = Finding(
+        source="test", finding_type=FindingType.posture, severity=Severity.info,
+        title="pillar",
+        evidence=[
+            Evidence(key="client_secret", value="hunter2pw"),  # secret-hinting key
+            Evidence(key="score", value="62"),                  # benign
+        ],
+    )
+    out = server._render([f])
+    assert len(out) == 1
+    ev = {e["key"]: e["value"] for e in out[0]["evidence"]}
+    assert ev["client_secret"] == "«redacted»"
+    assert ev["score"] == "62"

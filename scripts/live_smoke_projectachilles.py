@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from f0_projectachilles_mcp import tools
 from f0_projectachilles_mcp.client import ProjectAchillesClient
 from f0_sectools_core.auth.config import ProjectAchillesConfig
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding, redact_obj
 
 load_dotenv(".env.projectachilles")
 
@@ -35,7 +35,7 @@ load_dotenv(".env.projectachilles")
 def _show(label: str, findings) -> None:
     print(f"\n=== {label}: {len(findings)} finding(s) ===")
     for f in findings[:8]:
-        print(json.dumps(redact_obj(f.model_dump()), indent=2, default=str))
+        print(json.dumps(redact_finding(f).model_dump(), indent=2, default=str))
     if len(findings) > 8:
         print(f"... ({len(findings) - 8} more)")
 

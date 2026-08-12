@@ -1,6 +1,6 @@
 # Sample findings — one per server
 
-One representative finding from each of the eight MCP servers, showing the
+One representative finding from each of the nine MCP servers, showing the
 **same normalized shape** regardless of platform — the point of the
 [findings schema](../../docs/explanation/findings-schema.md). All values are
 fictional (example.com-style hosts and GUIDs); shapes mirror what the
@@ -20,6 +20,7 @@ cannot drift from the contract.
 | [`intune.json`](intune.json) | a `misconfig` on a device entity (stale device) |
 | [`tenable.json`](tenable.json) | a critical `misconfig` (the [offline demo](../../docs/demo.md)'s Log4Shell output) |
 | [`purview.json`](purview.json) | a data-risk `alert` (DLP) |
+| [`sentinel.json`](sentinel.json) | an `incident` finding with MITRE tactics/techniques |
 
 Reading order for the schema's ideas: `tenable.json` (plain read),
 `defender.json` (read that *names* a gated action without invoking it), then

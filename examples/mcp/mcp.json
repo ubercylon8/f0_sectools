@@ -1,7 +1,8 @@
 {
   "//": "f0_sectools MCP server config. Point any MCP-capable agent client at this.",
   "//directory": "Replace /ABSOLUTE/PATH/TO/sec-tools with your checkout path. `uv run --directory` sets the working dir so each server finds its .env.<platform> file there.",
-  "//secrets": "Credentials are NOT in this file. Put them in .env.defender / .env.entra at the repo root (gitignored). Servers load them at startup.",
+  "//secrets": "Credentials are NOT in this file. Put them in the per-platform .env.<platform> files at the repo root (gitignored). Servers load them at startup.",
+  "//subset": "Delete entries for platforms you don't run -- a server with no credentials configured will fail to start.",
   "mcpServers": {
     "f0-defender": {
       "command": "uv",
@@ -10,6 +11,34 @@
     "f0-entra": {
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-entra-mcp"]
+    },
+    "f0-intune": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-intune-mcp"]
+    },
+    "f0-purview": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-purview-mcp"]
+    },
+    "f0-sentinel": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-sentinel-mcp"]
+    },
+    "f0-limacharlie": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-limacharlie-mcp"]
+    },
+    "f0-tenable": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-tenable-mcp"]
+    },
+    "f0-projectachilles": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-projectachilles-mcp"]
+    },
+    "f0-pa-actions": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/sec-tools", "f0-projectachilles-actions-mcp"]
     }
   }
 }

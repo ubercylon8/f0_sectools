@@ -6,7 +6,7 @@ afterwards. Written for the person who has to approve a deployment.*
 
 ## Summary
 
-- **Read-only by default.** Every platform query is read-only. Of the 51
+- **Read-only by default.** Every platform query is read-only. Of the 58
   registered tools, only six can change anything (Defender
   `isolate_host`/`release_host`; ProjectAchilles `run_test`, `schedule_test`,
   `set_schedule_status`, `cancel_tasks`) — and each is disabled until an

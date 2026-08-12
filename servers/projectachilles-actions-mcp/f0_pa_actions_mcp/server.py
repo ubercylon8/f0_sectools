@@ -13,7 +13,7 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import ProjectAchillesConfig
 from f0_sectools_core.gating.actions import AuditLog, GatedAction, TokenStore
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
 
@@ -27,7 +27,7 @@ mcp = MCPServer("f0-pa-actions")
 
 def _render(findings: list[Finding]) -> list[dict[str, Any]]:
     """Dump findings and redact every payload before it leaves the server."""
-    return [redact_obj(f.model_dump()) for f in findings]
+    return [redact_finding(f).model_dump() for f in findings]
 
 
 def _gate(name: str, cfg: ProjectAchillesConfig) -> GatedAction:

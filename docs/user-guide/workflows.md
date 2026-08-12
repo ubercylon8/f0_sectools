@@ -20,13 +20,16 @@ one recommended focus. No IDs or raw JSON.
 > **Prompt:** "As a CISO, give me our overall risk posture across everything."
 
 The `ciso-risk-rollup` (a.k.a. `roll-up-ciso-risk`) skill pulls one headline
-number from each of the six platforms — Microsoft Secure Score, ProjectAchilles
-defense score, Tenable exposure, Intune compliance, Purview data-risk, and
-LimaCharlie endpoint coverage — ranks the top 1–3 risks by their actual
-severity, and names one highest-value next step. If a platform is dark
-(unlicensed, no permission), it is reported as **"not assessed"** and the rollup
-continues, so the coverage of the picture is always explicit. Favour a capable
-local model — it is six sequential calls plus synthesis.
+number from each of the seven platforms — Microsoft Secure Score, ProjectAchilles
+defense score, Tenable exposure, Intune compliance, Purview data-risk,
+LimaCharlie endpoint coverage, and Sentinel detection coverage — ranks the top
+1–3 risks by their actual severity, and names one highest-value next step.
+Sentinel's pillar reports the CUSTOM (operator-authored) ATT&CK-tactic
+coverage, never the flattering overall figure, which includes
+Microsoft-managed rules. If a platform is dark (unlicensed, no permission), it
+is reported as **"not assessed"** and the rollup continues, so the coverage of
+the picture is always explicit. Favour a capable local model — it is seven
+sequential calls plus synthesis.
 
 ## Generate a posture report (any persona) — Markdown, HTML + PDF, EN/ES
 
@@ -97,7 +100,7 @@ generates.
 
 | Persona | Title | Gathers |
 |---|---|---|
-| `ciso` | Executive Risk Briefing | The six-pillar rollup above, as headline metric tiles + compact one-line top risks |
+| `ciso` | Executive Risk Briefing | The report engine's six automated pillars (config hardening, attack validation, vulnerability exposure, device compliance, data risk, endpoint coverage — Sentinel detection coverage is not yet wired into report generation), as headline metric tiles + compact one-line top risks |
 | `detection-engineer` | Detection Coverage Report | Defender alerts and incidents, LimaCharlie D&R rules and endpoint detections, ProjectAchilles weak techniques |
 | `threat-hunter` | Threat Hunting Report | Incidents, MITRE-bearing alerts, endpoint detections, sensor coverage |
 | `security-engineer` | Security Hardening Report | Secure Score, Entra conditional-access / privileged-role / risky-user posture, Intune compliance and stale devices, Tenable exposure |
@@ -123,7 +126,10 @@ recommended next step. Containment is read-only/not available — it says so.
 The `defender-threat-hunt` skill picks a bounded KQL query from
 [`references/kql-starters.md`](../../skills/defender/threat-hunt/references/kql-starters.md),
 calls `run_hunting_query`, reviews the returned rows, optionally refines, and
-summarizes findings + TTPs. Hunting covers the **last 30 days**.
+summarizes findings + TTPs. Hunting covers the **last 30 days**. This is
+endpoint/device telemetry; for network perimeter, DNS/web, or M365-audit
+hunting, see **Sentinel network investigation** below — Sentinel is the only
+server that carries firewall, DNS/web, and M365-audit telemetry.
 
 ## Identity risk review (security engineer)
 
@@ -140,7 +146,10 @@ Returns concrete hardening recommendations.
 > **Prompt:** "As a detection engineer, look at our recent alerts and coverage."
 
 Calls `list_alerts`, maps them to MITRE techniques, flags noisy/low-signal
-detections (e.g. repetitive DLP), and notes coverage gaps to tune.
+detections (e.g. repetitive DLP), and notes coverage gaps to tune. This reads
+coverage from alert history; for the direct question "how much of the ATT&CK
+matrix do our own analytics rules cover" see **Sentinel detection coverage
+review** below, which answers from the rule inventory itself.
 
 ## LimaCharlie endpoint investigation (SOC analyst / threat hunter) — default focus
 
@@ -286,6 +295,48 @@ top findings.
 The `review-scan-coverage` skill runs `list_scans` to flag failed/stale scans
 and `list_assets` to gauge the inventory those scans should cover, then
 reports where coverage looks thin.
+
+## Sentinel network investigation (threat hunter) — default focus
+
+> **Prompt:** "Did anyone reach malicious-domain.example from our network in
+> the last day?"
+
+The `network-investigation` skill routes an indicator by **type** — the
+single most important decision in the skill: a **domain or URL** goes to
+`hunt_dns_web`; an **IP address or port** goes to `hunt_firewall`. Never send
+a domain to `hunt_firewall` — the CEF firewall table carries essentially no
+URL data, so a domain query against it comes back empty, and reporting that as
+"no activity found" would be wrong: it means the wrong table was asked, not
+that nothing happened. The skill also covers `search_office_activity` for
+what a user touched in M365 — the fast path vs. Purview's asynchronous
+`search_audit_log` (sub-second vs. 5–15 minutes); fall back to Purview only
+when there is no Sentinel workspace, or for audit history older than the
+workspace's Log Analytics retention. No other server here hunts firewall,
+DNS/web, or M365-audit telemetry — this is Sentinel's own surface.
+
+## Sentinel detection coverage review (detection engineer / CISO)
+
+> **Prompt:** "How much of the ATT&CK matrix do our own Sentinel analytics
+> rules cover?"
+
+The `detection-coverage` skill calls `get_detection_coverage`, which reports
+TWO tactic figures, never conflated: coverage from all enabled rules
+(including Microsoft-managed kinds — `Fusion`, `MicrosoftSecurityIncidentCreation`,
+`MLBehaviorAnalytics`, `ThreatIntelligence`) versus coverage from CUSTOM,
+operator-authored rules alone (`Scheduled`/`NRT`). Lead with the custom
+figure — a tenant can show broad coverage overall while its own rules cover
+almost nothing, and that gap is the point of the tool. Disabled rules never
+count toward either figure.
+
+## Sentinel data-source coverage (detection engineer)
+
+> **Prompt:** "What is our Sentinel workspace actually ingesting?"
+
+The `data-source-coverage` skill calls `list_data_sources` to report which
+tables are ingesting (by volume, last 30 days), grouped into firewall,
+dns_web, office, identity, incident, and custom families, then cross-checks
+with `get_detection_coverage` — ingesting data with no analytics rules is
+collection, not detection.
 
 ## Cross-platform incident triage (SOC analyst / threat hunter)
 
