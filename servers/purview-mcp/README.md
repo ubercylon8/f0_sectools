@@ -22,6 +22,15 @@ API** (portal-only) — see the Defender-for-Cloud roadmap item for the
 API-accessible compliance alternative. Deep per-event DLP forensics (O365
 Management Activity API) is also out of scope.
 
+**Faster alternative for M365 audit search:** `search_audit_log` is
+asynchronous and can take 5–15 minutes on a large tenant. If a Sentinel
+workspace is configured, prefer `f0-sentinel`'s `search_office_activity` for
+SharePoint / OneDrive / Exchange / Teams file and mail activity instead — it
+queries the same `OfficeActivity` data through Log Analytics and returns in
+under a second. Fall back to `search_audit_log` when there is no Sentinel
+workspace, or for audit records that predate the workspace's Log Analytics
+retention.
+
 Findings-schema output, core redaction at the boundary, graceful
 permission/licensing degradation — same contract as every f0_sectools server.
 Full parameter details:
