@@ -11,7 +11,7 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.schema.findings import Finding
 from mcp.server import MCPServer
 
@@ -23,7 +23,7 @@ mcp = MCPServer("f0-purview")
 
 
 def _render(findings: list[Finding]) -> list[dict[str, Any]]:
-    return [redact_obj(f.model_dump()) for f in findings]
+    return [redact_finding(f).model_dump() for f in findings]
 
 
 def _client() -> GraphClient:
