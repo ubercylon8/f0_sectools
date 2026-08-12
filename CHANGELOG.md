@@ -6,8 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
+_Nothing yet._
 
+## [0.3.0] — 2026-08-12
+
+### Added
 - **`sentinel-mcp` — ninth server** (Microsoft Sentinel, SIEM pillar).
   Read-only: KQL telemetry over the Log Analytics workspace (guided
   `hunt_firewall` and `hunt_dns_web` plus a custom `run_kql` escape hatch),
@@ -19,9 +22,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Two-way routing docstrings point operators at the right server: Sentinel vs.
   Defender for incidents and for KQL (different table universes), Sentinel vs.
   Purview for M365 audit.
+- **Umbrella cloud firewall reachable as `hunt_firewall(surface="cloud")`.**
+  `Cisco_Umbrella_firewall_CL` is not a duplicate of the CEF perimeter table:
+  those are on-prem appliances seeing traffic that crosses the office network,
+  this is the cloud-delivered firewall seeing roaming clients that never touch
+  it. On the validation workspace the perimeter carried a named user on 0.14%
+  of 108M rows/7d and the cloud firewall on 100% of 10.6M — ten times smaller
+  and fully attributed, so it answers "which user opened this connection",
+  which the perimeter cannot. Aggregates by identity when called bare.
+- **Umbrella identities are searchable and readable.** `hunt_dns_web`'s
+  `indicator` now matches the identity and address columns, not just the
+  domain, and every row carries `identity_host` (the machine) and
+  `identity_user` (the AD user) as separate fields. Previously the identity was
+  returned as a JSON array inside one evidence value, so "who resolved this"
+  needed a parse the caller was unlikely to make and "which machine" looked
+  unanswerable. `validate_indicator` accepts a UPN accordingly — one extra
+  character (`@`), still no quote, backslash or whitespace.
+- **Local eval dashboard** (`evals/`) — a live view over the scorecard while a
+  run is in progress: per-server and per-model matrix, per-cell drill-down to
+  the failing task, elapsed time and a column-weighted ETA, and a roster-aware
+  trend across runs. Local-only, no external assets.
+- **Detection-coverage pillar in the generated CISO report**, so the report
+  matches the risk-rollup skill it is meant to mirror; the per-rule inventory
+  goes to the detection-engineer persona, where the detail belongs.
 
 ### Changed
-
 - **Hunt-result columns whose names hint at a secret are now redacted too.**
   `redact_finding`'s evidence-key pass (see Fixed, below) applies to *every*
   evidence key, including the raw column names a hunt tool like Sentinel's
@@ -35,9 +60,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   anything containing "auth". `TokenIssuerType` is a genuinely useful sign-in
   triage column; expect it (and any column with a secret-shaped name) to come
   back as `«redacted»` rather than its real value.
+- **Migrated to the MCP Python SDK 2.0** across all servers (`FastMCP` →
+  `MCPServer`).
+- **Credential files are located by search, not by the working directory.**
+  Every server used a bare relative `load_dotenv(".env.<platform>")`, which
+  resolves against whatever directory the MCP client happened to start in — so
+  launching a runtime from a subdirectory of the checkout started all nine
+  servers with no credentials and an error that pointed at the credentials
+  rather than at the launch context. `core/auth/env.py` now searches
+  `$F0_SECTOOLS_ENV_DIR`, then the working directory and its parents, then the
+  installed package's checkout. **Only `<PLATFORM>_*` variables are injected**:
+  Critical Rule 7 is per-platform isolation, and a file loaded wholesale could
+  also set process-wide values such as `HTTPS_PROXY`, which httpx honours on
+  calls carrying a live token. Anything else in a `.env.<platform>` file is now
+  ignored — export it in the environment instead.
+- **The Sentinel incident queue returns open work by default.**
+  `list_sentinel_incidents` defaulted to `status="any"`, so the tool described
+  as "the SOC incident queue" returned closed incidents as current work — on
+  the validation tenant, 23 Closed against 2 New when exactly 2 were open. The
+  default is now `status="open"`, expressed as an exclusion (`!~ "Closed"`) so
+  a status Sentinel adds later counts as open work rather than disappearing.
+  `status="any"` restores the previous behaviour.
+- **`hunt_firewall` takes `surface` as its first argument.** MCP clients pass
+  arguments by name and are unaffected; anything calling
+  `f0_sentinel_mcp.tools.hunt_firewall` positionally must be updated.
 
 ### Fixed
-
 - **`run_kql`'s control-command guard classifies every line at face value**,
   with no verbatim-string exemption. The guard already rejected a dot-command
   on any line, not just the first, but an exemption added to stop that check
@@ -61,6 +109,47 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keys of a flat evidence entry; `redact_finding`'s extra evidence-key pass
   blanks a value sitting under a secret-hinting key name (e.g.
   `client_secret`), which previously only the generated-report path did.
+- **No exception leaves a tool unredacted or without a finding.** Servers
+  mapped the errors they expected; everything else — a transport failure, an
+  unmapped status, a bug in the mapping code — propagated past `_render` and
+  reached the client as a raw exception string, breaking Critical Rule 3
+  (redaction covers error paths) and Rule 4 (every tool returns the findings
+  schema) on all nine servers and all 58 tools. `core/redaction/boundary.py`'s
+  `guarded_tool` now wraps every registered tool, turning an unclaimed
+  exception into one redacted posture finding whose message is truncated to
+  300 characters. Cancellation still propagates.
+- **A gated write that executed but failed to audit no longer reports as a
+  failure.** The platform call necessarily runs before the audit record can
+  describe it; if that record throws, the guard above would have rendered
+  "temporarily unavailable" — the opposite of what happened. It is now a
+  high-severity `action` finding stating the action took effect and must not be
+  retried, which matters because chat-confirm tokens are deliberately not
+  single-use.
+- **Every Sentinel tool now discloses truncation, and none over-reports it.**
+  Three of seven cut results silently (25 of 55 deduped incidents dropped with
+  no note); the four that did disclose inferred it from `len(rows) >= limit`,
+  which cannot tell an exactly-full page from a truncated one. Every
+  row-returning query — including the aggregate paths — fetches one spare row
+  and reports what it observed.
+- **`hunt_dns_web` on the dns surface can be searched by IP.** Its help text
+  advertised "a domain, URL fragment, or IP", but only `Domain_s` was matched,
+  so an IP indicator validated and then matched nothing — answering "no
+  activity" to a question that was never asked.
+- **Intune stale-device fixtures are relative**, so the test stops rotting as
+  wall-clock time passes.
+- **ProjectAchilles no longer drops `interval` in silence** on the snapshot
+  path.
+- **Defender tool descriptions lead with what the tool does**, not how it
+  builds its KQL — a routing fix for small models, not cosmetics.
+- Numerous eval-harness fixes: a 60s timeout reported itself as an unexplained
+  endpoint error; a completed cell was hidden after a narrowed re-run; a suite
+  the model never saw could be scored.
+
+### Security
+- **Every GitHub Action is pinned to a commit SHA**, and TruffleHog,
+  dependency-review and zizmor were added to CI.
+- **Dependency overrides clear the `cryptography` and Pygments advisories**
+  that LimaCharlie's pins held back, capped below their next major.
 
 ## [0.2.1] — 2026-07-25
 
@@ -324,7 +413,8 @@ Initial public release.
   a single-use human confirmation token, and audited.
 - Credentials never logged, never returned to the model, never leave the host.
 
-[Unreleased]: https://github.com/ubercylon8/f0_sectools/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/ubercylon8/f0_sectools/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ubercylon8/f0_sectools/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/ubercylon8/f0_sectools/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ubercylon8/f0_sectools/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ubercylon8/f0_sectools/releases/tag/v0.1.0
