@@ -945,6 +945,60 @@ async def test_run_kql_dot_followed_by_non_letter_is_never_a_control_command(fak
         assert any(f.finding_type.value == "hunt_result" for f in out)
 
 
+async def test_run_kql_appending_a_fence_to_a_command_does_not_evade_the_guard(fake):
+    # Security regression caught by review: the first version of the ```
+    # exemption skipped a line WHOLESALE whenever it merely contained a
+    # fence ("if '```' in line: continue"), so appending a stray ``` to a
+    # control command exempted the whole line -- worse than pre-fix, where
+    # the plain startswith(".") check on the whole query would have caught
+    # ".drop table X ```" (a single-line query) outright. The guard must
+    # classify the text OUTSIDE any provably-closed block, never skip a line
+    # just because a fence appears on it somewhere.
+    client = fake(rows={})
+    for bad in (
+        ".drop table X ```",
+        "print 1\n.drop table X ```",
+        "print 1\n.drop table X ```y```",
+    ):
+        out = await tools.run_kql(client, bad)
+        assert len(out) == 1 and out[0].finding_type.value == "posture", bad
+    assert client.queries == []
+
+
+async def test_run_kql_unclosed_verbatim_block_disables_the_exemption(fake):
+    # A block that opens but is never closed by the end of the query has an
+    # odd total fence count -- we cannot prove the backend would treat the
+    # remainder as inert string content, so the exemption is disabled for
+    # the WHOLE query (strictness over cleverness) and ".drop table X" on
+    # the following line is classified at face value, same as if there were
+    # no ``` handling at all.
+    client = fake(rows={})
+    out = await tools.run_kql(client, "``` \n.drop table X")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert client.queries == []
+
+
+async def test_run_kql_balanced_inline_block_still_blocks_trailing_command(fake):
+    # A block that opens and closes entirely on one line (fence count on
+    # that line is even) is balanced, so the exemption stays active -- but
+    # the command on the NEXT line is still outside any block and must
+    # still be classified and rejected.
+    client = fake(rows={})
+    out = await tools.run_kql(client, "```x``` \n.drop table X")
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert client.queries == []
+
+
+async def test_run_kql_let_statement_before_query_still_dispatches(fake):
+    # A `let` statement is semicolon-terminated, ordinary legal KQL -- must
+    # not be affected by the control-command guard at all.
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    query = "let x = 1;\nHeartbeat | take x"
+    out = await tools.run_kql(client, query)
+    assert client.queries == [query]
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
 # --- Critical Rule: every tool returns a finding, never an exception, on a
 # platform error. `require_table` (-> `probed_tables` -> `client.query`) is a
 # real transport call and can raise `GraphError` exactly like any other query

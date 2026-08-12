@@ -843,21 +843,41 @@ async def run_kql(
     if not query:
         return [_bad_arg("kql", kql or "", "a KQL query, e.g. 'Heartbeat | take 10'")]
     # Kusto verbatim string literals are delimited by ``` ``` ```` and can span
-    # multiple lines (e.g. an embedded multi-line sample log). A simple
-    # open/close toggle, not a full lexer: a line that changes the toggle (an
-    # odd number of ``` markers on it) or that opens-and-closes on the same
-    # line is never itself classified, and no line is classified while the
-    # toggle is open. A control command placed AFTER a block has closed is
-    # still classified normally -- the toggle only exempts genuine interior
-    # content, it cannot be used to smuggle a command past a closed block.
+    # multiple lines (e.g. an embedded multi-line sample log). A line that
+    # merely CONTAINS a fence must never be skipped wholesale -- an earlier
+    # version of this guard did `if "```" in line: continue`, which let
+    # `.drop table X ``` ` (append a fence to smuggle a command past the
+    # check) dispatch unrejected. Instead, split every line on the fence and
+    # classify only the text OUTSIDE any open block; text inside a block is
+    # dropped, never the whole line.
+    #
+    # This exemption only activates when the fence count across the WHOLE
+    # query is even -- i.e. every opened block is provably closed somewhere
+    # in the query. If it is odd (a block opened but never closed by the end
+    # of the query), we cannot know whether the backend will actually treat
+    # the remainder as inert string content, so the exemption is disabled
+    # entirely for the whole query and every line is classified at face
+    # value, fences included -- strictness over cleverness. This also means
+    # a control command placed on a line AFTER a block has genuinely closed
+    # is still classified and still rejected; the exemption only ever
+    # removes text that is provably inside a matched pair of fences.
+    exempt_verbatim_strings = query.count("```") % 2 == 0
     in_string_block = False
     for line in query.splitlines():
-        if line.count("```") % 2 == 1:
-            in_string_block = not in_string_block
-            continue
-        if in_string_block or "```" in line:
-            continue
-        reason = _line_control_command_reason(line)
+        if exempt_verbatim_strings:
+            outside_parts: list[str] = []
+            state = in_string_block
+            segments = line.split("```")
+            for i, seg in enumerate(segments):
+                if not state:
+                    outside_parts.append(seg)
+                if i < len(segments) - 1:
+                    state = not state
+            in_string_block = state
+            line_text = "".join(outside_parts)
+        else:
+            line_text = line
+        reason = _line_control_command_reason(line_text)
         if reason == "nonprintable":
             return [_nonprintable_prefix_finding()]
         if reason == "control":
