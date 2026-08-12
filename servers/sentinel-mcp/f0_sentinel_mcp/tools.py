@@ -753,6 +753,16 @@ async def get_detection_coverage(client: Any) -> list[Finding]:
 # ultimately decides what a raw string does, not us -- reject before dispatch,
 # don't rely on the endpoint being query-only today.
 #
+# A line only counts as a control command when the dot is immediately
+# followed by a letter (.drop, .show, .set-or-append, ...) -- every real
+# Kusto control command has that shape. A bare "." check over-rejected: KQL
+# is whitespace-insensitive across an unterminated expression, so a decimal
+# literal opening a continuation line (`| where Ratio >` then `    .5`) is
+# legal KQL, not a command. Lines inside an open triple-backtick verbatim
+# string literal (```...```) are skipped entirely by the caller below, so an
+# embedded sample log line that happens to start with "." (or contains one)
+# is not mistaken for a command either -- see the loop in run_kql.
+#
 # Deliberately NOT rejecting ";": the same-line form
 # (`Heartbeat | take 1; .drop table X`) stays open. Rejecting ";" outright
 # would break legitimate KQL -- `let` statements are semicolon-separated --
@@ -773,20 +783,25 @@ def _line_control_command_reason(line: str) -> Literal["ok", "nonprintable", "co
     line that doesn't open with an ordinary printable character as unsafe by
     construction -- no legitimate KQL line starts with one.
 
-    "control": `line`, once stripped, opens with a Kusto control-command dot
-    (`.create`, `.drop`, `.set-or-append`, `.ingest`, ...).
+    "control": `line`, once stripped, opens with a dot immediately followed
+    by a letter (`.drop`, `.show`, `.set-or-append`, `.ingest`, ...) -- the
+    only shape a real Kusto control command takes. A dot followed by
+    anything else (a digit, another dot, end of line, ...) is not a command
+    -- most commonly a decimal literal, e.g. the ".5" in a continuation line
+    after `| where Ratio >`.
 
     "ok": neither -- includes blank lines.
 
-    The caller applies this per line (not just to the whole query) so the
-    hardening covers a dot-command hidden on any line, not only the first.
+    The caller applies this per line (not just to the whole query, and not
+    to lines inside a triple-backtick verbatim string) so the hardening
+    covers a dot-command hidden on any line, not only the first.
     """
     stripped = line.strip()
     if not stripped:
         return "ok"
     if not stripped[0].isprintable():
         return "nonprintable"
-    if stripped.startswith(_CONTROL_PREFIX):
+    if stripped[0] == _CONTROL_PREFIX and len(stripped) > 1 and stripped[1].isalpha():
         return "control"
     return "ok"
 
@@ -827,7 +842,21 @@ async def run_kql(
     query = (kql or "").strip()
     if not query:
         return [_bad_arg("kql", kql or "", "a KQL query, e.g. 'Heartbeat | take 10'")]
+    # Kusto verbatim string literals are delimited by ``` ``` ```` and can span
+    # multiple lines (e.g. an embedded multi-line sample log). A simple
+    # open/close toggle, not a full lexer: a line that changes the toggle (an
+    # odd number of ``` markers on it) or that opens-and-closes on the same
+    # line is never itself classified, and no line is classified while the
+    # toggle is open. A control command placed AFTER a block has closed is
+    # still classified normally -- the toggle only exempts genuine interior
+    # content, it cannot be used to smuggle a command past a closed block.
+    in_string_block = False
     for line in query.splitlines():
+        if line.count("```") % 2 == 1:
+            in_string_block = not in_string_block
+            continue
+        if in_string_block or "```" in line:
+            continue
         reason = _line_control_command_reason(line)
         if reason == "nonprintable":
             return [_nonprintable_prefix_finding()]

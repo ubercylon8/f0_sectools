@@ -896,6 +896,55 @@ async def test_run_kql_query_with_comment_line_still_dispatches(fake):
     assert any(f.finding_type.value == "hunt_result" for f in out)
 
 
+async def test_run_kql_decimal_literal_on_a_continuation_line_still_dispatches(fake):
+    # Review follow-up on #99: KQL is whitespace-insensitive across an
+    # unterminated expression, so a decimal literal opening a continuation
+    # line ("| where Ratio >" then "    .5") is legal KQL -- a bare "starts
+    # with dot" check over-rejects it. A dot only counts as a control-command
+    # prefix when immediately followed by a letter.
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    query = "Heartbeat\n| where Ratio >\n    .5\n| take 5"
+    out = await tools.run_kql(client, query)
+    assert client.queries == [query]
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_run_kql_dot_line_inside_verbatim_string_still_dispatches(fake):
+    # Review follow-up on #99: a Kusto verbatim string literal (```...```)
+    # can span multiple lines, e.g. an embedded multi-line sample log whose
+    # body happens to start with ".". Lines inside an open ``` block are not
+    # classified at all.
+    client = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+    query = "print s = ```\n.example log line\n```\n| take 5"
+    out = await tools.run_kql(client, query)
+    assert client.queries == [query]
+    assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
+async def test_run_kql_control_command_after_a_closed_verbatim_string_still_blocks(fake):
+    # The ``` toggle exempts genuine interior string content -- it must not
+    # become an evasion route: a control command placed on a line AFTER a
+    # verbatim-string block has already closed is still a real control
+    # command and must still be rejected.
+    client = fake(rows={})
+    query = "print s = ```\nx\n```\n.drop table X"
+    out = await tools.run_kql(client, query)
+    assert len(out) == 1 and out[0].finding_type.value == "posture"
+    assert client.queries == []
+
+
+async def test_run_kql_dot_followed_by_non_letter_is_never_a_control_command(fake):
+    # Narrower unit-level check on the classifier's boundary: a dot at the
+    # start of a line is only a control-command prefix when followed by a
+    # letter. A trailing lone "." (nothing after it) and "." followed by
+    # another "." must both still dispatch.
+    for query in ("Heartbeat\n.\n| take 5", "Heartbeat\n..\n| take 5"):
+        c = fake(rows={"Heartbeat": [{"Computer": "srv-1"}]})
+        out = await tools.run_kql(c, query)
+        assert c.queries == [query], query
+        assert any(f.finding_type.value == "hunt_result" for f in out)
+
+
 # --- Critical Rule: every tool returns a finding, never an exception, on a
 # platform error. `require_table` (-> `probed_tables` -> `client.query`) is a
 # real transport call and can raise `GraphError` exactly like any other query
