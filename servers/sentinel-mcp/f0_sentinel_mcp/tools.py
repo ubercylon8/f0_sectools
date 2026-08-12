@@ -179,6 +179,33 @@ _INDICATOR_HELP = {
 }
 
 
+def _expand_identities(row: dict[str, Any], spec: n.Surface) -> dict[str, Any]:
+    """Replace a surface's raw identity array with flat host/user evidence keys.
+
+    Rewritten in place of the original column so field grouping survives, and
+    the classifier column is consumed rather than shown -- it exists to sort the
+    identities, and echoing it back would just be another array for the reader
+    to parse.
+    """
+    if not spec.identity_field or spec.identity_field not in row:
+        return row
+    host, user, other = n.split_identities(
+        row.get(spec.identity_field), row.get("Identity_Types_s", "")
+    )
+    out: dict[str, Any] = {}
+    for key, value in row.items():
+        if key == spec.identity_field:
+            if host:
+                out["identity_host"] = host
+            if user:
+                out["identity_user"] = user
+            if other:
+                out["identity_other"] = other
+        elif key != "Identity_Types_s":
+            out[key] = value
+    return out
+
+
 def _fetch_bound(limit: int) -> int:
     """Ask the platform for one row more than we intend to show.
 
@@ -305,6 +332,7 @@ async def _run_surface(
 
     title_key = spec.indicator_fields[0] if indicator else spec.action_field
     shown, has_more = _split_page(rows, limit)
+    shown = [_expand_identities(r, spec) for r in shown]
     findings = _rows_to_findings(shown, title_key, limit)
     return findings + _more(
         len(findings), has_more, "Narrow with an indicator or a shorter hours window."

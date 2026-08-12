@@ -58,9 +58,11 @@ VPN sessions and failures. `indicator` is a domain, URL fragment, IP
 address, or an identity — Umbrella names the AD user or roaming-client
 machine behind each request, so pass a hostname or username to see what it
 did, or pass an IP or domain to see who was behind it. Every returned row
-carries that identity, so you do not need another platform to answer "who
-was this?". Without an indicator this returns an aggregate, not individual
-events. For perimeter firewall connections by IP/port use hunt_firewall.
+carries `identity_host` (the machine) and `identity_user` (the AD user) as
+separate fields, so you do not need another platform — or any parsing — to
+answer "who was this?" or "which machine was that?". Without an indicator
+this returns an aggregate, not individual events. For perimeter firewall
+connections by IP/port use hunt_firewall.
 
 | Parameter | Type | Default |
 |---|---|---|
