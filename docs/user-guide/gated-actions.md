@@ -74,7 +74,8 @@ actions (it is deliberately not wired to any). Details and the honest caveat:
 ## 5. Read the audit trail
 
 Every executed action appends a line to `~/.f0sectools/gating/audit.log`
-(override the directory with `F0_GATING_DIR` — servers and the CLI must agree
+(override the directory by **exporting** `F0_GATING_DIR` in the environment,
+never in a `.env.<platform>` file — servers and the CLI must agree
 on it):
 
 ```bash

@@ -1,5 +1,6 @@
 """Credential files must be found by where the checkout is, not by how the client was launched."""
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -135,3 +136,29 @@ def test_only_the_platforms_own_variables_are_loaded(tmp_path, monkeypatch):
     assert os.environ[f"{FAKE.upper()}_TOKEN"] == "mine"
     assert "OTHERPLAT_CLIENT_SECRET" not in os.environ
     assert "HTTPS_PROXY" not in os.environ
+
+
+def test_env_examples_only_document_prefixed_variables():
+    """A guard for the claim I got wrong by hand.
+
+    `load_platform_env` injects only `<PLATFORM>_*` keys, so an example file
+    that documents anything else is telling operators to set something that is
+    silently ignored. Commented assignments count: they are copy-paste
+    instructions. Deliberately shared knobs like F0_GATING_DIR must be real
+    exported environment variables — the confirm CLI is a separate process and
+    never reads these files, and letting a discoverable file relocate the audit
+    trail would undo the isolation this loader exists to provide.
+    """
+    repo = Path(__file__).resolve().parents[2]
+    assign = re.compile(r"^#?\s*([A-Z][A-Z0-9_]*)\s*=")
+    offenders = []
+    for example in sorted(repo.glob("**/.env.*.example")):
+        if ".venv" in example.parts:
+            continue
+        platform = example.name.removeprefix(".env.").removesuffix(".example")
+        prefix = f"{platform.upper()}_"
+        for num, line in enumerate(example.read_text().splitlines(), 1):
+            m = assign.match(line)
+            if m and not m.group(1).startswith(prefix):
+                offenders.append(f"{example.relative_to(repo)}:{num} {m.group(1)}")
+    assert offenders == [], f"documented but never loaded: {offenders}"
