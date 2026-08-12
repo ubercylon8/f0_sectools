@@ -593,7 +593,7 @@ requires-dist = [
 
 [[package]]
 name = "f0-sectools"
-version = "0.2.1"
+version = "0.3.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
@@ -622,7 +622,7 @@ dev = [
 
 [[package]]
 name = "f0-sectools-core"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "core" }
 dependencies = [
     { name = "httpx" },
