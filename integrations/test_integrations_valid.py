@@ -3,7 +3,8 @@
 The uv workspace is the single source of truth for which servers exist
 (every ``servers/*/pyproject.toml`` declares one ``[project.scripts]`` entry).
 These tests fail CI whenever a runtime template — pi's mcp.json, the Hermes
-example config, or the Hermes distribution config.yaml — is missing a server,
+example config, the Hermes distribution config.yaml, or the generic
+examples/mcp/mcp.json — is missing a server,
 references one that no longer exists, or leaks a real local path instead of
 the placeholder. Adding server #8 without wiring it into every runtime becomes
 a red build, not silent drift.
@@ -96,6 +97,45 @@ def test_every_server_wired_into_distribution():
         assert "${F0_SECTOOLS_DIR}" in s["args"], s
 
 
+def test_every_server_wired_into_generic_mcp_example():
+    cfg = json.loads((ROOT / "examples/mcp/mcp.json").read_text(encoding="utf-8"))
+    assert _wired(cfg["mcpServers"]) == _server_scripts(), (
+        "examples/mcp/mcp.json is out of sync with servers/* — "
+        "add/remove the server entry there (recipe step 11)"
+    )
+
+
+def test_generic_mcp_example_warns_about_the_gated_write_server():
+    """The generic MCP schema has no `enabled` field, so the README is the only guard.
+
+    Every other template ships `f0-pa-actions` DISABLED — opencode via
+    `"enabled": false`, Hermes via its own disabled-by-default entry. The generic
+    MCP config format has no equivalent, so this template ships the gated-write
+    server reachable as soon as `.env.projectachilles` is populated, and a written
+    caveat is the entire mitigation. If someone deletes that paragraph the template
+    silently arms a write-capable server for any client that copies it.
+
+    Conditional on purpose: remove `f0-pa-actions` from the JSON and the caveat is
+    no longer required.
+    """
+    cfg = json.loads((ROOT / "examples/mcp/mcp.json").read_text(encoding="utf-8"))
+    if "f0-pa-actions" not in cfg["mcpServers"]:
+        return
+    readme = (ROOT / "examples/mcp/README.md").read_text(encoding="utf-8")
+    # Scoped to the paragraph, not the file: a whole-file substring search would
+    # still pass if this caveat were deleted while "gated-write" survived in some
+    # unrelated paragraph, which is exactly the deletion this test exists to catch.
+    paragraphs = [p for p in readme.split("\n\n") if "f0-pa-actions" in p]
+    assert paragraphs, (
+        "examples/mcp/mcp.json ships the gated-write server but examples/mcp/README.md "
+        "never names it — the caveat is this template's only safeguard"
+    )
+    assert any("gated-write" in p.lower() for p in paragraphs), (
+        "examples/mcp/README.md names f0-pa-actions but no longer explains, in the same "
+        "paragraph, that it is gated-write"
+    )
+
+
 def test_templates_use_placeholder_paths_only():
     # Files that should use ${F0_SECTOOLS_DIR}
     placeholder_required_files = {
@@ -103,7 +143,7 @@ def test_templates_use_placeholder_paths_only():
         "integrations/hermes/distribution/config.yaml",
     }
     # Files that should use /ABSOLUTE/PATH/TO/sec-tools
-    legacy_placeholder_files = {"integrations/pi/mcp.json"}
+    legacy_placeholder_files = {"integrations/pi/mcp.json", "examples/mcp/mcp.json"}
     # Files that should not leak real paths but don't require a specific placeholder
     no_real_paths_files = {
         "integrations/hermes/distribution/distribution.yaml",
