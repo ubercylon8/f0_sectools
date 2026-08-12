@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from f0_defender_mcp import tools
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.renderers import Persona, render_findings
 
 load_dotenv(".env.defender")
@@ -31,7 +31,7 @@ SMOKE_KQL = "DeviceInfo | take 1"
 def _show(label: str, findings, persona: str | None = None) -> None:
     print(f"\n=== {label}: {len(findings)} finding(s) ===")
     for f in findings:
-        redacted = redact_obj(f.model_dump())
+        redacted = redact_finding(f).model_dump()
         print(json.dumps(redacted, indent=2, default=str))
     if persona is not None:
         print(f"\n--- {persona} view ---")

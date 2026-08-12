@@ -17,7 +17,7 @@ import json
 
 from dotenv import load_dotenv
 from f0_sectools_core.auth.config import TenableConfig
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding
 from f0_sectools_core.renderers import Persona, render_findings
 from f0_tenable_mcp import tools
 from f0_tenable_mcp.client import TenableClient
@@ -28,7 +28,7 @@ load_dotenv(".env.tenable")
 def _show(label: str, findings, persona: str | None = None) -> None:
     print(f"\n=== {label}: {len(findings)} finding(s) ===")
     for f in findings[:8]:
-        print(json.dumps(redact_obj(f.model_dump()), indent=2, default=str))
+        print(json.dumps(redact_finding(f).model_dump(), indent=2, default=str))
     if len(findings) > 8:
         print(f"... ({len(findings) - 8} more)")
     if persona is not None:

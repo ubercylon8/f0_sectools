@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding
 from f0_tenable_mcp import tools
 
 
@@ -43,7 +43,7 @@ class FakeTenable:
 async def main() -> None:
     tio = FakeTenable()
     findings = await tools.list_top_vulnerabilities(tio, severity_min="high", limit=3)
-    payload = [redact_obj(f.model_dump()) for f in findings]
+    payload = [redact_finding(f).model_dump() for f in findings]
     print(json.dumps(payload, indent=2, default=str))
 
 

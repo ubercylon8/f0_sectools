@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from f0_entra_mcp import tools
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding
 
 load_dotenv(".env.entra")
 
@@ -26,7 +26,7 @@ load_dotenv(".env.entra")
 def _show(label: str, findings) -> None:
     print(f"\n=== {label}: {len(findings)} finding(s) ===")
     for f in findings[:10]:  # cap console output
-        print(json.dumps(redact_obj(f.model_dump()), indent=2, default=str))
+        print(json.dumps(redact_finding(f).model_dump(), indent=2, default=str))
     if len(findings) > 10:
         print(f"... ({len(findings) - 10} more)")
 

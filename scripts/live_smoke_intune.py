@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from f0_intune_mcp import tools
 from f0_sectools_core.auth.config import PlatformConfig
 from f0_sectools_core.auth.graph import GraphClient
-from f0_sectools_core.redaction.redact import redact_obj
+from f0_sectools_core.redaction.redact import redact_finding
 
 load_dotenv(".env.intune")
 
@@ -27,7 +27,7 @@ load_dotenv(".env.intune")
 def _show(label: str, findings) -> None:
     print(f"\n=== {label}: {len(findings)} finding(s) ===")
     for f in findings[:8]:
-        print(json.dumps(redact_obj(f.model_dump()), indent=2, default=str))
+        print(json.dumps(redact_finding(f).model_dump(), indent=2, default=str))
     if len(findings) > 8:
         print(f"... ({len(findings) - 8} more)")
 
