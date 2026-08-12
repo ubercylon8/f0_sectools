@@ -80,9 +80,13 @@ async def hunt_dns_web(
     Choose surface by what you are looking for: dns — a domain was resolved or
     blocked (C2, newly-registered domains, blocked categories); web — a URL was
     fetched, a file downloaded, or a proxy verdict applied; vpn — remote-access
-    VPN sessions and failures. `indicator` is a domain, URL fragment or IP.
-    Without an indicator this returns an aggregate, not individual events. For
-    perimeter firewall connections by IP/port use hunt_firewall."""
+    VPN sessions and failures. `indicator` is a domain, URL fragment, IP
+    address, or an identity — Umbrella names the AD user or roaming-client
+    machine behind each request, so pass a hostname or username to see what it
+    did, or pass an IP or domain to see who was behind it. Every returned row
+    carries that identity, so you do not need another platform to answer "who
+    was this?". Without an indicator this returns an aggregate, not individual
+    events. For perimeter firewall connections by IP/port use hunt_firewall."""
     async with _client() as c:
         return _render(
             await tools.hunt_dns_web(c, surface, action, indicator, hours_back, limit)

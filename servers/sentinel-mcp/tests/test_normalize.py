@@ -130,3 +130,45 @@ def test_validate_indicator_empty_string_passes_for_every_kind():
     # implicit.
     assert n.validate_indicator("", "net") is True
     assert n.validate_indicator("", "domain") is True
+
+
+# --- Identity/IP search on the Umbrella surfaces -------------------------
+# Live-verified 2026-08-12 on the validation workspace: Identities_s is 100%
+# populated on Cisco_Umbrella_dns_CL (1,245 distinct in 24h; identity types are
+# "AD Users" and "Anyconnect Roaming Client"), and `has` matched a token drawn
+# from the same row on 359,304 of 359,304 rows. The "who" was always in the row
+# the tool already returned -- it just could not be searched for.
+
+def test_dns_indicator_searches_the_ip_columns():
+    """`_INDICATOR_HELP` promised IP matching for dns; only Domain_s was searched."""
+    spec = n.SURFACE_SPECS["dns"]
+    clause = n.indicator_clause(spec, "192.168.1.29")
+    assert "InternalIp_s has" in clause
+    assert "ExternalIp_s has" in clause
+
+
+def test_dns_indicator_searches_identity():
+    clause = n.indicator_clause(n.SURFACE_SPECS["dns"], "lt-tpl-l114")
+    assert "Identities_s has" in clause
+
+
+def test_web_indicator_searches_identity():
+    clause = n.indicator_clause(n.SURFACE_SPECS["web"], "lt-tpl-l114")
+    assert "Identities_s has" in clause
+
+
+def test_a_upn_is_a_valid_indicator():
+    """Umbrella identities are AD users, so an indicator must survive an '@'."""
+    assert n.validate_indicator("rherrera@example.gob.do", "domain") is True
+
+
+def test_upn_widening_still_rejects_a_kql_break_out():
+    """The charset is the injection boundary; widening it must not open a quote."""
+    for bad in ['a" or 1==1 //', "a\\b", "a'b", "a b"]:
+        assert n.validate_indicator(bad, "domain") is False
+
+
+def test_identity_is_projected_on_the_umbrella_surfaces():
+    """Returning the answer matters as much as being able to search for it."""
+    for surface in ("dns", "web"):
+        assert "Identities_s" in n.SURFACE_SPECS[surface].project

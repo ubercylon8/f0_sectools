@@ -81,7 +81,12 @@ SURFACE_SPECS: dict[str, Surface] = {
         table="Cisco_Umbrella_dns_CL",
         action_field="Action_s",
         action_map={"allowed": ("Allowed",), "blocked": ("Blocked",)},
-        indicator_fields=("Domain_s",),
+        # Live fill rates (2026-08-12, 24h): Identities_s 100% / 1,245 distinct,
+        # identity types "AD Users" + "Anyconnect Roaming Client". The "who"
+        # behind a DNS query is in the row; these fields make it searchable, so
+        # "which host resolved X" and "what did host Y resolve" are one call
+        # each instead of a correlation hunt across other platforms.
+        indicator_fields=("Domain_s", "InternalIp_s", "ExternalIp_s", "Identities_s"),
         project=(
             "TimeGenerated", "Action_s", "Domain_s", "Categories_s",
             "InternalIp_s", "ExternalIp_s", "Identities_s", "QueryType_s",
@@ -92,7 +97,8 @@ SURFACE_SPECS: dict[str, Surface] = {
         table="Cisco_Umbrella_proxy_CL",
         action_field="Verdict_s",
         action_map={"allowed": ("ALLOWED",), "blocked": ("BLOCKED",)},
-        indicator_fields=("URL_s", "Destination_IP_s"),
+        # Identities_s 100% / 1,114 distinct; Host_Name_s 100% (24h sample).
+        indicator_fields=("URL_s", "Destination_IP_s", "Internal_IP_s", "Identities_s"),
         project=(
             "TimeGenerated", "Verdict_s", "URL_s", "Categories_s",
             "Internal_IP_s", "Identities_s", "File_Name_s", "SHA_SHA256_s",
@@ -106,7 +112,8 @@ SURFACE_SPECS: dict[str, Surface] = {
         # plus Disconnected=240 (a session end, not an accept/deny outcome --
         # deliberately left out of both buckets rather than guessed into one).
         action_map={"allowed": ("Connected",), "blocked": ("Failed",)},
-        indicator_fields=("User_ID_s", "Public_IP_s", "Assigned_IP_s"),
+        # Device_ID_s is 100% populated (281 distinct, matching User_ID_s).
+        indicator_fields=("User_ID_s", "Public_IP_s", "Assigned_IP_s", "Device_ID_s"),
         project=(
             "TimeGenerated", "Event_Type_s", "User_ID_s", "Public_IP_s",
             "Assigned_IP_s", "VPN_Profile_s", "OS_Version_s", "Failed_Reasons_s",
@@ -180,7 +187,10 @@ def validate_indicator(indicator: str, kind: str) -> bool:
         return True
     if kind == "net":
         return bool(IP_RE.fullmatch(indicator) or PORT_RE.fullmatch(indicator))
-    return bool(DOMAIN_RE.fullmatch(indicator))
+    # UPN_RE widens the charset by exactly one character, "@", so an Umbrella
+    # identity (an AD user) is a usable indicator. It stays inside the same
+    # injection boundary as DOMAIN_RE -- no quote, backslash or whitespace.
+    return bool(DOMAIN_RE.fullmatch(indicator) or UPN_RE.fullmatch(indicator))
 
 
 def indicator_clause(spec: Surface, indicator: str) -> str:

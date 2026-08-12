@@ -172,7 +172,8 @@ async def list_data_sources(client: Any, limit: int = 25) -> list[Finding]:
 _INDICATOR_HELP = {
     "net": "an IP address or a port number (this table carries no URLs or "
     "usernames — for domains and URLs use hunt_dns_web)",
-    "domain": "a domain, URL fragment, or IP",
+    "domain": "a domain, URL fragment, IP address, or an Umbrella identity "
+    "(the AD user or roaming-client machine name that made the request)",
 }
 
 
