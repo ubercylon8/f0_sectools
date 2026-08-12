@@ -197,10 +197,11 @@ def test_gather_map_has_all_four_personas():
     }
 
 
-def test_ciso_map_is_the_six_pillars():
+def test_ciso_map_is_the_seven_pillars():
     assert list(report_gather.GATHER_MAP["ciso"]) == [
         "config_hardening", "attack_validation", "vulnerability_exposure",
         "device_compliance", "data_risk", "endpoint_coverage",
+        "detection_coverage",
     ]
 
 
@@ -208,7 +209,7 @@ def test_detection_engineer_gathers_its_own_groups():
     groups = set(report_gather.GATHER_MAP["detection_engineer"])
     assert groups == {
         "alerts_mitre", "incidents", "detection_rules",
-        "endpoint_detections", "weak_techniques",
+        "endpoint_detections", "weak_techniques", "analytics_rules",
     }
     # it must NOT be the CISO pillar set
     assert "data_risk" not in groups
@@ -369,10 +370,11 @@ def test_findings_count_excludes_degradation_findings(monkeypatch):
     assert meta.findings_count == 1    # but only the real one is counted
 
 
-def test_ciso_provenance_still_six_platforms(monkeypatch):
-    # Guardrail for the golden CISO fixture: each of the six pillars has a
-    # distinct source, so platforms_queried must still resolve to 6.
-    sources = ["defender", "projectachilles", "tenable", "intune", "purview", "limacharlie"]
+def test_ciso_provenance_still_seven_platforms(monkeypatch):
+    # Guardrail for the golden CISO fixture: each of the seven pillars has a
+    # distinct source, so platforms_queried must resolve to 7.
+    sources = ["defender", "projectachilles", "tenable", "intune", "purview",
+               "limacharlie", "sentinel"]
     groups = list(report_gather.GATHER_MAP["ciso"])
 
     def make(src):
@@ -384,7 +386,7 @@ def test_ciso_provenance_still_six_platforms(monkeypatch):
     monkeypatch.setitem(report_gather.GATHER_MAP, "ciso",
                         dict(zip(groups, [make(s) for s in sources], strict=True)))
     _findings, meta = asyncio.run(report_gather.gather("ciso", 168))
-    assert len(meta.platforms_queried) == 6
+    assert len(meta.platforms_queried) == 7
 
 
 # ── FIX 4: _within_window scopes findings without a time-bounded tool ─────
@@ -480,3 +482,88 @@ def test_count_tile_state_escalates_to_exposure_on_critical(monkeypatch):
                         {"top_vulnerabilities": crit})
     _f, meta = asyncio.run(report_gather.gather("security-engineer", 168))
     assert meta.pillar_metrics[0].state == "exposure"
+
+
+# ── Sentinel detection-coverage pillar (7th CISO pillar) ──────────────────
+_SENTINEL_ENV = {
+    "SENTINEL_TENANT_ID": "t", "SENTINEL_CLIENT_ID": "c",
+    "SENTINEL_CLIENT_SECRET": "s", "SENTINEL_WORKSPACE_ID": "w",
+}
+
+
+def test_ciso_pillar_keeps_only_the_summary_finding(monkeypatch):
+    # get_detection_coverage returns a summary PLUS up to 25 per-rule findings.
+    # Every other CISO pillar is one headline number -- this one must trim to
+    # just the summary (the first element) so the rule inventory doesn't
+    # swamp the executive rollup.
+    from unittest.mock import AsyncMock, patch
+
+    for k, v in _SENTINEL_ENV.items():
+        monkeypatch.setenv(k, v)
+
+    summary = Finding(source="sentinel", finding_type=FindingType.posture,
+                      severity=Severity.info, title="5 Sentinel analytics rules")
+    rules = [Finding(source="sentinel", finding_type=FindingType.posture,
+                     severity=Severity.info, title=f"Rule: r{i}") for i in range(25)]
+
+    with patch("f0_sentinel_mcp.tools.get_detection_coverage",
+              AsyncMock(return_value=[summary, *rules])):
+        result = asyncio.run(report_gather._pillar_detection_coverage(168))
+
+    assert result == [summary]
+
+
+def test_ciso_pillar_defensive_on_empty_result(monkeypatch):
+    from unittest.mock import AsyncMock, patch
+
+    for k, v in _SENTINEL_ENV.items():
+        monkeypatch.setenv(k, v)
+
+    with patch("f0_sentinel_mcp.tools.get_detection_coverage", AsyncMock(return_value=[])):
+        result = asyncio.run(report_gather._pillar_detection_coverage(168))
+
+    assert result == []
+
+
+def test_detection_engineer_analytics_rules_keeps_the_full_result(monkeypatch):
+    # The detection-engineer report is exactly where the per-rule inventory
+    # belongs -- unlike the CISO pillar above, nothing should be trimmed.
+    from unittest.mock import AsyncMock, patch
+
+    for k, v in _SENTINEL_ENV.items():
+        monkeypatch.setenv(k, v)
+
+    summary = Finding(source="sentinel", finding_type=FindingType.posture,
+                      severity=Severity.info, title="5 Sentinel analytics rules")
+    rules = [Finding(source="sentinel", finding_type=FindingType.posture,
+                     severity=Severity.info, title=f"Rule: r{i}") for i in range(25)]
+
+    with patch("f0_sentinel_mcp.tools.get_detection_coverage",
+              AsyncMock(return_value=[summary, *rules])):
+        result = asyncio.run(report_gather._sentinel_analytics_rules(168))
+
+    assert result == [summary, *rules]
+    assert len(result) == 26
+
+
+def test_sentinel_detection_coverage_unconfigured_is_not_assessed(monkeypatch):
+    # Confirms (rather than assumes) that get_detection_coverage's own
+    # graceful-degradation finding for an unconfigured client matches
+    # sections.is_not_assessed, and that the gather pipeline renders it as a
+    # dark pillar with no crash -- no env vars, no network involved.
+    from f0_sectools_core.reports.sections import is_not_assessed
+    from f0_sentinel_mcp import tools as sentinel_tools
+
+    class _StubClient:
+        has_arm = False
+
+    async def unconfigured(window_hours):
+        return await sentinel_tools.get_detection_coverage(_StubClient())
+
+    monkeypatch.setitem(report_gather.GATHER_MAP, "ciso", {"detection_coverage": unconfigured})
+    findings, meta = asyncio.run(report_gather.gather("ciso", 168))
+
+    assert len(findings) == 1
+    assert is_not_assessed(findings[0])
+    assert meta.not_assessed == ["detection_coverage"]
+    assert meta.assessed == []

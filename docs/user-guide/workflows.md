@@ -100,8 +100,8 @@ generates.
 
 | Persona | Title | Gathers |
 |---|---|---|
-| `ciso` | Executive Risk Briefing | The report engine's six automated pillars (config hardening, attack validation, vulnerability exposure, device compliance, data risk, endpoint coverage — Sentinel detection coverage is not yet wired into report generation), as headline metric tiles + compact one-line top risks |
-| `detection-engineer` | Detection Coverage Report | Defender alerts and incidents, LimaCharlie D&R rules and endpoint detections, ProjectAchilles weak techniques |
+| `ciso` | Executive Risk Briefing | The report engine's seven automated pillars (config hardening, attack validation, vulnerability exposure, device compliance, data risk, endpoint coverage, Sentinel detection coverage), as headline metric tiles + compact one-line top risks |
+| `detection-engineer` | Detection Coverage Report | Defender alerts and incidents, LimaCharlie D&R rules and endpoint detections, ProjectAchilles weak techniques, Sentinel analytics-rule inventory |
 | `threat-hunter` | Threat Hunting Report | Incidents, MITRE-bearing alerts, endpoint detections, sensor coverage |
 | `security-engineer` | Security Hardening Report | Secure Score, Entra conditional-access / privileged-role / risky-user posture, Intune compliance and stale devices, Tenable exposure |
 

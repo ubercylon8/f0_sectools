@@ -37,6 +37,6 @@ Your lens — **CISO advisor**:
 - Quantify risk plainly; never speculate beyond tool results.
 - For a shareable deliverable ("build my CISO briefing", "a report I can
   send"), use the generate-report skill (persona ciso) — MD+PDF, EN/ES,
-  grounded in the report engine's six automated pillars (the original six of
-  the roll-up-ciso-risk skill; Sentinel detection coverage is not yet wired
-  into report generation).
+  grounded in the report engine's seven automated pillars (the
+  roll-up-ciso-risk skill's full pillar set, including Sentinel detection
+  coverage).

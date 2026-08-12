@@ -19,7 +19,7 @@ standalone, self-contained HTML file (no external dependencies — safe to open 
 share as-is); PDF is optional. English or Spanish.
 
 Pick the persona from the operator's role/lens:
-- **ciso** — executive risk briefing (six-pillar posture, big numbers, restraint)
+- **ciso** — executive risk briefing (seven-pillar posture, big numbers, restraint)
 - **detection-engineer** — detection coverage + tuning questions
 - **threat-hunter** — telemetry/incidents + hypothesis questions
 - **security-engineer** — hardening backlog across identity/compliance/exposure
@@ -28,11 +28,12 @@ Pick the persona from the operator's role/lens:
 
 1. **Gather the findings** for the persona (read-only) — each persona gathers its
    own working data (`scripts/report_gather.py`'s `GATHER_MAP`):
-   - **ciso** — the `roll-up-ciso-risk` skill's six-pillar rollup (config
+   - **ciso** — the `roll-up-ciso-risk` skill's seven-pillar rollup (config
      hardening, attack validation, vulnerability exposure, device compliance,
-     data risk, endpoint coverage).
+     data risk, endpoint coverage, Sentinel detection coverage).
    - **detection-engineer** — Defender alerts/incidents, LimaCharlie D&R rules
-     and endpoint detections, ProjectAchilles weak techniques.
+     and endpoint detections, ProjectAchilles weak techniques, Sentinel
+     analytics-rule inventory.
    - **threat-hunter** — Defender incidents/alerts, LimaCharlie endpoint
      detections and sensor/endpoint coverage.
    - **security-engineer** — Secure Score, Entra conditional access/privileged
