@@ -228,3 +228,75 @@ def test_a_flow_indicator_accepts_an_identity_and_a_port():
     assert n.validate_indicator("someone@example.gob.do", "flow") is True
     assert n.validate_indicator("443", "flow") is True
     assert n.validate_indicator('x" or 1==1', "flow") is False
+
+
+# --- Umbrella identity splitting ----------------------------------------
+# Live 2026-08-12 (1h, 362,944 dns rows): Identities_s is a 2-element array on
+# 356,571 of them — element 0 the Anyconnect roaming client (a MACHINE NAME,
+# 739 distinct, none containing "@"), element 1 the AD user (724 distinct, all
+# UPNs) — in the same order as Identity_Types_s. Returned as one JSON array in
+# a flat evidence value, a model asked for "the hostname" grepped for a key
+# called hostname, found none, and reported the column absent. It was there.
+
+def test_identities_split_into_host_and_user():
+    host, user, other = n.split_identities(
+        '["LT-TPL-L114","aborbon@example.gob.do"]',
+        '["Anyconnect Roaming Client","AD Users"]',
+    )
+    assert host == "LT-TPL-L114"
+    assert user == "aborbon@example.gob.do"
+    assert other == ""
+
+
+def test_identity_types_drive_the_split_not_position():
+    """The array order is conventional, not guaranteed; the type array is truth."""
+    host, user, _ = n.split_identities(
+        '["aborbon@example.gob.do","LT-TPL-L114"]',
+        '["AD Users","Anyconnect Roaming Client"]',
+    )
+    assert host == "LT-TPL-L114"
+    assert user == "aborbon@example.gob.do"
+
+
+def test_a_group_identity_is_neither_host_nor_user():
+    """~1% of rows carry a third AD Groups element; calling it a hostname would
+    be the same class of wrong this split exists to fix."""
+    host, user, other = n.split_identities(
+        '["LT-TPL-L114","aborbon@example.gob.do","Finance-RW"]',
+        '["Anyconnect Roaming Client","AD Users","AD Groups"]',
+    )
+    assert host == "LT-TPL-L114"
+    assert user == "aborbon@example.gob.do"
+    assert other == "Finance-RW"
+
+
+def test_split_falls_back_to_shape_when_types_are_missing():
+    host, user, _ = n.split_identities('["LT-TPL-L114","aborbon@example.gob.do"]', "")
+    assert host == "LT-TPL-L114"
+    assert user == "aborbon@example.gob.do"
+
+
+def test_split_survives_a_value_that_is_not_json():
+    """Never lose the value to a parse error — degrade to shape-based sorting."""
+    host, user, _ = n.split_identities("LT-TPL-L114", "")
+    assert host == "LT-TPL-L114"
+    assert user == ""
+
+
+def test_split_of_an_empty_value_is_empty():
+    assert n.split_identities("", "") == ("", "", "")
+
+
+def test_umbrella_surfaces_declare_their_identity_columns():
+    for surface in ("dns", "web"):
+        spec = n.SURFACE_SPECS[surface]
+        assert spec.identity_field == "Identities_s"
+        assert "Identity_Types_s" in spec.project, "needed to classify the split"
+
+
+def test_split_survives_a_truncated_json_array():
+    """A value that looks like JSON but is not must not vanish: a log field can
+    arrive truncated, and losing the identity entirely is worse than showing it
+    unparsed."""
+    host, user, other = n.split_identities('["LT-TPL-L114","abo', "")
+    assert "LT-TPL-L114" in (host + user + other)

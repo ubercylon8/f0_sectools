@@ -1219,3 +1219,21 @@ async def test_aggregate_mode_silent_when_nothing_hidden(fake):
     out = await tools.hunt_firewall(client, surface="cloud", limit=5)
     assert not any("more results available" in f.title for f in out)
     assert sum(f.finding_type.value == "hunt_result" for f in out) == 5
+
+
+async def test_dns_rows_expose_hostname_and_user_as_flat_evidence(fake):
+    """The findings schema is flat by contract. Handing back a JSON array in an
+    evidence value made the hostname invisible to the model that asked for it."""
+    rows = [{
+        "TimeGenerated": "2026-08-12T12:00:00Z", "Action_s": "Blocked",
+        "Domain_s": "log.tailscale.com", "InternalIp_s": "192.168.68.56",
+        "Identities_s": '["LT-TPL-L114","aborbon@example.gob.do"]',
+        "Identity_Types_s": '["Anyconnect Roaming Client","AD Users"]',
+    }]
+    client = fake(rows={USAGE: _TABLES, "Cisco_Umbrella_dns_CL": rows})
+    out = await tools.hunt_dns_web(client, surface="dns", indicator="tailscale")
+    ev = {e.key: e.value for e in out[0].evidence}
+    assert ev["identity_host"] == "LT-TPL-L114"
+    assert ev["identity_user"] == "aborbon@example.gob.do"
+    assert "Identities_s" not in ev, "the raw array is replaced, not duplicated"
+    assert "Identity_Types_s" not in ev, "the classifier column is consumed, not shown"

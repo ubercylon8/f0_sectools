@@ -15,6 +15,7 @@ tool rewrite. Field names, action values, and junk values -- including the
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 
@@ -57,6 +58,9 @@ class Surface:
     # must never appear in indicator_fields' `has` fallback.
     port_field: str | None = None
     junk: tuple[str, ...] = field(default_factory=tuple)
+    # Column holding a JSON array of identities, split into flat evidence keys
+    # before the row becomes a finding. See split_identities.
+    identity_field: str | None = None
 
 
 SURFACE_SPECS: dict[str, Surface] = {
@@ -120,9 +124,11 @@ SURFACE_SPECS: dict[str, Surface] = {
         indicator_fields=("Domain_s", "InternalIp_s", "ExternalIp_s", "Identities_s"),
         project=(
             "TimeGenerated", "Action_s", "Domain_s", "Categories_s",
-            "InternalIp_s", "ExternalIp_s", "Identities_s", "QueryType_s",
+            "InternalIp_s", "ExternalIp_s", "Identities_s", "Identity_Types_s",
+            "QueryType_s",
         ),
         junk=("Action",),
+        identity_field="Identities_s",
     ),
     "web": Surface(
         table="Cisco_Umbrella_proxy_CL",
@@ -132,9 +138,11 @@ SURFACE_SPECS: dict[str, Surface] = {
         indicator_fields=("URL_s", "Destination_IP_s", "Internal_IP_s", "Identities_s"),
         project=(
             "TimeGenerated", "Verdict_s", "URL_s", "Categories_s",
-            "Internal_IP_s", "Identities_s", "File_Name_s", "SHA_SHA256_s",
+            "Internal_IP_s", "Identities_s", "Identity_Types_s", "File_Name_s",
+            "SHA_SHA256_s",
         ),
         junk=("Action",),
+        identity_field="Identities_s",
     ),
     "vpn": Surface(
         table="Cisco_Umbrella_ravpnlogs_CL",
@@ -191,6 +199,69 @@ def action_clause(spec: Surface, action: str) -> str:
     if not values:
         return ""
     return f"| where {spec.action_field} in~ ({_kql_list(values)})"
+
+
+# Umbrella identity-type vocabulary, live-observed on the validation tenant.
+# Anything unrecognised falls through to `other` rather than being guessed into
+# a hostname -- mislabelling a group as a machine is the same class of error
+# this split exists to remove.
+_HOST_TYPES = ("roaming", "computer", "mobile device", "machine")
+_USER_TYPES = ("user",)
+
+
+def _json_list(raw: object) -> list[str]:
+    """Parse a JSON array-of-strings column, tolerating anything that is not one."""
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except (ValueError, TypeError):
+            return [text]
+        if isinstance(parsed, list):
+            return [str(x) for x in parsed if x not in (None, "")]
+        return [str(parsed)]
+    return [text]
+
+
+def split_identities(raw: object, types_raw: object = "") -> tuple[str, str, str]:
+    """Split Umbrella's `Identities_s` array into (hosts, users, other).
+
+    Live 2026-08-12: 98% of dns rows carry two identities -- the Anyconnect
+    roaming client (a machine name) and the AD user -- as a JSON array in one
+    string, ordered to match `Identity_Types_s`. The findings schema is flat by
+    contract, and a JSON array inside an evidence value is not flat: asked for
+    "the hostname", a model grepped for a key called hostname, found none, and
+    reported the column absent while the machine name sat in element 0.
+
+    The type array classifies, not the position -- the ordering is a convention
+    of this tenant's connector, not a guarantee. When types are missing or do
+    not line up, fall back to shape: an "@" means a user, anything else is
+    treated as a host. Values are never dropped; unclassifiable ones surface as
+    the third element rather than silently disappearing.
+    """
+    ids = _json_list(raw)
+    if not ids:
+        return "", "", ""
+    types = _json_list(types_raw)
+    hosts: list[str] = []
+    users: list[str] = []
+    other: list[str] = []
+    for i, ident in enumerate(ids):
+        kind = types[i].lower() if i < len(types) else ""
+        if kind:
+            if any(t in kind for t in _USER_TYPES):
+                users.append(ident)
+            elif any(t in kind for t in _HOST_TYPES):
+                hosts.append(ident)
+            else:
+                other.append(ident)
+        elif "@" in ident:
+            users.append(ident)
+        else:
+            hosts.append(ident)
+    return ", ".join(hosts), ", ".join(users), ", ".join(other)
 
 
 def hygiene_clause(spec: Surface) -> str:

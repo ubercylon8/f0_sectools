@@ -41,7 +41,10 @@ Base tool names: `list_data_sources`, `hunt_firewall`, `hunt_dns_web`,
      (`surface="cloud"`) for their L3/L4 connections.
      Umbrella identities are searchable, so "what did this host resolve" is
      one call. Do not go hunting for an IP-to-user mapping in other platforms
-     before trying this: the identity is in the same row as the query.
+     before trying this: the identity is in the same row as the query, split
+     into `identity_host` (machine name) and `identity_user` (AD user). If you
+     are asked for hostnames, those rows already carry them — there is no
+     lookup to do in Tenable, LimaCharlie or Entra.
    - **Never send a domain to `hunt_firewall`.** The firewall (CEF) table
      carries essentially no URL data — on a validated workspace, well under
      1% of rows had anything in a URL field. A domain query against it comes
