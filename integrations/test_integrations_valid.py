@@ -252,3 +252,34 @@ def test_distribution_config_valid():
     assert cfg["mcp_servers"]["f0-pa-actions"]["enabled"] is False
     # No operator-specific model config is baked in (config.yaml is preserved on update).
     assert "model" not in cfg and "providers" not in cfg
+
+
+def test_distribution_manifest_names_every_platform_it_ships():
+    """The manifest description is what an operator reads before installing.
+
+    It listed six platforms while the distribution wired nine — Purview and
+    Sentinel shipped and nobody updated the prose, so the profile under-sold
+    itself and misdescribed its own contents. `mcp_servers` completeness was
+    already guarded; the sentence a human reads was not.
+    """
+    manifest = yaml.safe_load(
+        (ROOT / "integrations/hermes/distribution/distribution.yaml").read_text(encoding="utf-8")
+    )
+    description = manifest["description"].lower()
+    missing = sorted(
+        {p.name.removesuffix("-mcp").split("-")[0] for p in (ROOT / "servers").iterdir()
+         if p.is_dir()}
+        - {word for word in description.replace(",", " ").split()}
+    )
+    # projectachilles-actions collapses onto projectachilles; both start the same.
+    missing = [m for m in missing if m not in description]
+    assert missing == [], f"distribution.yaml description omits: {missing}"
+
+
+def test_distribution_version_tracks_the_repo_version():
+    """A profile pinned at an old version tells operators nothing changed."""
+    manifest = yaml.safe_load(
+        (ROOT / "integrations/hermes/distribution/distribution.yaml").read_text(encoding="utf-8")
+    )
+    root = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert str(manifest["version"]) == root["project"]["version"]

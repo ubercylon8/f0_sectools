@@ -39,6 +39,41 @@ def render_mcp_json(template_text: str, repo_root: Path, uv_path: str) -> str:
     return text
 
 
+def merge_into_existing(rendered: str, target: Path) -> str:
+    """Keep servers the live config has that this repo does not ship.
+
+    A pi install is shared: this machine also carries `f0-library` from the
+    sibling offensive-testing repo. Writing the rendered template wholesale
+    deletes any such entry — the operator adds a server and silently loses a
+    different one, the only trace being a .bak file they have no reason to read.
+
+    Ownership is decided by whether an entry references this checkout, not by
+    whether the template still names it. "Absent from the template" would keep a
+    server we renamed or removed alive forever, pointing at a command that no
+    longer exists — the same silent drift in the opposite direction.
+    """
+    if not target.is_file():
+        return rendered
+    try:
+        existing = json.loads(target.read_text(encoding="utf-8")).get("mcpServers", {})
+    except (ValueError, OSError):
+        return rendered  # unreadable or not JSON: replace it rather than guess
+    if not isinstance(existing, dict):
+        return rendered
+    config = json.loads(rendered)
+    ours = config.get("mcpServers", {})
+    marker = str(REPO)
+    foreign = {
+        name: entry
+        for name, entry in existing.items()
+        if name not in ours and marker not in json.dumps(entry)
+    }
+    if not foreign:
+        return rendered
+    config["mcpServers"] = {**foreign, **ours}
+    return json.dumps(config, indent=2) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--pi-home", default=str(Path.home() / ".pi" / "agent"))
@@ -55,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     changed = False
 
     target = pi_home / "mcp.json"
+    rendered = merge_into_existing(rendered, target)
     if target.is_file() and target.read_text(encoding="utf-8") == rendered:
         print(f"mcp.json    up to date  ({target})")
     else:
