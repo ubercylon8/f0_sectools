@@ -43,3 +43,23 @@ def test_sync_preserves_servers_this_repo_does_not_own(tmp_path, monkeypatch):
     assert "f0-library" in result, "a foreign server must survive the sync"
     assert "f0-sentinel" in result, "every server this repo ships must be installed"
     assert "--stale" not in json.dumps(result["f0-defender"]), "ours are refreshed"
+
+
+def test_sync_drops_a_server_this_repo_no_longer_ships(tmp_path):
+    """"Foreign" cannot mean "absent from the template": a server we renamed or
+    removed would then be preserved forever, pointing at a command that no
+    longer exists. Ownership is decided by whether the entry references this
+    checkout, so a stale entry of ours is dropped while a sibling repo's is not.
+    """
+    pi_home = tmp_path / "agent"
+    pi_home.mkdir()
+    (pi_home / "mcp.json").write_text(json.dumps({"mcpServers": {
+        "f0-library": {"command": "uv", "args": ["run", "--directory",
+                                                 "/elsewhere/f0_library", "f0-library-mcp"]},
+        "f0-retired": {"command": "uv", "args": ["run", "--directory",
+                                                 str(sync.REPO), "f0-retired-mcp"]},
+    }}))
+    sync.main(["--pi-home", str(pi_home)])
+    result = json.loads((pi_home / "mcp.json").read_text())["mcpServers"]
+    assert "f0-library" in result, "another checkout's server is not ours to remove"
+    assert "f0-retired" not in result, "a server we no longer ship must not linger"

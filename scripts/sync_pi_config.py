@@ -47,8 +47,10 @@ def merge_into_existing(rendered: str, target: Path) -> str:
     deletes any such entry — the operator adds a server and silently loses a
     different one, the only trace being a .bak file they have no reason to read.
 
-    Ours always win (a stale command line for a server this repo owns must be
-    refreshed); anything else is preserved untouched.
+    Ownership is decided by whether an entry references this checkout, not by
+    whether the template still names it. "Absent from the template" would keep a
+    server we renamed or removed alive forever, pointing at a command that no
+    longer exists — the same silent drift in the opposite direction.
     """
     if not target.is_file():
         return rendered
@@ -60,7 +62,12 @@ def merge_into_existing(rendered: str, target: Path) -> str:
         return rendered
     config = json.loads(rendered)
     ours = config.get("mcpServers", {})
-    foreign = {name: entry for name, entry in existing.items() if name not in ours}
+    marker = str(REPO)
+    foreign = {
+        name: entry
+        for name, entry in existing.items()
+        if name not in ours and marker not in json.dumps(entry)
+    }
     if not foreign:
         return rendered
     config["mcpServers"] = {**foreign, **ours}
