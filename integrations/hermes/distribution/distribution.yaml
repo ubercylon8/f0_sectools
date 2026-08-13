@@ -1,10 +1,10 @@
 name: f0sectools
-version: 0.2.0
+version: 0.3.0
 description: >
   F0RT1KA security-operations agent — read-only SOC/IR/CISO tooling over
-  Microsoft Defender, Entra ID, LimaCharlie, ProjectAchilles, Intune, and
-  Tenable, driven by a local small model. Gated writes for ProjectAchilles
-  validation runs (flag + human confirmation + audit).
+  Microsoft Sentinel, Defender, Entra ID, Intune, Purview, LimaCharlie,
+  Tenable and ProjectAchilles, driven by a local small model. Gated writes
+  for ProjectAchilles validation runs (flag + human confirmation + audit).
 author: F0RT1KA Contributors
 license: Apache-2.0
 hermes_requires: ">=0.18.0"

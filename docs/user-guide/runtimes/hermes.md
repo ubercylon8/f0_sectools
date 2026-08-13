@@ -165,6 +165,36 @@ tool selection**. Hermes gives you the knobs:
 Keeping the live tool count small is the single highest-leverage thing you can do
 for reliability on a local model.
 
+## Keeping it current after a repo update
+
+**An installed profile is a copy, not a link.** `hermes profile install` writes
+`~/.hermes/profiles/f0sectools/config.yaml` once; pulling a new server into this
+repo does not change it. A profile installed before a server shipped simply will
+not list that server, and Hermes reports no error — the tools are just absent.
+
+After pulling a version that adds or renames a server, re-install over the
+existing profile:
+
+```bash
+cd /path/to/sec-tools
+hermes profile install ./integrations/hermes/distribution
+```
+
+Hermes backs up the previous `config.yaml` alongside it. If you have hand-edited
+that file (model routing, gateways, personalities), diff the backup afterwards
+and re-apply your changes — the distribution ships our wiring, not your local
+tuning.
+
+To check without installing, compare the two lists:
+
+```bash
+diff <(grep -oE 'f0-[a-z-]+:' integrations/hermes/distribution/config.yaml | sort -u) \
+     <(grep -oE 'f0-[a-z-]+:' ~/.hermes/profiles/f0sectools/config.yaml | sort -u)
+```
+
+The equivalent for pi is `scripts/sync_pi_config.py` (see the pi guide), which
+merges rather than overwrites and can be wired as a `post-merge` hook.
+
 ## Profiles: deployment pattern
 
 A Hermes **profile** is a fully isolated installation — its own `HERMES_HOME`
