@@ -52,7 +52,7 @@ jobs:
       # landed on the default branch.
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@6b082c41935b4c8a3b8b0ef85ba4ba4d9eeb8975  # v1
+        uses: anthropics/claude-code-action@e63208cb983318a44e3f945e959ef894b707dcfa  # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Post + maintain a managed PR comment with the review (the switch that makes
