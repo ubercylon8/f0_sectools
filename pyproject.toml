@@ -21,7 +21,7 @@ dev = [
     "respx>=0.21",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
-    "ruff>=0.16.1",
+    "ruff>=0.16.2",
     "mypy>=2.3.0",
 ]
 
