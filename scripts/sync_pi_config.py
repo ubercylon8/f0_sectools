@@ -1,18 +1,26 @@
 """Sync the local pi runtime config from this repo's templates.
 
-Renders integrations/pi/mcp.json into ~/.pi/agent/mcp.json (placeholder path
--> this checkout, "uv" -> its absolute path) and symlinks ~/.pi/agent/AGENTS.md
-to the repo copy so it can never drift. Idempotent — run it after every
+Renders integrations/pi/mcp.json into <checkout>/.pi/mcp.json (placeholder path
+-> this checkout, "uv" -> its absolute path) and symlinks the AGENTS.md beside
+it to the repo copy so it can never drift. Idempotent — run it after every
 `git pull`, or wire it as a local post-merge hook:
 
     echo 'uv run python scripts/sync_pi_config.py' >> .git/hooks/post-merge
     chmod +x .git/hooks/post-merge
 
+The default is PROJECT scope. pi-mcp-extension reads `<cwd>/.pi/mcp.json` and
+lets it win over the global config, so the nine servers load only when pi runs
+in this checkout instead of putting 40-odd SOC tool schemas in front of the
+model in every unrelated session. `--pi-home ~/.pi/agent` installs them
+globally instead; that directory must already exist (a missing one means pi
+is not installed, which is worth an error), while the project one is created
+on demand for a fresh clone.
+
 Skills and persona prompts need no syncing: ~/.pi/agent/settings.json points
 at the repo's skills/ and integrations/pi/prompts/ directories in place.
 
 Usage (from the repo root):
-    uv run python scripts/sync_pi_config.py [--pi-home ~/.pi/agent] [--check]
+    uv run python scripts/sync_pi_config.py [--pi-home DIR] [--check]
 
 --check: exit 1 if anything would change, without writing (for scripts/CI-like
 use on your own machine; the repo's CI never touches a live pi install).
@@ -28,6 +36,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 TEMPLATE = REPO / "integrations" / "pi" / "mcp.json"
 AGENTS_MD = REPO / "integrations" / "pi" / "AGENTS.md"
+DEFAULT_PI_HOME = REPO / ".pi"  # project scope; see the module docstring
 PLACEHOLDER = "/ABSOLUTE/PATH/TO/sec-tools"
 
 
@@ -76,14 +85,22 @@ def merge_into_existing(rendered: str, target: Path) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--pi-home", default=str(Path.home() / ".pi" / "agent"))
+    parser.add_argument(
+        "--pi-home", default=None,
+        help=f"install into an existing pi home instead of {DEFAULT_PI_HOME}",
+    )
     parser.add_argument("--check", action="store_true", help="report drift, write nothing")
     args = parser.parse_args(argv)
 
-    pi_home = Path(args.pi_home).expanduser()
-    if not pi_home.is_dir():
-        print(f"pi home not found: {pi_home} — is pi installed?", file=sys.stderr)
-        return 1
+    if args.pi_home is None:
+        pi_home = DEFAULT_PI_HOME
+        if not args.check:
+            pi_home.mkdir(parents=True, exist_ok=True)
+    else:
+        pi_home = Path(args.pi_home).expanduser()
+        if not pi_home.is_dir():
+            print(f"pi home not found: {pi_home} — is pi installed?", file=sys.stderr)
+            return 1
 
     uv_path = shutil.which("uv") or "uv"
     rendered = render_mcp_json(TEMPLATE.read_text(encoding="utf-8"), REPO, uv_path)
@@ -98,10 +115,22 @@ def main(argv: list[str] | None = None) -> int:
         if args.check:
             print(f"mcp.json    WOULD UPDATE ({target})")
         else:
-            if target.is_file():
+            had_previous = target.is_file()
+            if had_previous:
                 shutil.copy2(target, target.with_suffix(".json.bak"))
             target.write_text(rendered, encoding="utf-8")
-            print(f"mcp.json    updated     ({target}, previous saved as .bak)")
+            note = ", previous saved as .bak" if had_previous else ""
+            print(f"mcp.json    {'updated' if had_previous else 'created'}     ({target}{note})")
+
+    # Project scope has no AGENTS.md step: pi reads context files from the
+    # working directory upward, so the checkout's own tracked AGENTS.md (which
+    # routes between developing this repo and operating a SOC) is already the
+    # one it loads. A second copy under .pi/ would never be read.
+    if pi_home == DEFAULT_PI_HOME:
+        print(f"AGENTS.md   repo root   ({REPO / 'AGENTS.md'} — pi reads it from cwd)")
+        if changed and not args.check:
+            print("Restart pi (new session) to pick up the changes.")
+        return 1 if (changed and args.check) else 0
 
     link = pi_home / "AGENTS.md"
     if link.is_symlink() and link.resolve() == AGENTS_MD.resolve():

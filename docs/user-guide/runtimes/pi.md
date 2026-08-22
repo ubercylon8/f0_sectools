@@ -54,8 +54,9 @@ Install the MCP client extension:
 pi install npm:pi-mcp-extension
 ```
 
-Then declare our servers in `~/.pi/agent/mcp.json` (or project-level
-`.pi/mcp.json`). A ready copy lives at
+Then declare our servers in `<checkout>/.pi/mcp.json` (project-level, the
+default below) or `~/.pi/agent/mcp.json` (global, every pi session). A ready
+copy lives at
 [`integrations/pi/mcp.json`](../../../integrations/pi/mcp.json) — copy it and
 replace the placeholder path with your checkout:
 
@@ -83,9 +84,9 @@ gated-write ProjectAchilles companion, whose write tools stay inert without
 uv run python scripts/sync_pi_config.py
 ```
 
-It renders the template into `~/.pi/agent/mcp.json` (placeholder path → your
-checkout, `uv` → its absolute path) and symlinks `~/.pi/agent/AGENTS.md` to the
-repo copy (making step 4 automatic). It is idempotent — re-run it after every
+It renders the template into `<checkout>/.pi/mcp.json` (placeholder path →
+your checkout, `uv` → its absolute path) and symlinks the `AGENTS.md` beside it
+to the repo copy. It is idempotent — re-run it after every
 `git pull` so new servers appear in pi without manual edits, or make it
 automatic with a local git hook:
 
@@ -93,6 +94,14 @@ automatic with a local git hook:
 echo 'uv run python scripts/sync_pi_config.py' >> .git/hooks/post-merge
 chmod +x .git/hooks/post-merge
 ```
+
+**Scope.** The default is project-level, because `pi-mcp-extension` reads
+`<cwd>/.pi/mcp.json` and lets it win over the global config: the nine servers
+then load only when pi runs in this checkout, instead of putting their tool
+schemas in front of the model in every unrelated pi session. Pass
+`--pi-home ~/.pi/agent` if you do want them everywhere — that directory must
+already exist, while the project one is created on demand. Note the extension
+matches `<cwd>` exactly and does not walk up, so start pi from the repo root.
 
 Skills and persona prompts never need syncing: step 5 points pi at the repo's
 `skills/` and `integrations/pi/prompts/` directories in place, so they always
@@ -118,12 +127,26 @@ server list (`integrations/test_integrations_valid.py`).
 
 ## 4. Base identity (the SOUL.md equivalent)
 
-pi has no `SOUL.md`; it auto-loads `AGENTS.md` context files. If you ran
-`scripts/sync_pi_config.py` in step 3 this is already a symlink and you can
-skip ahead. Manual alternative:
+pi has no `SOUL.md`; it auto-loads context files — one per directory, from
+`~/.pi/agent/` and from the working directory upward, taking the first of
+`AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`. It does **not** read
+`<checkout>/.pi/`, so nothing in step 3 wires the identity.
+
+Matching the project scope of the servers, this repo ships a tracked
+[`AGENTS.md`](../../../AGENTS.md) at its root: an entry point that routes
+between developing f0_sectools (→ `CLAUDE.md`) and operating a SOC (→ the
+personas below), since `AGENTS.md` is read *instead of* `CLAUDE.md`, not
+alongside it. Start pi from the checkout root and you get it for free — nothing
+to install.
+
+The operator identity itself is [`integrations/pi/AGENTS.md`](../../../integrations/pi/AGENTS.md),
+the read-only / never-fabricate baseline the root router links to and the
+personas in step 6 layer on top of. To apply it to *every* pi session
+instead — including outside this checkout — install globally, which also links
+the identity for you:
 
 ```bash
-ln -s "$(pwd)/integrations/pi/AGENTS.md" ~/.pi/agent/AGENTS.md
+uv run python scripts/sync_pi_config.py --pi-home ~/.pi/agent
 ```
 
 It carries the same read-only / never-fabricate principles as the Hermes
