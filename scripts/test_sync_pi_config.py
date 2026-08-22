@@ -63,3 +63,47 @@ def test_sync_drops_a_server_this_repo_no_longer_ships(tmp_path):
     result = json.loads((pi_home / "mcp.json").read_text())["mcpServers"]
     assert "f0-library" in result, "another checkout's server is not ours to remove"
     assert "f0-retired" not in result, "a server we no longer ship must not linger"
+
+
+def test_default_target_is_project_scoped_never_the_shared_pi_home():
+    """Scope is the whole point: nine SOC tool schemas do not belong in every
+    unrelated pi session. The default must stay inside this checkout — a
+    default under ~ is what the `post-merge` hook would silently restore."""
+    assert sync.DEFAULT_PI_HOME == sync.REPO / ".pi"
+    assert sync.DEFAULT_PI_HOME != Path.home() / ".pi" / "agent"
+    assert sync.REPO in sync.DEFAULT_PI_HOME.parents
+
+
+def test_default_pi_home_is_created_on_a_fresh_clone(tmp_path, monkeypatch):
+    """A clone has no .pi/ yet. Project scope must bootstrap it rather than
+    exit 1 the way a missing ~/.pi/agent (a real "pi not installed") does."""
+    monkeypatch.setattr(sync, "DEFAULT_PI_HOME", tmp_path / ".pi")
+    assert sync.main([]) == 0
+    assert json.loads((tmp_path / ".pi" / "mcp.json").read_text())["mcpServers"]
+
+
+def test_explicit_missing_pi_home_still_errors(tmp_path, capsys):
+    """--pi-home is how you target a real pi install; a typo there is a
+    mistake, not a directory to create."""
+    assert sync.main(["--pi-home", str(tmp_path / "nope")]) == 1
+    assert "pi home not found" in capsys.readouterr().err
+
+
+def test_project_scope_leaves_agents_md_to_the_repo(tmp_path, monkeypatch):
+    """In project scope the persona is routed by the checkout's own tracked
+    AGENTS.md, which pi reads from the repo root. Writing another one under
+    .pi/ would be a copy pi never loads — and a second thing to drift."""
+    monkeypatch.setattr(sync, "DEFAULT_PI_HOME", tmp_path / ".pi")
+    assert sync.main([]) == 0
+    assert not (tmp_path / ".pi" / "AGENTS.md").exists()
+
+
+def test_global_scope_still_links_the_persona(tmp_path):
+    """~/.pi/agent has no repo root above it to carry an AGENTS.md, so a
+    global install still needs the symlink to get an identity at all."""
+    pi_home = tmp_path / "agent"
+    pi_home.mkdir()
+    assert sync.main(["--pi-home", str(pi_home)]) == 0
+    link = pi_home / "AGENTS.md"
+    assert link.is_symlink()
+    assert link.resolve() == sync.AGENTS_MD.resolve()
